@@ -1,0 +1,28 @@
+{
+  "name": "realm-of-legends",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Realm of Legends - a static, offline-first pixel-art action RPG set in Eldoria",
+  "workspaces": [
+    "core",
+    "client"
+  ],
+  "scripts": {
+    "dev": "vite --config client/vite.config.ts",
+    "assets": "node tools/generate-assets.mjs",
+    "typecheck": "tsc -p core/tsconfig.json && tsc -p client/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && vite build --config client/vite.config.ts",
+    "preview": "vite preview --config client/vite.config.ts",
+    "verify:pages": "node tools/verify-pages-build.mjs"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0",
+    "typescript": "5.9.3",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
+  }
+}

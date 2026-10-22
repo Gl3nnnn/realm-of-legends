@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1420" />
+    <meta name="description" content="Realm of Legends - an offline-first pixel-art action RPG set in Eldoria." />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Realm of Legends</title>
+  </head>
+  <body>
+    <div id="game" aria-label="Realm of Legends game canvas"></div>
+
+    <div id="boot-screen" class="screen">
+      <div class="boot-inner">
+        <div class="logo-mark">ROM</div>
+        <h1>Realm of Legends</h1>
+        <p class="muted">Forging Eldoria...</p>
+        <div class="boot-bar"><div id="boot-progress-track"></div></div>
+        <span id="boot-progress">0%</span>
+      </div>
+    </div>
+
+    <div id="char-select" class="screen hidden" aria-live="polite">
+      <div class="select-shell">
+        <header class="select-header">
+          <div>
+            <div class="eyebrow">A pixel adventure</div>
+            <h1>Realm of Legends</h1>
+            <p class="muted">Choose a hero, or forge a new legend. Everything is saved in this browser.</p>
+          </div>
+          <div class="select-actions">
+            <button class="btn ghost" id="btn-import-save">Import save</button>
+            <input type="file" id="import-file" accept="application/json,.json" hidden />
+          </div>
+        </header>
+        <section id="save-list" class="save-list"></section>
+        <section id="create-panel" class="create-panel hidden"></section>
+        <footer class="select-footer">
+          <span class="muted">Offline-first · No account · Export/import your saves</span>
+          <span class="muted" id="save-count"></span>
+        </footer>
+      </div>
+    </div>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top-left">
+        <div id="hud-portrait" class="portrait-frame"></div>
+        <div class="hud-vitals">
+          <div class="hud-name-row">
+            <span id="hud-name">Hero</span>
+            <span id="hud-level" class="level-chip">Lv 1</span>
+          </div>
+          <div id="hud-class" class="muted small">Warrior</div>
+          <div class="bar hp"><div id="hp-fill" class="bar-fill"></div><span id="hp-text">100 / 100</span></div>
+          <div class="bar resource"><div id="res-fill" class="bar-fill"></div><span id="res-text">100 / 100</span></div>
+          <div class="bar xp"><div id="xp-fill" class="bar-fill"></div><span id="xp-text">0 / 100 XP</span></div>
+        </div>
+      </div>
+
+      <div class="hud-top-right">
+        <div class="hud-controls">
+          <button class="icon-btn" data-panel="inventory" title="Inventory (I)">I</button>
+          <button class="icon-btn" data-panel="quests" title="Quests (Q)">Q</button>
+          <button class="icon-btn" data-panel="settings" title="Settings (Esc)">⚙</button>
+        </div>
+        <div class="zone-card">
+          <span id="hud-zone">Eldoria Village</span>
+          <span id="hud-safe" class="zone-tag">Safe</span>
+          <span id="hud-gold" class="gold">0 g</span>
+        </div>
+        <canvas id="minimap" width="176" height="132" aria-label="Minimap"></canvas>
+      </div>
+
+      <div id="boss-bar" class="boss-bar hidden">
+        <div class="boss-name" id="boss-name">The Bone Warden</div>
+        <div class="bar boss"><div id="boss-fill" class="bar-fill"></div></div>
+      </div>
+
+      <div id="buff-bar" class="buff-bar"></div>
+      <div id="quest-tracker" class="quest-tracker"></div>
+
+      <div class="hud-bottom">
+        <div id="combat-log" class="combat-log" aria-live="polite"></div>
+        <div class="ability-wrap">
+          <div id="interact-prompt" class="interact-prompt hidden"></div>
+          <div id="ability-bar" class="ability-bar"></div>
+          <div class="hint-line">WASD move · LMB/Space attack · 1-5 skills · E interact · I inventory · Q quests</div>
+        </div>
+      </div>
+
+      <div id="death-overlay" class="death-overlay hidden">
+        <div class="death-card">
+          <h2>You have fallen</h2>
+          <p>Elara's light is pulling you back.</p>
+          <div id="death-timer" class="death-timer">4</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true"></div>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,447 @@
+export type Vec2 = { x: number; y: number };
+
+export type Direction = "down" | "left" | "right" | "up";
+
+export type ZoneId = "village" | "forest" | "dungeon";
+
+export type ClassId =
+  | "warrior"
+  | "mage"
+  | "archer"
+  | "assassin"
+  | "paladin"
+  | "priest"
+  | "necromancer"
+  | "druid"
+  | "monk"
+  | "gunslinger"
+  | "berserker"
+  | "summoner"
+  | "ranger"
+  | "spellblade"
+  | "dragonknight";
+
+export type ResourceKind = "mana" | "energy" | "rage";
+
+export type DamageType =
+  | "physical"
+  | "fire"
+  | "ice"
+  | "arcane"
+  | "holy"
+  | "shadow"
+  | "nature"
+  | "poison";
+
+export type Difficulty = "Easy" | "Medium" | "Hard";
+
+export type EquipSlot = "weapon" | "armor" | "helm" | "boots" | "trinket";
+
+export type ItemType = EquipSlot | "consumable" | "material";
+
+export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+
+export interface BaseStats {
+  maxHp: number;
+  maxResource: number;
+  attack: number;
+  defense: number;
+  crit: number;
+  moveSpeed: number;
+}
+
+export interface ClassGrowth {
+  maxHp: number;
+  maxResource: number;
+  attack: number;
+  defense: number;
+}
+
+export type StatBonus = Partial<{
+  attack: number;
+  defense: number;
+  maxHp: number;
+  maxResource: number;
+  crit: number;
+  moveSpeed: number;
+}>;
+
+export type EffectKind =
+  | "damage"
+  | "heal"
+  | "buff"
+  | "dot"
+  | "slow"
+  | "stun"
+  | "dash"
+  | "summon"
+  | "trap"
+  | "shield"
+  | "mark";
+
+export interface AbilityEffect {
+  kind: EffectKind;
+  amount?: number;
+  scaling?: number;
+  damageType?: DamageType;
+  radius?: number;
+  duration?: number;
+  percent?: number;
+  stat?: "attack" | "defense" | "moveSpeed" | "maxHp";
+  name?: string;
+  projectile?: { speed: number; radius: number };
+  summonId?: string;
+  summonCount?: number;
+  summonDuration?: number;
+}
+
+export interface AbilityDef {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  cost: number;
+  cooldown: number;
+  range: number;
+  unlockLevel: number;
+  targeting: "melee" | "direction" | "point" | "self";
+  effects: AbilityEffect[];
+  signature?: boolean;
+  basic?: boolean;
+}
+
+export interface ClassDef {
+  id: ClassId;
+  name: string;
+  role: string;
+  weapon: string;
+  difficulty: Difficulty;
+  description: string;
+  resource: ResourceKind;
+  sprite: string;
+  color: string;
+  accent: string;
+  base: BaseStats;
+  growth: ClassGrowth;
+  basic: AbilityDef;
+  abilities: AbilityDef[];
+}
+
+export interface ItemDef {
+  id: string;
+  name: string;
+  type: ItemType;
+  rarity: Rarity;
+  icon: string;
+  description: string;
+  stack: number;
+  buy?: number;
+  sell: number;
+  stats?: StatBonus;
+  classes?: ClassId[];
+  heal?: number;
+  restore?: number;
+}
+
+export interface ItemStack {
+  itemId: string;
+  qty: number;
+}
+
+export type Equipment = Partial<Record<EquipSlot, ItemStack>>;
+
+export interface QuestRewards {
+  xp: number;
+  gold: number;
+  items?: ItemStack[];
+}
+
+export type QuestObjective =
+  | { kind: "kill"; monsterId: string; count: number }
+  | { kind: "collect"; itemId: string; count: number }
+  | { kind: "visit"; zone: ZoneId }
+  | { kind: "boss"; monsterId: string };
+
+export interface QuestDef {
+  id: string;
+  name: string;
+  giverNpc: string;
+  description: string;
+  objectives: QuestObjective[];
+  rewards: QuestRewards;
+  requiresLevel?: number;
+  repeatable?: boolean;
+}
+
+export interface QuestState {
+  id: string;
+  progress: number[];
+  completed: boolean;
+  completions: number;
+}
+
+export interface LootEntry {
+  itemId: string;
+  chance: number;
+  min: number;
+  max: number;
+}
+
+export interface MonsterDef {
+  id: string;
+  name: string;
+  level: number;
+  maxHp: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  aggroRadius: number;
+  leashRadius: number;
+  attackRange: number;
+  attackCooldown: number;
+  xp: number;
+  goldMin: number;
+  goldMax: number;
+  loot: LootEntry[];
+  respawn: number;
+  radius: number;
+  sprite: string;
+  boss?: boolean;
+}
+
+export interface StatusInstance {
+  kind: "poison" | "burn" | "slow" | "stun" | "mark";
+  remaining: number;
+  value: number;
+}
+
+export interface MonsterInstance {
+  uid: string;
+  defId: string;
+  x: number;
+  y: number;
+  spawnX: number;
+  spawnY: number;
+  hp: number;
+  state: "idle" | "chase" | "attack" | "return" | "dead";
+  facing: number;
+  attackTimer: number;
+  respawnTimer: number;
+  statuses: StatusInstance[];
+  wanderTimer: number;
+  wanderX: number;
+  wanderY: number;
+}
+
+export interface ProjectileInstance {
+  uid: string;
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  speed: number;
+  ttl: number;
+  radius: number;
+  damage: number;
+  crit: number;
+  damageType: DamageType;
+  color: string;
+  statuses: StatusInstance[];
+  owner: "player" | "pet";
+}
+
+export interface GroundLoot {
+  uid: string;
+  itemId: string;
+  qty: number;
+  x: number;
+  y: number;
+  ttl: number;
+}
+
+export interface TelegraphInstance {
+  uid: string;
+  x: number;
+  y: number;
+  radius: number;
+  remaining: number;
+  total: number;
+  damage: number;
+  kind: "boss" | "trap";
+}
+
+export interface PetInstance {
+  uid: string;
+  kind: "skeleton" | "wolf" | "familiar";
+  x: number;
+  y: number;
+  hp: number;
+  ttl: number;
+  attackTimer: number;
+  damage: number;
+}
+
+export interface BuffInstance {
+  name: string;
+  stat: "attack" | "defense" | "moveSpeed" | "maxHp";
+  percent: number;
+  remaining: number;
+}
+
+export interface TrapInstance {
+  uid: string;
+  x: number;
+  y: number;
+  radius: number;
+  damage: number;
+  armed: boolean;
+  rearmTimer: number;
+}
+
+export interface PortalDef {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  targetZone: ZoneId;
+  targetX: number;
+  targetY: number;
+  label: string;
+}
+
+export interface NpcSpawn {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface MonsterSpawn {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface ChestSpawn {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface TrapSpawn {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  damage: number;
+  cooldown: number;
+}
+
+export interface GatherSpawn {
+  id: string;
+  itemId: string;
+  x: number;
+  y: number;
+}
+
+export interface ZoneData {
+  id: ZoneId;
+  name: string;
+  width: number;
+  height: number;
+  tileWidth: number;
+  tileHeight: number;
+  blocked: boolean[];
+  safe: boolean;
+  ambience: "village" | "forest" | "dungeon";
+  spawn: Vec2;
+  portals: PortalDef[];
+  npcs: NpcSpawn[];
+  monsterSpawns: MonsterSpawn[];
+  chests: ChestSpawn[];
+  traps: TrapSpawn[];
+  gatherNodes: GatherSpawn[];
+}
+
+export interface NpcDef {
+  id: string;
+  name: string;
+  role: string;
+  dialogue: string[];
+  quests?: string[];
+  shop?: string;
+  healer?: boolean;
+  trainer?: boolean;
+  sprite: string;
+  color: string;
+}
+
+export interface ShopDef {
+  id: string;
+  name: string;
+  itemIds: string[];
+}
+
+export interface CharacterSave {
+  version: number;
+  id: string;
+  name: string;
+  classId: ClassId;
+  level: number;
+  xp: number;
+  gold: number;
+  hp: number;
+  resource: number;
+  zone: ZoneId;
+  x: number;
+  y: number;
+  inventory: (ItemStack | null)[];
+  equipment: Equipment;
+  quests: QuestState[];
+  openedChests: string[];
+  playtime: number;
+  rngState: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface InputState {
+  moveX: number;
+  moveY: number;
+  aimX: number;
+  aimY: number;
+}
+
+export type SimEvent =
+  | {
+      type: "damage";
+      target: "player" | "monster";
+      uid?: string;
+      amount: number;
+      crit: boolean;
+      x: number;
+      y: number;
+      damageType: DamageType;
+    }
+  | { type: "heal"; amount: number; x: number; y: number }
+  | { type: "death"; who: "player" | "monster"; defId?: string; x: number; y: number }
+  | { type: "levelup"; level: number }
+  | { type: "xp"; amount: number }
+  | { type: "gold"; amount: number }
+  | { type: "loot"; itemId: string; qty: number; x: number; y: number }
+  | { type: "pickup"; itemId: string; qty: number }
+  | { type: "quest"; questId: string; text: string }
+  | { type: "zone"; zone: ZoneId }
+  | { type: "log"; text: string; tone?: "info" | "good" | "bad" | "quest" }
+  | { type: "save" }
+  | { type: "cast"; abilityId: string; x: number; y: number; color: string; icon: string }
+  | { type: "telegraph"; x: number; y: number; radius: number; remaining: number }
+  | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
+  | { type: "respawn" }
+  | { type: "error"; message: string };
+
+export interface InteractResult {
+  kind: "npc" | "portal" | "chest" | "gather";
+  id: string;
+  label: string;
+}
