@@ -49,7 +49,7 @@ The build includes type checking, bundles the game into `client/dist`, and gener
 
 ### GitHub Pages
 
-The workflow in `.github/workflows/deploy-pages.yml` deploys on every push to `main`. In the repository settings, set **Pages > Build and deployment > Source** to **GitHub Actions**.
+The workflow in `.github/workflows/deploy-pages.yml` deploys on every push to `main`. On a new repository, open **Settings > Pages** once and set **Build and deployment > Source** to **GitHub Actions**. The workflow token can deploy to Pages but cannot create the Pages site itself.
 
 For a manual project-site build, set the base path to the repository name:
 

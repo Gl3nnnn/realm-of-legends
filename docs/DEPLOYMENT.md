@@ -4,9 +4,9 @@
 
 The repository includes `.github/workflows/deploy-pages.yml`.
 
-1. Push to `main`, or run the workflow manually.
-2. In GitHub, open **Settings > Pages**.
-3. Set **Build and deployment > Source** to **GitHub Actions**.
+1. In GitHub, open **Settings > Pages**.
+2. Set **Build and deployment > Source** to **GitHub Actions**. This first-time activation must be done once in the browser; the workflow `GITHUB_TOKEN` can deploy but cannot create the Pages site.
+3. Push to `main`, or run the workflow manually.
 4. The game is published at `https://<user>.github.io/<repository>/`.
 
 The workflow:
