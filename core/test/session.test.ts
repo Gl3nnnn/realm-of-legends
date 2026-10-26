@@ -3,6 +3,7 @@ import {
   GameSession,
   INVENTORY_SIZE,
   getItem,
+  getTalentTree,
   createCharacter,
   validateSave,
   type CharacterSave,
@@ -207,6 +208,65 @@ describe("quests", () => {
   });
 });
 
+describe("item instances, affixes and crafting", () => {
+  it("crafts an affixed item and upgrades equipped gear", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.gold = 1000;
+    session.addItem("iron_ore", 20);
+    expect(session.craft("craft_iron_sword")).toBe(true);
+    const craftedSlot = session.save.inventory.findIndex((stack) => stack?.itemId === "iron_sword" && stack.instance);
+    expect(craftedSlot).toBeGreaterThanOrEqual(0);
+    const crafted = session.save.inventory[craftedSlot]!;
+    expect(crafted.instance?.affixes.length).toBeGreaterThan(0);
+    expect(session.equip(craftedSlot)).toBe(true);
+    const cost = session.upgradeCost("weapon");
+    expect(cost).not.toBeNull();
+    const before = session.stats.attack;
+    expect(session.upgradeEquipped("weapon")).toBe(true);
+    expect(session.save.equipment.weapon?.instance?.upgrade).toBe(1);
+    expect(session.stats.attack).toBeGreaterThan(before);
+    expect(validateSave(session.snapshot()).ok).toBe(true);
+  });
+
+  it("rejects crafting without materials", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.gold = 1000;
+    expect(session.craft("craft_steel_sword")).toBe(false);
+  });
+});
+
+describe("talents", () => {
+  it("learns one talent per tier and applies its bonuses", () => {
+    const save = saveIn("village");
+    save.level = 5;
+    const session = new GameSession(save);
+    const tree = getTalentTree("warrior");
+    const first = tree.tiers[0].choices[0];
+    const second = tree.tiers[0].choices[1];
+    const before = session.stats.attack;
+    expect(session.learnTalent(first.id)).toBe(true);
+    expect(session.stats.attack).toBeGreaterThan(before);
+    expect(session.learnTalent(second.id)).toBe(false);
+    expect(session.learnTalent(tree.tiers[1].choices[0].id)).toBe(false);
+    expect(validateSave(session.snapshot()).ok).toBe(true);
+  });
+
+  it("respecs at the trainer for gold", () => {
+    const save = saveIn("village");
+    save.level = 5;
+    save.gold = 500;
+    const session = new GameSession(save);
+    const first = getTalentTree("warrior").tiers[0].choices[0];
+    expect(session.learnTalent(first.id)).toBe(true);
+    const cost = session.respecCost();
+    expect(cost).toBeGreaterThan(0);
+    expect(session.respecTalents()).toBe(true);
+    expect(session.save.talents).toEqual([]);
+    expect(session.save.gold).toBe(500 - cost);
+    expect(session.respecTalents()).toBe(false);
+  });
+});
+
 describe("zones and persistence", () => {
   it("travels through a portal and produces a valid snapshot", () => {
     const session = new GameSession(saveIn("village"));
@@ -221,5 +281,45 @@ describe("zones and persistence", () => {
     const result = validateSave(snapshot);
     expect(result.ok, result.ok ? "" : result.error).toBe(true);
     expect(snapshot.zone).toBe(portal.targetZone);
+  });
+});
+
+describe("difficulty, elites and bosses", () => {
+  it("scales enemies by difficulty and cycle", () => {
+    const normal = saveIn("forest");
+    const nightmare = saveIn("forest");
+    nightmare.difficulty = "nightmare";
+    nightmare.ngPlus = 1;
+    const normalSession = new GameSession(normal);
+    const hardSession = new GameSession(nightmare);
+    const normalSlime = normalSession.monsters.find((m) => m.defId === "slime")!;
+    const hardSlime = hardSession.monsters.find((m) => m.defId === "slime")!;
+    expect(hardSlime.maxHp!).toBeGreaterThan(normalSlime.maxHp!);
+    expect(hardSession.difficultyScale.attack).toBeGreaterThan(1);
+    expect(hardSession.setDifficulty("story")).toBe(true);
+    expect(hardSession.save.difficulty).toBe("story");
+  });
+
+  it("advances bosses through phases", () => {
+    const save = saveIn("throne");
+    const session = new GameSession(save);
+    const king = session.monsters.find((m) => m.defId === "hollow_king")!;
+    expect(king).toBeTruthy();
+    king.hp = king.maxHp! * 0.6;
+    const events = session.step(0.05, IDLE);
+    expect(king.phase).toBe(1);
+    expect(events.some((event) => event.type === "log" && event.text.includes("phase 2"))).toBe(true);
+  });
+
+  it("starts New Game+ only after the final boss", () => {
+    const save = saveIn("village");
+    const session = new GameSession(save);
+    expect(session.canNewGamePlus()).toBe(false);
+    expect(session.startNewGamePlus()).toBe(false);
+    session.save.defeatedBosses.push("hollow_king");
+    expect(session.startNewGamePlus()).toBe(true);
+    expect(session.save.ngPlus).toBe(1);
+    expect(session.save.zone).toBe("village");
+    expect(session.save.quests).toEqual([]);
   });
 });

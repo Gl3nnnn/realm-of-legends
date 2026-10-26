@@ -1,17 +1,29 @@
 import { z } from "zod";
 import { INVENTORY_SIZE, LEVEL_CAP, SAVE_VERSION } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
-import { ITEMS, canClassUse, isEquippable } from "../data/items";
+import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
+import { getTalentChoice, talentTierChosen } from "../data/talents";
 import { getZone, ZONES } from "../generated/world-data";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
 import { clampLevel } from "../progression";
 
 const CLASS_IDS = Object.keys(CLASSES) as [ClassId, ...ClassId[]];
-const ZONE_IDS = ["village", "forest", "dungeon"] as const;
+const ZONE_IDS = ["village", "forest", "dungeon", "marsh", "frost", "throne"] as const;
+const DIFFICULTIES = ["story", "normal", "nightmare"] as const;
+const BOSS_IDS = ["bone_warden", "miremother", "frost_revenant", "hollow_king"] as const;
+
+const affixIds = AFFIX_IDS as [string, ...string[]];
+
+const itemInstanceSchema = z.object({
+  uid: z.string().min(1).max(80),
+  affixes: z.array(z.enum(affixIds)).max(8),
+  upgrade: z.number().int().min(0).max(MAX_UPGRADE),
+});
 
 const itemStackSchema = z.object({
   itemId: z.string().min(1),
   qty: z.number().int().min(1).max(9999),
+  instance: itemInstanceSchema.optional(),
 });
 
 const equipmentSchema = z.object({
@@ -43,9 +55,14 @@ export const saveSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
   inventory: z.array(itemStackSchema.nullable()).length(INVENTORY_SIZE),
+  quickSlots: z.tuple([z.string().nullable(), z.string().nullable()]),
+  talents: z.array(z.string().min(1)).max(5),
   equipment: equipmentSchema,
   quests: z.array(questSchema),
   openedChests: z.array(z.string()),
+  difficulty: z.enum(DIFFICULTIES),
+  ngPlus: z.number().int().min(0).max(99),
+  defeatedBosses: z.array(z.enum(BOSS_IDS)).max(32),
   playtime: z.number().finite().min(0),
   rngState: z.number().int().min(0).max(0xffffffff),
   createdAt: z.number().int().min(0),
@@ -114,9 +131,14 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     x: zone.spawn.x,
     y: zone.spawn.y,
     inventory,
+    quickSlots: ["health_potion", null],
+    talents: [],
     equipment,
     quests: [],
     openedChests: [],
+    difficulty: "normal",
+    ngPlus: 0,
+    defeatedBosses: [],
     playtime: 0,
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
@@ -152,11 +174,26 @@ export function validateSave(input: unknown): SaveParseResult {
   for (const stack of save.inventory) {
     if (!stack) continue;
     if (!ITEMS[stack.itemId]) return { ok: false, error: `Unknown inventory item: ${stack.itemId}` };
+    if (stack.instance && (stack.qty !== 1 || !isEquippable(ITEMS[stack.itemId]))) return { ok: false, error: "Item instances must be single pieces of equipment." };
+  }
+  for (const itemId of save.quickSlots) {
+    if (itemId && !ITEMS[itemId]) return { ok: false, error: `Unknown quick-slot item: ${itemId}` };
+  }
+  const seenTiers = new Set<number>();
+  for (const talentId of save.talents) {
+    const choice = getTalentChoice(save.classId, talentId);
+    if (!choice) return { ok: false, error: `Unknown talent: ${talentId}` };
+    if (seenTiers.has(choice.tier) || talentTierChosen(save.classId, save.talents, choice.tier)?.id !== choice.id) {
+      return { ok: false, error: "Only one talent can be chosen per tier." };
+    }
+    seenTiers.add(choice.tier);
+    if (save.level < choice.level) return { ok: false, error: `${choice.name} requires level ${choice.level}.` };
   }
   for (const [slot, stack] of Object.entries(save.equipment)) {
     if (!stack) continue;
     const def = ITEMS[stack.itemId];
     if (!def) return { ok: false, error: `Unknown equipped item: ${stack.itemId}` };
+    if (stack.instance && (stack.qty !== 1 || !isEquippable(def))) return { ok: false, error: "Invalid equipment instance." };
     if (!isEquippable(def)) return { ok: false, error: `${def.name} cannot be equipped.` };
     if (!canClassUse(def, save.classId)) return { ok: false, error: `${def.name} cannot be used by this class.` };
     if (slot !== def.type) return { ok: false, error: `${def.name} does not belong in the ${slot} slot.` };
@@ -173,10 +210,23 @@ export function migrateSave(input: unknown): CharacterSave {
   const record = input as Record<string, unknown>;
   if (typeof record.version !== "number") throw new Error("Save is missing a version.");
   if (record.version > SAVE_VERSION) throw new Error("This save was created by a newer version of the game.");
-  if (record.version < SAVE_VERSION) {
-    throw new Error("This save version is no longer supported.");
+  if (record.version < 1) throw new Error("This save version is no longer supported.");
+  const migrated = { ...record };
+  if (migrated.version === 1) {
+    migrated.quickSlots = ["health_potion", null];
+    migrated.version = 2;
   }
-  const result = validateSave(record);
+  if (migrated.version === 2) {
+    migrated.talents = [];
+    migrated.version = 3;
+  }
+  if (migrated.version === 3) {
+    migrated.difficulty = "normal";
+    migrated.ngPlus = 0;
+    migrated.defeatedBosses = [];
+    migrated.version = 4;
+  }
+  const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);
   return result.save;
 }

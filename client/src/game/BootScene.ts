@@ -25,6 +25,9 @@ export class BootScene extends Phaser.Scene {
     this.load.tilemapTiledJSON("map-village", "assets/maps/village.json");
     this.load.tilemapTiledJSON("map-forest", "assets/maps/forest.json");
     this.load.tilemapTiledJSON("map-dungeon", "assets/maps/dungeon.json");
+    this.load.tilemapTiledJSON("map-marsh", "assets/maps/marsh.json");
+    this.load.tilemapTiledJSON("map-frost", "assets/maps/frost.json");
+    this.load.tilemapTiledJSON("map-throne", "assets/maps/throne.json");
   }
 
   async create(): Promise<void> {

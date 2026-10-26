@@ -1,11 +1,16 @@
 import {
+  AFFIXES,
   CLASSES,
   ITEMS,
   abilityIcon,
   charFrame,
   itemIcon,
   portraitFrame,
+  GEAR_SETS,
   getItem,
+  itemDisplayName,
+  itemSellValue,
+  itemStats,
   type ClassDef,
   type ItemDef,
   type ItemStack,
@@ -78,7 +83,7 @@ export function itemDef(itemId: string): ItemDef | undefined {
 
 export function stackName(stack: ItemStack | null): string {
   if (!stack) return "";
-  return getItem(stack.itemId).name;
+  return itemDisplayName(stack);
 }
 
 export function formatNumber(value: number): string {
@@ -115,23 +120,46 @@ export function statLines(stats?: StatBonus): string[] {
     });
 }
 
-export function itemDetailHtml(stack: ItemStack | null): string {
+export function itemDetailHtml(stack: ItemStack | null, compareTo: ItemStack | null = null): string {
   if (!stack) return `<div class="item-detail"><p class="muted">Select an item to inspect it.</p></div>`;
   const def = getItem(stack.itemId);
-  const lines = statLines(def.stats);
+  const stats = itemStats(stack);
+  const lines = statLines(stats);
+  const compareDef = compareTo ? getItem(compareTo.itemId) : null;
+  const compareStats = compareTo ? itemStats(compareTo) : null;
+  const diffs = compareDef && compareStats
+    ? (Object.keys(STAT_LABELS) as (keyof StatBonus)[])
+        .map((key) => ({ key, value: (stats[key] ?? 0) - (compareStats[key] ?? 0) }))
+        .filter((entry) => Math.abs(entry.value) > 0.001)
+    : [];
+  const comparison = diffs.length
+    ? `<div class="item-compare"><div class="muted small">Compared with ${esc(itemDisplayName(compareTo!))}</div>${diffs
+        .map(({ key, value }) => {
+          const shown = key === "crit" ? `${Math.round(Math.abs(value) * 100)}%` : `${Math.round(Math.abs(value))}`;
+          return `<div class="${value > 0 ? "better" : "worse"}">${value > 0 ? "+" : "-"}${shown} ${STAT_LABELS[key]}</div>`;
+        })
+        .join("")}</div>`
+    : compareDef
+      ? `<div class="item-compare muted small">Same stats as ${esc(itemDisplayName(compareTo!))}</div>`
+      : "";
+  const set = def.set ? GEAR_SETS[def.set] : null;
+  const affixes = (stack.instance?.affixes ?? []).map((id) => `Affix: ${AFFIXES[id]?.name ?? id}`).join(" · ");
   return `<div class="item-detail">
     <div style="display:flex;gap:12px;align-items:center">
       <div class="item-icon" style="width:48px;height:48px;display:grid;place-items:center">${itemIconHtml(def.icon, 40)}</div>
       <div>
-        <h3 class="rarity-${def.rarity}">${esc(def.name)}</h3>
-        <div class="muted small">${esc(def.type)} · ${esc(def.rarity)}${stack.qty > 1 ? ` · x${stack.qty}` : ""}</div>
+        <h3 class="rarity-${def.rarity}">${esc(itemDisplayName(stack))}</h3>
+        <div class="muted small">${esc(def.type)} · ${esc(def.rarity)}${stack.qty > 1 ? ` · x${stack.qty}` : ""}${stack.instance?.upgrade ? ` · +${stack.instance.upgrade}` : ""}</div>
       </div>
     </div>
     <p class="desc">${esc(def.description)}</p>
     ${lines.length ? `<div class="item-stat">${lines.map(esc).join("<br>")}</div>` : ""}
+    ${affixes ? `<div class="small muted">${esc(affixes)}</div>` : ""}
+    ${set ? `<div class="small" style="color:var(--gold)">Set: ${esc(set.name)}</div>${set.bonuses.map((bonus) => `<div class="small muted">${bonus.pieces} pieces: ${esc(bonus.text)}</div>`).join("")}` : ""}
+    ${comparison}
     ${def.heal ? `<div class="item-stat">Restores ${def.heal} health</div>` : ""}
     ${def.restore ? `<div class="item-stat">Restores ${def.restore} resource</div>` : ""}
-    ${def.buy ? `<div class="muted small">Value: ${def.buy} gold · Sells for ${def.sell}</div>` : `<div class="muted small">Sells for ${def.sell}</div>`}
+    ${def.buy ? `<div class="muted small">Value: ${def.buy} gold · Sells for ${itemSellValue(stack)}</div>` : `<div class="muted small">Sells for ${itemSellValue(stack)}</div>`}
   </div>`;
 }
 

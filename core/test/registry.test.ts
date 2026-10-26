@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ZoneId } from "../src/types";
 import {
   ABILITY_ICON_INDEX,
   ALL_ABILITIES,
@@ -174,16 +175,17 @@ describe("zone data", () => {
     }
   });
 
-  it("links the three overworld areas together", () => {
-    expect(ZONE_LIST.map((z) => z.id).sort()).toEqual(["dungeon", "forest", "village"]);
+  it("links every zone into one reachable world", () => {
+    const expected = ["dungeon", "forest", "frost", "marsh", "throne", "village"];
+    expect(ZONE_LIST.map((z) => z.id).sort()).toEqual(expected);
     const reachable = new Set<string>();
     const queue = ["village"];
     while (queue.length) {
       const id = queue.pop()!;
       if (reachable.has(id)) continue;
       reachable.add(id);
-      for (const portal of getZone(id as "village" | "forest" | "dungeon").portals) queue.push(portal.targetZone);
+      for (const portal of getZone(id as ZoneId).portals) queue.push(portal.targetZone);
     }
-    expect([...reachable].sort()).toEqual(["dungeon", "forest", "village"]);
+    expect([...reachable].sort()).toEqual(expected);
   });
 });

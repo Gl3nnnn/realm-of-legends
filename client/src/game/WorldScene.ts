@@ -12,6 +12,18 @@ import {
   type SimEvent,
 } from "@realm/core";
 import type { UIManager } from "../ui/UIManager";
+import { loadPreferences } from "../ui/preferences";
+
+const DAMAGE_TEXT_COLORS: Record<string, string> = {
+  physical: "#fff0cc",
+  fire: "#ff9a4a",
+  ice: "#7fd4ff",
+  arcane: "#c99aff",
+  holy: "#ffe89a",
+  shadow: "#b07ae8",
+  nature: "#8ef0a0",
+  poison: "#a6e87a",
+};
 
 interface WorldData {
   session: GameSession;
@@ -28,6 +40,7 @@ interface KeyMap {
   LEFT: Phaser.Input.Keyboard.Key;
   RIGHT: Phaser.Input.Keyboard.Key;
   SPACE: Phaser.Input.Keyboard.Key;
+  SHIFT: Phaser.Input.Keyboard.Key;
   E: Phaser.Input.Keyboard.Key;
   ONE: Phaser.Input.Keyboard.Key;
   TWO: Phaser.Input.Keyboard.Key;
@@ -75,7 +88,14 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     const session = this.session;
-    this.cameras.main.setBackgroundColor(session.zone.ambience === "dungeon" ? "#0d0a12" : session.zone.ambience === "forest" ? "#111a13" : "#141a17");
+    const bg = session.zone.ambience === "dungeon" || session.zone.ambience === "throne"
+      ? "#0d0a12"
+      : session.zone.ambience === "forest" || session.zone.ambience === "marsh"
+        ? "#111a13"
+        : session.zone.ambience === "frost"
+          ? "#111a24"
+          : "#141a17";
+    this.cameras.main.setBackgroundColor(bg);
     this.buildMap();
     this.createPortals();
     this.createChests();
@@ -94,7 +114,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.roundPixels = true;
     this.cameras.main.fadeIn(260, 10, 8, 14);
 
-    if (session.zone.ambience === "dungeon") {
+    if (session.zone.ambience === "dungeon" || session.zone.ambience === "throne") {
       const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2);
       shade.setOrigin(0, 0).setScrollFactor(0).setDepth(9500);
       const onResize = () => shade.setSize(this.scale.width, this.scale.height);
@@ -102,8 +122,8 @@ export class WorldScene extends Phaser.Scene {
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off("resize", onResize));
     }
 
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,ONE,TWO,THREE,FOUR,FIVE") as KeyMap;
-    this.input.keyboard!.addCapture(["W", "A", "S", "D", "SPACE", "UP", "DOWN", "LEFT", "RIGHT"]);
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,E,ONE,TWO,THREE,FOUR,FIVE") as KeyMap;
+    this.input.keyboard!.addCapture(["W", "A", "S", "D", "SPACE", "SHIFT", "UP", "DOWN", "LEFT", "RIGHT"]);
     this.aim = { x: session.save.x + 80, y: session.save.y + 40 };
 
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -231,6 +251,7 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(monster.y)
       .setOrigin(0.5, 0.6);
     if (def.boss) sprite.setScale(1.55);
+    else if (monster.elite) sprite.setScale(1.2);
     this.monsterSprites.set(monster.uid, sprite);
   }
 
@@ -278,6 +299,9 @@ export class WorldScene extends Phaser.Scene {
     const down = this.keys.S.isDown || this.keys.DOWN.isDown;
     const moveX = (right ? 1 : 0) - (left ? 1 : 0);
     const moveY = (down ? 1 : 0) - (up ? 1 : 0);
+    if (!this.ui.modalOpen && Phaser.Input.Keyboard.JustDown(this.keys.SHIFT)) {
+      this.session.dodge(moveX, moveY);
+    }
 
     const events = this.session.step(Math.min(delta / 1000, 0.05), {
       moveX,
@@ -321,14 +345,25 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private handleSimEvents(events: SimEvent[]): void {
+    const preferences = loadPreferences();
     for (const event of events) {
       switch (event.type) {
         case "damage":
-          this.floatText(event.x, event.y - 12, `-${Math.round(event.amount)}`, event.target === "player" ? "#ff8f8f" : event.crit ? "#ffd76a" : "#fff0cc", event.crit ? 11 : 9);
+          if (preferences.showDamage) {
+            const color = event.target === "player" ? "#ff8f8f" : event.crit ? "#ffd76a" : DAMAGE_TEXT_COLORS[event.damageType] ?? "#fff0cc";
+            this.floatText(event.x, event.y - 12, `-${Math.round(event.amount)}${event.crit ? "!" : ""}`, color, event.crit ? 11 : 9);
+          }
           this.flashMonster(event.x, event.y);
           break;
         case "heal":
-          this.floatText(event.x, event.y - 12, `+${Math.round(event.amount)}`, "#8ef0a0", 9);
+          if (preferences.showDamage) this.floatText(event.x, event.y - 12, `+${Math.round(event.amount)}`, "#8ef0a0", 9);
+          break;
+        case "dodge":
+          this.floatText(event.x, event.y - 18, "DODGE", "#9ecbff", 8);
+          this.burst(event.x, event.y, 0x7fd4ff);
+          break;
+        case "immune":
+          this.floatText(event.x, event.y - 18, "IMMUNE", "#9ecbff", 8);
           break;
         case "death":
           if (event.who === "monster") this.burst(event.x, event.y, 0xb24a4a);
@@ -393,6 +428,10 @@ export class WorldScene extends Phaser.Scene {
       else if (monster.statuses.some((status) => status.kind === "burn")) sprite.setTint(0xffb070);
       else if (monster.statuses.some((status) => status.kind === "slow")) sprite.setTint(0x9ecbff);
       else if (monster.statuses.some((status) => status.kind === "stun")) sprite.setTint(0xaaaaaa);
+      else if (monster.elite === "swift") sprite.setTint(0xffe27a);
+      else if (monster.elite === "armored") sprite.setTint(0x9ecbff);
+      else if (monster.elite === "venomous") sprite.setTint(0x9fe8a0);
+      else if (monster.elite === "volatile") sprite.setTint(0xff9a6a);
       else sprite.clearTint();
     }
     for (const [uid, sprite] of this.monsterSprites) {

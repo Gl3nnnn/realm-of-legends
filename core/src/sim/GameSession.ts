@@ -1,16 +1,37 @@
 import {
   COMBAT_TIMEOUT,
+  DODGE_COOLDOWN,
+  DODGE_DURATION,
+  DODGE_INVULN,
+  DODGE_SPEED,
   INTERACT_RANGE,
   PICKUP_RANGE,
   PLAYER_RADIUS,
+  POTION_COOLDOWN,
   RESPAWN_SECONDS,
   RESOURCE_LABELS,
 } from "../constants";
 import { getClass } from "../data/classes";
-import { getItem, ITEMS, canClassUse, isEquippable } from "../data/items";
+import {
+  createItemInstance,
+  getItem,
+  getRecipe,
+  itemSellValue,
+  ITEMS,
+  MAX_UPGRADE,
+  canClassUse,
+  isEquippable,
+} from "../data/items";
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { getQuest, QUESTS } from "../data/quests";
+import {
+  getTalentChoice,
+  talentBonuses,
+  talentModifiers as computeTalentModifiers,
+  talentTierChosen,
+  type TalentModifiers,
+} from "../data/talents";
 import { getZone, ZONES } from "../generated/world-data";
 import { deriveStats, isAbilityUnlocked, rageDecayPerSecond, resourceRegen, unlockedAbilities, xpToNext, type DerivedStats } from "../progression";
 import { Rng } from "../rng";
@@ -85,6 +106,10 @@ export class GameSession {
   buffs: BuffInstance[] = [];
   cooldowns: Record<string, number> = {};
   shield = 0;
+  dodgeCooldown = 0;
+  dodgeTimer = 0;
+  invulnerable = 0;
+  potionCooldown = 0;
   dead = false;
   respawnTimer = 0;
   facing: Direction = "down";
@@ -99,6 +124,8 @@ export class GameSession {
   private lastCombat = -999;
   private gathered = new Set<string>();
   private lastAim: Vec2 = { x: 0, y: 1 };
+  private dodgeDir: Vec2 = { x: 0, y: 1 };
+  private lastImmuneEvent = -999;
 
   constructor(save: CharacterSave) {
     this.save = save;
@@ -123,8 +150,61 @@ export class GameSession {
     return RESOURCE_LABELS[this.classDef.resource];
   }
 
+  get modifiers(): TalentModifiers {
+    return computeTalentModifiers(this.save.classId, this.save.talents);
+  }
+
+  get difficultyScale(): { hp: number; attack: number; xp: number; gold: number } {
+    const base = this.save.difficulty === "story"
+      ? { hp: 0.8, attack: 0.8, reward: 0.9 }
+      : this.save.difficulty === "nightmare"
+        ? { hp: 1.6, attack: 1.35, reward: 1.3 }
+        : { hp: 1, attack: 1, reward: 1 };
+    const cycle = 1 + this.save.ngPlus * 0.35;
+    return {
+      hp: base.hp * cycle,
+      attack: base.attack * cycle,
+      xp: base.reward * (1 + this.save.ngPlus * 0.15),
+      gold: base.reward * (1 + this.save.ngPlus * 0.15),
+    };
+  }
+
+  setDifficulty(difficulty: CharacterSave["difficulty"]): boolean {
+    if (this.dead) return false;
+    if (!["story", "normal", "nightmare"].includes(difficulty)) return false;
+    this.save.difficulty = difficulty;
+    this.emit({ type: "log", text: `Difficulty set to ${difficulty}.`, tone: "info" });
+    return true;
+  }
+
+  canNewGamePlus(): boolean {
+    return this.save.defeatedBosses.includes("hollow_king");
+  }
+
+  startNewGamePlus(): boolean {
+    if (!this.canNewGamePlus()) {
+      this.emit({ type: "log", text: "Defeat the Hollow King before beginning a new cycle.", tone: "info" });
+      return false;
+    }
+    this.save.ngPlus += 1;
+    this.save.defeatedBosses = [];
+    this.save.quests = [];
+    this.save.openedChests = [];
+    this.save.zone = "village";
+    const village = ZONES.village;
+    this.save.x = village.spawn.x;
+    this.save.y = village.spawn.y;
+    this.loadZone();
+    const stats = this.stats;
+    this.save.hp = stats.maxHp;
+    this.save.resource = this.classDef.resource === "rage" ? 0 : stats.maxResource;
+    this.emit({ type: "zone", zone: "village" });
+    this.emit({ type: "log", text: `New Game+ ${this.save.ngPlus} begins. The realm grows harsher.`, tone: "good" });
+    return true;
+  }
+
   private computeStats(): DerivedStats {
-    const base = deriveStats(this.classDef, this.save.level, this.save.equipment);
+    const base = deriveStats(this.classDef, this.save.level, this.save.equipment, talentBonuses(this.save.classId, this.save.talents));
     let attack = base.attack;
     let defense = base.defense;
     let maxHp = base.maxHp;
@@ -190,6 +270,10 @@ export class GameSession {
 
   private makeMonster(spawn: { id: string; x: number; y: number }, uid?: string): MonsterInstance {
     const def = getMonster(spawn.id);
+    const elite = !def.boss && this.rng.chance(0.08 + this.save.ngPlus * 0.02)
+      ? this.rng.pick(["swift", "armored", "venomous", "volatile"] as const)
+      : undefined;
+    const maxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (elite ? 1.6 : 1)));
     return {
       uid: uid ?? this.nextUid("m"),
       defId: spawn.id,
@@ -197,7 +281,8 @@ export class GameSession {
       y: spawn.y,
       spawnX: spawn.x,
       spawnY: spawn.y,
-      hp: def.maxHp,
+      hp: maxHp,
+      maxHp,
       state: "idle",
       facing: 1,
       attackTimer: 0,
@@ -206,6 +291,8 @@ export class GameSession {
       wanderTimer: this.rng.between(0.5, 3),
       wanderX: spawn.x,
       wanderY: spawn.y,
+      elite,
+      phase: 0,
     };
   }
 
@@ -257,16 +344,26 @@ export class GameSession {
     for (const key of Object.keys(this.cooldowns)) {
       this.cooldowns[key] = Math.max(0, this.cooldowns[key] - clamped);
     }
+    this.dodgeCooldown = Math.max(0, this.dodgeCooldown - clamped);
+    this.invulnerable = Math.max(0, this.invulnerable - clamped);
+    this.potionCooldown = Math.max(0, this.potionCooldown - clamped);
     this.tickStatuses(clamped);
     this.tickBuffs(clamped);
 
     const stats = this.stats;
-    let currentStats = stats;
+    const currentStats = stats;
     const slow = this.statuses.find((s) => s.kind === "slow");
     const stunned = this.statuses.some((s) => s.kind === "stun");
     const speed = currentStats.moveSpeed * (slow ? 1 - slow.value / 100 : 1);
-    const moving = !stunned && (input.moveX !== 0 || input.moveY !== 0);
-    if (moving) {
+    const dodging = this.dodgeTimer > 0 && !stunned;
+    let moving = !stunned && (input.moveX !== 0 || input.moveY !== 0);
+    if (dodging) {
+      const dodgeSpeed = DODGE_SPEED * (slow ? 0.85 : 1);
+      this.moveEntity(this.save, this.dodgeDir.x * dodgeSpeed * clamped, this.dodgeDir.y * dodgeSpeed * clamped, PLAYER_RADIUS);
+      this.dodgeTimer = Math.max(0, this.dodgeTimer - clamped);
+      this.animationTime += clamped;
+      moving = true;
+    } else if (moving) {
       const dir = normalize(input.moveX, input.moveY);
       this.moveEntity(this.save, dir.x * speed * clamped, dir.y * speed * clamped, PLAYER_RADIUS);
       if (Math.abs(input.moveX) > Math.abs(input.moveY)) this.facing = input.moveX > 0 ? "right" : "left";
@@ -303,6 +400,13 @@ export class GameSession {
 
   private tickStatuses(dt: number): void {
     for (const status of this.statuses) status.remaining -= dt;
+    const playerDot = this.statuses
+      .filter((s) => s.kind === "poison" || s.kind === "burn")
+      .reduce((sum, s) => sum + s.value * dt, 0);
+    if (playerDot > 0 && !this.dead) {
+      this.save.hp = Math.max(0, this.save.hp - playerDot);
+      if (this.save.hp <= 0) this.killPlayer("Venom");
+    }
     this.statuses = this.statuses.filter((s) => s.remaining > 0);
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
@@ -360,13 +464,13 @@ export class GameSession {
       }
 
       if (stunned) continue;
-      const speed = def.speed * (slowed ? 1 - slowed.value / 100 : 1);
+      const speed = def.speed * (monster.elite === "swift" ? 1.3 : 1) * (slowed ? 1 - slowed.value / 100 : 1);
 
       if (monster.state === "return") {
         const dir = normalize(monster.spawnX - monster.x, monster.spawnY - monster.y);
         if (leashDist < 6) {
           monster.state = "idle";
-          monster.hp = def.maxHp;
+          monster.hp = monster.maxHp ?? def.maxHp;
           monster.statuses = [];
         } else {
           this.moveEntity(monster, dir.x * speed * dt, dir.y * speed * dt, def.radius);
@@ -391,9 +495,14 @@ export class GameSession {
           monster.state = "chase";
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
-          const raw = def.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
+          const raw = def.attack * this.difficultyScale.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
           this.damagePlayer(raw, def.name);
           if (this.dead) return;
+          if (monster.elite === "venomous") {
+            const existing = this.statuses.find((s) => s.kind === "poison");
+            if (existing) existing.remaining = Math.max(existing.remaining, 3);
+            else this.statuses.push({ kind: "poison", remaining: 3, value: def.attack * 0.12 });
+          }
         }
       } else if (monster.state === "idle") {
         if (monster.wanderTimer <= 0) {
@@ -409,7 +518,30 @@ export class GameSession {
       }
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
-        this.spawnTelegraph(player.x, player.y, 62, def.attack * 1.8, 1.25);
+        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25);
+      }
+
+      if (def.boss) {
+        const maxHp = monster.maxHp ?? def.maxHp;
+        const nextPhase = monster.hp / maxHp <= 0.33 ? 2 : monster.hp / maxHp <= 0.66 ? 1 : 0;
+        if (nextPhase > (monster.phase ?? 0)) {
+          monster.phase = nextPhase;
+          monster.attackTimer = Math.max(monster.attackTimer, 0.8);
+          this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
+          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5);
+          if (def.id === "hollow_king") {
+            for (let i = 0; i < nextPhase; i += 1) {
+              const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
+              const add = this.makeMonster({
+                id: "hollow_acolyte",
+                x: monster.x + Math.cos(angle) * 56,
+                y: monster.y + Math.sin(angle) * 56,
+              });
+              this.monsters.push(add);
+            }
+            this.emit({ type: "log", text: "Hollow acolytes answer their king's call.", tone: "bad" });
+          }
+        }
       }
     }
   }
@@ -460,8 +592,16 @@ export class GameSession {
 
   private damagePlayer(raw: number, source: string): void {
     if (this.dead) return;
+    if (this.invulnerable > 0) {
+      if (this.elapsed - this.lastImmuneEvent > 0.35) {
+        this.lastImmuneEvent = this.elapsed;
+        this.emit({ type: "immune", x: this.save.x, y: this.save.y });
+      }
+      return;
+    }
     const stats = this.stats;
-    const mitigated = Math.max(1, Math.round(raw * (100 / (100 + stats.defense * 2))));
+    const reduced = raw * (1 - this.modifiers.damageReduction / 100);
+    const mitigated = Math.max(1, Math.round(reduced * (100 / (100 + stats.defense * 2))));
     let damage = mitigated;
     if (this.shield > 0) {
       const absorbed = Math.min(this.shield, damage);
@@ -506,7 +646,7 @@ export class GameSession {
     const def = getMonster(monster.defId);
     monster.x = monster.spawnX;
     monster.y = monster.spawnY;
-    monster.hp = def.maxHp;
+    monster.hp = monster.maxHp ?? def.maxHp;
     monster.state = "idle";
     monster.attackTimer = 0;
     monster.statuses = [];
@@ -520,16 +660,25 @@ export class GameSession {
     monster.respawnTimer = def.respawn > 0 ? def.respawn : 0;
     this.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y });
     this.lastCombat = this.elapsed;
+    if (def.boss && !this.save.defeatedBosses.includes(def.id)) this.save.defeatedBosses.push(def.id);
+    if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
+      this.damagePlayer(def.attack * this.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
+      this.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
+    }
     if (SUMMON_IDS.has(def.id)) return;
-    if (def.xp > 0) this.gainXp(def.xp);
-    const gold = this.rng.int(def.goldMin, def.goldMax);
+    if (def.xp > 0) this.gainXp(Math.round(def.xp * this.difficultyScale.xp));
+    const gold = Math.round(this.rng.int(def.goldMin, def.goldMax) * this.difficultyScale.gold);
     if (gold > 0) {
       this.save.gold += gold;
       this.emit({ type: "gold", amount: gold });
     }
     const drops: ItemStack[] = [];
     for (const entry of def.loot) {
-      if (this.rng.chance(entry.chance)) drops.push({ itemId: entry.itemId, qty: this.rng.int(entry.min, entry.max) });
+      if (!this.rng.chance(entry.chance)) continue;
+      const item = ITEMS[entry.itemId];
+      const qty = this.rng.int(entry.min, entry.max);
+      const instance = item && isEquippable(item) ? createItemInstance(entry.itemId, this.rng) : undefined;
+      drops.push({ itemId: entry.itemId, qty: instance ? 1 : qty, instance });
     }
     for (const drop of drops) {
       const item = ITEMS[drop.itemId];
@@ -541,6 +690,7 @@ export class GameSession {
         x: monster.x + this.rng.between(-10, 10),
         y: monster.y + this.rng.between(-10, 10),
         ttl: 90,
+        instance: drop.instance,
       });
       this.emit({ type: "loot", itemId: drop.itemId, qty: drop.qty, x: monster.x, y: monster.y });
     }
@@ -599,7 +749,7 @@ export class GameSession {
     for (const drop of this.loot) {
       drop.ttl -= dt;
       if (dist2(this.save.x, this.save.y, drop.x, drop.y) <= PICKUP_RANGE * PICKUP_RANGE) {
-        if (this.addItem(drop.itemId, drop.qty) === 0) {
+        if (this.addItem(drop.itemId, drop.qty, drop.instance) === 0) {
           this.emit({ type: "pickup", itemId: drop.itemId, qty: drop.qty });
           drop.ttl = 0;
         }
@@ -625,9 +775,14 @@ export class GameSession {
   private hitMonster(monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[]): void {
     if (monster.state === "dead") return;
     const def = getMonster(monster.defId);
+    const mods = this.modifiers;
     const marked = monster.statuses.some((s) => s.kind === "mark");
-    const mitigated = Math.max(1, Math.round(raw * (100 / (100 + def.defense * 2.5)) * (marked ? 1.2 : 1)));
+    const maxHp = monster.maxHp ?? def.maxHp;
+    const execute = monster.hp / maxHp <= 0.3 ? 1 + mods.execute / 100 : 1;
+    const eliteDefense = monster.elite === "armored" ? 1.35 : 1;
+    const mitigated = Math.max(1, Math.round(raw * (100 / (100 + def.defense * 2.5 * eliteDefense)) * (marked ? 1.2 : 1) * execute));
     monster.hp -= mitigated;
+    if (mods.lifesteal > 0) this.healPlayer(mitigated * (mods.lifesteal / 100));
     this.lastCombat = this.elapsed;
     this.emit({
       type: "damage",
@@ -654,7 +809,10 @@ export class GameSession {
         monster.statuses.push({ ...status });
       }
     }
-    if (monster.hp <= 0) this.killMonster(monster);
+    if (monster.hp <= 0) {
+      if (mods.healOnKill > 0) this.healPlayer(this.stats.maxHp * (mods.healOnKill / 100));
+      this.killMonster(monster);
+    }
   }
 
   private gainXp(amount: number): void {
@@ -705,7 +863,7 @@ export class GameSession {
     const dir = normalize(aim.x - this.save.x, aim.y - this.save.y);
     this.lastAim = dir;
     this.save.resource -= ability.cost;
-    this.cooldowns[id] = ability.cooldown;
+    this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
     this.emit({ type: "cast", abilityId: ability.id, x: this.save.x, y: this.save.y, color: this.classDef.accent, icon: ability.icon });
@@ -743,7 +901,7 @@ export class GameSession {
     const stats = this.stats;
     const raw = (effect.amount ?? 0) + (effect.scaling ?? 0) * stats.attack;
     const crit = this.rng.chance(stats.crit);
-    return Math.round(raw * (crit ? 1.8 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
+    return Math.round(raw * (crit ? 1.8 + this.modifiers.critDamage / 100 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
   }
 
   private castDirection(ability: AbilityDef, dir: Vec2): void {
@@ -957,9 +1115,16 @@ export class GameSession {
     }
   }
 
-  addItem(itemId: string, qty: number): number {
+  addItem(itemId: string, qty: number, instance?: ItemStack["instance"]): number {
     const def = ITEMS[itemId];
     if (!def || qty <= 0) return qty;
+    if (instance) {
+      const free = this.save.inventory.findIndex((stack) => stack === null);
+      if (free === -1) return qty;
+      this.save.inventory[free] = { itemId, qty: 1, instance };
+      this.refreshCollectQuests();
+      return Math.max(0, qty - 1);
+    }
     let remaining = qty;
     for (const stack of this.save.inventory) {
       if (!stack || stack.itemId !== itemId || stack.qty >= def.stack) continue;
@@ -1005,6 +1170,121 @@ export class GameSession {
     return true;
   }
 
+  dodge(dirX = 0, dirY = 0): boolean {
+    if (this.dead) return false;
+    if (this.stunned) return false;
+    if (this.dodgeCooldown > 0) return false;
+    const dir = dirX !== 0 || dirY !== 0
+      ? normalize(dirX, dirY)
+      : normalize(
+        this.facing === "left" ? -1 : this.facing === "right" ? 1 : 0,
+        this.facing === "up" ? -1 : this.facing === "down" ? 1 : 0,
+      );
+    this.dodgeDir = dir;
+    this.dodgeTimer = DODGE_DURATION;
+    this.invulnerable = DODGE_INVULN;
+    this.dodgeCooldown = DODGE_COOLDOWN;
+    const shieldOnDodge = this.modifiers.shieldOnDodge;
+    if (shieldOnDodge > 0) this.shield += shieldOnDodge;
+    if (Math.abs(dir.x) > Math.abs(dir.y)) this.facing = dir.x > 0 ? "right" : "left";
+    else this.facing = dir.y > 0 ? "down" : "up";
+    this.emit({ type: "dodge", x: this.save.x, y: this.save.y });
+    return true;
+  }
+
+  learnTalent(talentId: string): boolean {
+    const choice = getTalentChoice(this.save.classId, talentId);
+    if (!choice) {
+      this.emit({ type: "log", text: "That talent is not available to your class.", tone: "bad" });
+      return false;
+    }
+    if (this.save.level < choice.level) {
+      this.emit({ type: "log", text: `${choice.name} requires level ${choice.level}.`, tone: "info" });
+      return false;
+    }
+    const existing = talentTierChosen(this.save.classId, this.save.talents, choice.tier);
+    if (existing) {
+      this.emit({ type: "log", text: `You already chose ${existing.name} for this tier.`, tone: "info" });
+      return false;
+    }
+    const before = this.stats;
+    this.save.talents.push(choice.id);
+    const after = this.stats;
+    this.save.hp = Math.min(after.maxHp, this.save.hp + Math.max(0, after.maxHp - before.maxHp));
+    this.save.resource = Math.min(after.maxResource, this.save.resource + Math.max(0, after.maxResource - before.maxResource));
+    this.emit({ type: "log", text: `Learned talent: ${choice.name}.`, tone: "good" });
+    return true;
+  }
+
+  respecCost(): number {
+    if (this.save.talents.length === 0) return 0;
+    return 40 + this.save.level * 12;
+  }
+
+  respecTalents(): boolean {
+    if (this.save.talents.length === 0) {
+      this.emit({ type: "log", text: "You have no talents to reset.", tone: "info" });
+      return false;
+    }
+    const cost = this.respecCost();
+    if (this.save.gold < cost) {
+      this.emit({ type: "log", text: `Respec costs ${cost} gold.`, tone: "bad" });
+      return false;
+    }
+    this.save.gold -= cost;
+    this.save.talents = [];
+    const stats = this.stats;
+    this.save.hp = Math.min(this.save.hp, stats.maxHp);
+    this.save.resource = Math.min(this.save.resource, stats.maxResource);
+    this.emit({ type: "log", text: `Master Kael resets your talents for ${cost} gold.`, tone: "good" });
+    return true;
+  }
+
+  isGathered(nodeId: string): boolean {
+    return this.gathered.has(nodeId);
+  }
+
+  get dodgeCooldownRemaining(): number {
+    return this.dodgeCooldown;
+  }
+
+  get isInvulnerable(): boolean {
+    return this.invulnerable > 0;
+  }
+
+  get stunned(): boolean {
+    return this.statuses.some((s) => s.kind === "stun");
+  }
+
+  bindQuickSlot(index: number, itemId: string | null): boolean {
+    if (index !== 0 && index !== 1) return false;
+    if (itemId) {
+      const def = ITEMS[itemId];
+      if (!def) return false;
+      if (def.type !== "consumable") {
+        this.emit({ type: "log", text: "Only consumables can be bound to the quickbar.", tone: "info" });
+        return false;
+      }
+    }
+    this.save.quickSlots[index] = itemId;
+    return true;
+  }
+
+  useQuickSlot(index: number): boolean {
+    if (index !== 0 && index !== 1) return false;
+    const itemId = this.save.quickSlots[index];
+    if (!itemId) {
+      this.emit({ type: "log", text: "That quick slot is empty. Bind a consumable in your inventory.", tone: "info" });
+      return false;
+    }
+    const slot = this.save.inventory.findIndex((stack) => stack?.itemId === itemId);
+    if (slot < 0) {
+      this.emit({ type: "log", text: `No ${getItem(itemId).name} left in your pack.`, tone: "bad" });
+      return false;
+    }
+    return this.useItem(slot);
+  }
+
   countItem(itemId: string): number {
     return this.save.inventory.reduce((sum, stack) => (stack && stack.itemId === itemId ? sum + stack.qty : sum), 0);
   }
@@ -1014,6 +1294,10 @@ export class GameSession {
     if (!stack) return false;
     const def = getItem(stack.itemId);
     if (def.type !== "consumable") return false;
+    if (this.potionCooldown > 0) {
+      this.emit({ type: "log", text: `Potion cooldown: ${this.potionCooldown.toFixed(1)}s.`, tone: "info" });
+      return false;
+    }
     if (def.heal && this.save.hp >= this.stats.maxHp) {
       this.emit({ type: "log", text: "Health is already full.", tone: "info" });
       return false;
@@ -1022,6 +1306,7 @@ export class GameSession {
       this.emit({ type: "log", text: `${this.resourceLabel} is already full.`, tone: "info" });
       return false;
     }
+    this.potionCooldown = POTION_COOLDOWN;
     if (def.heal) this.healPlayer(def.heal);
     if (def.restore) this.save.resource = Math.min(this.stats.maxResource, this.save.resource + def.restore);
     stack.qty -= 1;
@@ -1077,7 +1362,7 @@ export class GameSession {
     if (!stack) return false;
     const amount = Math.max(1, Math.min(qty, stack.qty));
     const def = getItem(stack.itemId);
-    const gold = def.sell * amount;
+    const gold = itemSellValue(stack) * amount;
     stack.qty -= amount;
     if (stack.qty <= 0) this.save.inventory[slotIndex] = null;
     this.save.gold += gold;
@@ -1105,6 +1390,70 @@ export class GameSession {
     this.save.gold -= cost;
     this.addItem(itemId, amount);
     this.emit({ type: "log", text: `Bought ${amount}x ${def.name} for ${cost} gold.`, tone: "good" });
+    return true;
+  }
+
+  upgradeCost(slot: keyof CharacterSave["equipment"]): { gold: number; ore: number; next: number } | null {
+    const stack = this.save.equipment[slot];
+    if (!stack) return null;
+    const def = getItem(stack.itemId);
+    const next = (stack.instance?.upgrade ?? 0) + 1;
+    if (next > MAX_UPGRADE) return null;
+    return {
+      gold: Math.round(25 + next * 45 + (def.buy ?? 20) * 0.15),
+      ore: 2 + next * 2,
+      next,
+    };
+  }
+
+  upgradeEquipped(slot: keyof CharacterSave["equipment"]): boolean {
+    const stack = this.save.equipment[slot];
+    if (!stack) return false;
+    const cost = this.upgradeCost(slot);
+    if (!cost) {
+      this.emit({ type: "log", text: "That item is already masterwork quality.", tone: "info" });
+      return false;
+    }
+    if (this.save.gold < cost.gold || this.countItem("iron_ore") < cost.ore) {
+      this.emit({ type: "log", text: `Upgrading requires ${cost.gold} gold and ${cost.ore}x Iron Ore.`, tone: "bad" });
+      return false;
+    }
+    this.save.gold -= cost.gold;
+    this.removeItem("iron_ore", cost.ore);
+    if (!stack.instance) {
+      stack.instance = {
+        uid: `i_${Date.now().toString(36)}_${Math.floor(this.rng.next() * 1e9).toString(36)}`,
+        affixes: [],
+        upgrade: 0,
+      };
+    }
+    stack.instance.upgrade += 1;
+    this.emit({ type: "log", text: `${getItem(stack.itemId).name} upgraded to +${stack.instance.upgrade}.`, tone: "good" });
+    return true;
+  }
+
+  craft(recipeId: string): boolean {
+    const recipe = getRecipe(recipeId);
+    if (!recipe) return false;
+    if (this.save.gold < recipe.gold) {
+      this.emit({ type: "log", text: `Crafting requires ${recipe.gold} gold.`, tone: "bad" });
+      return false;
+    }
+    for (const material of recipe.materials) {
+      if (this.countItem(material.itemId) < material.qty) {
+        this.emit({ type: "log", text: `You need ${material.qty}x ${getItem(material.itemId).name}.`, tone: "bad" });
+        return false;
+      }
+    }
+    if (!this.canAdd(recipe.resultItemId, 1)) {
+      this.emit({ type: "log", text: "Your inventory is full.", tone: "bad" });
+      return false;
+    }
+    this.save.gold -= recipe.gold;
+    for (const material of recipe.materials) this.removeItem(material.itemId, material.qty);
+    const instance = createItemInstance(recipe.resultItemId, this.rng, 1);
+    this.addItem(recipe.resultItemId, 1, instance);
+    this.emit({ type: "log", text: `Borin crafts ${recipe.name}${instance ? " with an affix" : ""}.`, tone: "good" });
     return true;
   }
 

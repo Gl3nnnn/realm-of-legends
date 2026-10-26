@@ -7,6 +7,7 @@ export * from "./data/items";
 export * from "./data/monsters";
 export * from "./data/npcs";
 export * from "./data/quests";
+export * from "./data/talents";
 export * from "./save/schema";
 export * from "./sim/GameSession";
 export * from "./generated/world-data";

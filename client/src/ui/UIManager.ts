@@ -4,6 +4,7 @@ import {
   NPCS,
   QUESTS,
   SHOPS,
+  ZONES,
   createCharacter,
   getItem,
   migrateSave,
@@ -23,14 +24,26 @@ import {
   createPanelHtml,
   inventoryPanelHtml,
   npcPanelHtml,
+  quickbarHtml,
   questsPanelHtml,
   settingsPanelHtml,
   shopPanelHtml,
+  talentsPanelHtml,
+  type InventoryFilter,
+  type InventorySort,
 } from "./screens";
+import {
+  TUTORIAL_STORAGE_KEY,
+  applyPreferences,
+  loadPreferences,
+  updatePreferences,
+  type GamePreferences,
+} from "./preferences";
 
 type PanelState =
   | { kind: "inventory" }
   | { kind: "quests" }
+  | { kind: "talents" }
   | { kind: "settings" }
   | { kind: "npc"; id: string }
   | { kind: "shop"; id: string };
@@ -63,10 +76,15 @@ export class UIManager {
   private selectedClass: ClassId = "warrior";
   private selectedSlot: number | null = null;
   private selectedEquip: string | null = null;
+  private inventoryFilter: InventoryFilter = "all";
+  private inventorySort: InventorySort = "default";
+  private preferences: GamePreferences = loadPreferences();
 
   private abilitySignature = "";
+  private quickbarSignature = "";
   private questSignature = "";
   private buffSignature = "";
+  private compassSignature = "";
   private minimapZone: string | null = null;
   private minimapBase: HTMLCanvasElement | null = null;
   private lastHud = 0;
@@ -86,9 +104,12 @@ export class UIManager {
     overlay: must("overlay"),
     toasts: must("toasts"),
     abilityBar: must("ability-bar"),
+    quickbar: must("quickbar"),
     prompt: must("interact-prompt"),
     log: must("combat-log"),
     questTracker: must("quest-tracker"),
+    compass: must("quest-compass"),
+    tutorial: must("tutorial"),
     buffBar: must("buff-bar"),
     bossBar: must("boss-bar"),
     bossName: must("boss-name"),
@@ -108,6 +129,7 @@ export class UIManager {
     xpText: must("xp-text"),
     zone: must("hud-zone"),
     safe: must("hud-safe"),
+    cycle: must("hud-cycle"),
     gold: must("hud-gold"),
     importFile: must<HTMLInputElement>("import-file"),
   };
@@ -117,6 +139,7 @@ export class UIManager {
     this.sfx = options.sfx;
     this.onPlay = options.onPlay;
     this.onExitToMenu = options.onExitToMenu;
+    applyPreferences(this.preferences);
     this.bindEvents();
 
     window.setInterval(() => {
@@ -146,6 +169,8 @@ export class UIManager {
     this.dom.boot.classList.add("hidden");
     this.dom.charSelect.classList.remove("hidden");
     this.dom.death.classList.add("hidden");
+    this.dom.tutorial.classList.add("hidden");
+    this.dom.compass.classList.add("hidden");
     this.dom.log.innerHTML = "";
     await this.renderSelect();
   }
@@ -160,12 +185,17 @@ export class UIManager {
     this.dom.hud.classList.remove("hidden");
     this.selectedSlot = null;
     this.selectedEquip = null;
+    this.inventoryFilter = "all";
+    this.inventorySort = "default";
     this.abilitySignature = "";
+    this.quickbarSignature = "";
     this.questSignature = "";
+    this.compassSignature = "";
     this.buffSignature = "";
     this.minimapZone = null;
     this.logLines = [];
     this.dom.log.innerHTML = "";
+    this.showTutorialIfNeeded();
 
     const def = session.classInfo;
     this.dom.portrait.style.borderColor = classColor(def.id);
@@ -187,7 +217,37 @@ export class UIManager {
     this.schedulePersist();
   }
 
+  private showTutorialIfNeeded(): void {
+    let seen = false;
+    try {
+      seen = localStorage.getItem(TUTORIAL_STORAGE_KEY) === "seen";
+    } catch {
+      seen = true;
+    }
+    this.dom.tutorial.classList.toggle("hidden", seen);
+  }
+
+  private dismissTutorial(): void {
+    this.dom.tutorial.classList.add("hidden");
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, "seen");
+    } catch {
+      return;
+    }
+  }
+
   private bindEvents(): void {
+    must("tutorial-close").addEventListener("click", () => this.dismissTutorial());
+    this.dom.quickbar.addEventListener("click", (event) => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-quickslot]");
+      if (!target || !this.session) return;
+      const index = Number(target.dataset.quickslot);
+      if (!Number.isInteger(index)) return;
+      this.session.useQuickSlot(index);
+      this.updateHud(true);
+      this.handleEvents(this.session.drainEvents());
+    });
+
     this.dom.saveList.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
       if (!target) return;
@@ -264,6 +324,18 @@ export class UIManager {
     this.dom.overlay.addEventListener("change", (event) => {
       const input = event.target as HTMLInputElement;
       if (input.id === "mute-toggle") this.sfx.setMuted(input.checked);
+      if (input.id === "ui-scale") {
+        const scale = Number(input.value) === 1.5 ? 1.5 : Number(input.value) === 1.25 ? 1.25 : 1;
+        this.preferences = updatePreferences({ uiScale: scale });
+      }
+      if (input.id === "contrast-toggle") this.preferences = updatePreferences({ highContrast: input.checked });
+      if (input.id === "motion-toggle") this.preferences = updatePreferences({ reducedMotion: input.checked });
+      if (input.id === "damage-toggle") this.preferences = updatePreferences({ showDamage: input.checked });
+      if (input.id === "difficulty-select" && this.session) {
+        this.session.setDifficulty(input.value as "story" | "normal" | "nightmare");
+        void this.persist();
+        this.renderPanel();
+      }
       if (input.id === "settings-import" && input.files?.[0]) {
         const file = input.files[0];
         input.value = "";
@@ -310,6 +382,14 @@ export class UIManager {
     } else if (event.key === "q" || event.key === "Q") {
       event.preventDefault();
       this.openPanel("quests");
+    } else if (event.key === "t" || event.key === "T") {
+      event.preventDefault();
+      this.openPanel("talents");
+    } else if (event.key === "z" || event.key === "Z" || event.key === "x" || event.key === "X") {
+      event.preventDefault();
+      this.session.useQuickSlot(event.key.toLowerCase() === "z" ? 0 : 1);
+      this.updateHud(true);
+      this.handleEvents(this.session.drainEvents());
     }
   }
 
@@ -423,10 +503,12 @@ export class UIManager {
     else if (kind === "shop" && id) this.panel = { kind, id };
     else if (kind === "inventory") this.panel = { kind };
     else if (kind === "quests") this.panel = { kind };
+    else if (kind === "talents") this.panel = { kind };
     else this.panel = { kind: "settings" };
     this.selectedSlot = null;
     this.selectedEquip = null;
     this.renderPanel();
+    this.updateCompass();
     this.sfx.ui();
   }
 
@@ -446,14 +528,17 @@ export class UIManager {
     let narrow = false;
     if (this.panel.kind === "inventory" && this.session) {
       title = "Backpack & Equipment";
-      body = inventoryPanelHtml(this.session, this.selectedSlot, this.selectedEquip);
+      body = inventoryPanelHtml(this.session, this.selectedSlot, this.selectedEquip, this.inventoryFilter, this.inventorySort);
     } else if (this.panel.kind === "quests" && this.session) {
       title = "Quest Journal";
       body = questsPanelHtml(this.session);
       narrow = true;
+    } else if (this.panel.kind === "talents" && this.session) {
+      title = "Talents";
+      body = talentsPanelHtml(this.session);
     } else if (this.panel.kind === "settings") {
       title = "Settings";
-      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted);
+      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted, this.preferences);
       narrow = true;
     } else if (this.panel.kind === "npc" && this.session) {
       const npc = NPCS[this.panel.id];
@@ -474,6 +559,25 @@ export class UIManager {
   private async onPanelAction(action: string, target: HTMLElement): Promise<void> {
     if (action === "close-panel") {
       this.closePanel();
+      return;
+    }
+    if (action === "reset-tutorial") {
+      try {
+        localStorage.removeItem(TUTORIAL_STORAGE_KEY);
+      } catch {
+        return;
+      }
+      this.dismissTutorial();
+      this.closePanel(false);
+      this.dom.tutorial.classList.remove("hidden");
+      return;
+    }
+    if (this.panel?.kind === "inventory" && (action === "inv-filter" || action === "inv-sort")) {
+      const value = target.dataset.value ?? "";
+      if (action === "inv-filter") this.inventoryFilter = value as InventoryFilter;
+      else this.inventorySort = value as InventorySort;
+      this.renderPanel();
+      this.sfx.ui();
       return;
     }
     if (action === "export-current") {
@@ -514,6 +618,15 @@ export class UIManager {
       return;
     }
     if (!this.session) return;
+    if (action === "new-game-plus") {
+      if (!window.confirm("Begin a new cycle? Quests, bosses, and chests reset. Your level, gear, and talents remain.")) return;
+      if (this.session.startNewGamePlus()) {
+        await this.persist();
+        this.closePanel();
+        this.toast(`New Game+ ${this.session.save.ngPlus} begins.`, "good");
+      }
+      return;
+    }
     const session = this.session;
     const slot = Number(target.dataset.slot ?? -1);
     let changed = false;
@@ -522,7 +635,14 @@ export class UIManager {
       if (action === "use" && slot >= 0) changed = session.useItem(slot);
       else if (action === "equip" && slot >= 0) changed = session.equip(slot);
       else if (action === "sell" && slot >= 0) changed = session.sell(slot);
-      else if (action === "unequip" && target.dataset.slot) {
+      else if (action === "bind-quick" && slot >= 0) {
+        const stack = session.save.inventory[slot];
+        const quick = Number(target.dataset.quick);
+        if (stack && (quick === 0 || quick === 1)) {
+          changed = session.bindQuickSlot(quick, stack.itemId);
+          if (changed) this.toast(`${getItem(stack.itemId).name} bound to ${quick === 0 ? "Z" : "X"}.`, "good");
+        }
+      } else if (action === "unequip" && target.dataset.slot) {
         changed = session.unequip(target.dataset.slot as keyof CharacterSave["equipment"]);
       }
       if (!changed) this.selectedSlot = null;
@@ -537,8 +657,18 @@ export class UIManager {
         changed = session.buy(this.panel.id, target.dataset.item);
       } else if (action === "sell-slot" && slot >= 0) {
         changed = session.sell(slot);
+      } else if (action === "upgrade-slot" && target.dataset.slot) {
+        changed = session.upgradeEquipped(target.dataset.slot as keyof CharacterSave["equipment"]);
+      } else if (action === "craft" && target.dataset.recipe) {
+        changed = session.craft(target.dataset.recipe);
       }
       if (changed) this.sfx.coin();
+      this.renderPanel();
+    } else if (this.panel?.kind === "talents") {
+      if (action === "learn-talent" && target.dataset.talent) {
+        changed = session.learnTalent(target.dataset.talent);
+        if (changed) this.sfx.level();
+      }
       this.renderPanel();
     } else if (this.panel?.kind === "npc") {
       if (action === "accept-quest" && target.dataset.quest) {
@@ -550,6 +680,9 @@ export class UIManager {
       } else if (action === "heal") {
         changed = session.healAtNpc();
         if (changed) this.sfx.heal();
+      } else if (action === "respec-talents") {
+        changed = session.respecTalents();
+        if (changed) this.sfx.level();
       } else if (action === "open-shop" && target.dataset.shop) {
         this.openPanel("shop", target.dataset.shop);
         return;
@@ -568,6 +701,108 @@ export class UIManager {
     if (signature === this.abilitySignature) return;
     this.abilitySignature = signature;
     this.dom.abilityBar.innerHTML = abilityBarHtml(this.session);
+  }
+
+  private rebuildQuickbar(): void {
+    if (!this.session) return;
+    const [a, b] = this.session.save.quickSlots;
+    const signature = `${a ?? ""}:${a ? this.session.countItem(a) : 0}:${b ?? ""}:${b ? this.session.countItem(b) : 0}:${Math.ceil(this.session.potionCooldown * 10)}`;
+    if (signature === this.quickbarSignature) return;
+    this.quickbarSignature = signature;
+    this.dom.quickbar.innerHTML = quickbarHtml(this.session);
+  }
+
+  private updateCompass(): void {
+    const session = this.session;
+    if (!session || session.dead || this.panel) {
+      this.dom.compass.classList.add("hidden");
+      this.compassSignature = "";
+      return;
+    }
+    const save = session.save;
+    let target: { x: number; y: number; label: string; zone?: string } | null = null;
+    const portalToward = (zoneId: string) => {
+      const direct = session.zone.portals.find((portal) => portal.targetZone === zoneId);
+      const fallback = session.zone.portals[0];
+      const portal = direct ?? fallback;
+      if (!portal) return null;
+      return {
+        x: portal.x + portal.w / 2,
+        y: portal.y + portal.h / 2,
+        label: `Travel to ${ZONES[portal.targetZone]?.name ?? portal.targetZone}`,
+        zone: ZONES[portal.targetZone]?.name,
+      };
+    };
+    const npcTarget = (npcId: string, label: string) => {
+      const zoneEntry = Object.values(ZONES).find((zone) => zone.npcs.some((npc) => npc.id === npcId));
+      const npc = zoneEntry?.npcs.find((entry) => entry.id === npcId);
+      if (!zoneEntry || !npc) return null;
+      if (zoneEntry.id === session.zone.id) return { x: npc.x, y: npc.y, label };
+      return portalToward(zoneEntry.id);
+    };
+
+    for (const state of save.quests) {
+      const quest = QUESTS[state.id];
+      if (!quest) continue;
+      const ready = state.completed && (quest.repeatable || state.completions === 0);
+      if (ready) {
+        target = npcTarget(quest.giverNpc, `Turn in ${quest.name}`);
+        if (target) break;
+        continue;
+      }
+      for (let index = 0; index < quest.objectives.length; index += 1) {
+        const objective = quest.objectives[index];
+        const count = "count" in objective ? objective.count : 1;
+        if ((state.progress[index] ?? 0) >= count) continue;
+        if (objective.kind === "kill" || objective.kind === "boss") {
+          const alive = session.monsters
+            .filter((monster) => monster.defId === objective.monsterId && monster.state !== "dead")
+            .sort((left, right) => Math.hypot(left.x - save.x, left.y - save.y) - Math.hypot(right.x - save.x, right.y - save.y));
+          const spawn = alive[0];
+          if (spawn) {
+            target = { x: spawn.x, y: spawn.y, label: MONSTERS[objective.monsterId]?.name ?? objective.monsterId };
+            break;
+          }
+          const staticSpawn = session.zone.monsterSpawns.find((entry) => entry.id === objective.monsterId);
+          if (staticSpawn) {
+            target = { x: staticSpawn.x, y: staticSpawn.y, label: MONSTERS[objective.monsterId]?.name ?? objective.monsterId };
+            break;
+          }
+        } else if (objective.kind === "collect") {
+          const nodes = session.zone.gatherNodes
+            .filter((node) => node.itemId === objective.itemId && !session.isGathered(node.id))
+            .sort((left, right) => Math.hypot(left.x - save.x, left.y - save.y) - Math.hypot(right.x - save.x, right.y - save.y));
+          if (nodes[0]) {
+            target = { x: nodes[0].x, y: nodes[0].y, label: getItem(objective.itemId).name };
+            break;
+          }
+        } else if (objective.kind === "visit") {
+          if (objective.zone !== session.zone.id) {
+            target = portalToward(objective.zone);
+            if (target) break;
+          }
+        }
+      }
+      if (target) break;
+    }
+
+    if (!target) {
+      this.dom.compass.classList.add("hidden");
+      this.compassSignature = "";
+      return;
+    }
+    const dx = target.x - save.x;
+    const dy = target.y - save.y;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const dirs = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"];
+    const direction = dirs[(Math.round(angle / (Math.PI / 4)) + 8) % 8];
+    const signature = `${target.label}:${Math.round(distance / 4)}:${direction}`;
+    if (signature === this.compassSignature) return;
+    this.compassSignature = signature;
+    this.dom.compass.innerHTML = `<span class="compass-arrow" style="transform:rotate(${angle}rad)">➤</span>
+      <span class="compass-copy"><b>${esc(target.label)}</b><span>${direction} · ${Math.max(1, Math.round(distance / 10))}m${target.zone ? ` · ${esc(target.zone)}` : ""}</span></span>`;
+    this.dom.compass.classList.remove("hidden");
   }
 
   update(dt?: number): void {
@@ -606,6 +841,9 @@ export class UIManager {
     this.dom.zone.textContent = session.zone.name;
     this.dom.safe.textContent = session.zone.safe ? "Safe" : "Hostile";
     this.dom.safe.classList.toggle("danger", !session.zone.safe);
+    const cycleLabel = `${save.difficulty[0].toUpperCase()}${save.difficulty.slice(1)}${save.ngPlus > 0 ? ` · NG+${save.ngPlus}` : ""}`;
+    this.dom.cycle.textContent = cycleLabel;
+    this.dom.cycle.classList.remove("hidden");
     this.dom.gold.textContent = `${formatNumber(save.gold)} g`;
     this.rebuildAbilityBar();
 
@@ -622,7 +860,9 @@ export class UIManager {
       }
     }
 
+    this.rebuildQuickbar();
     this.updateQuestTracker();
+    this.updateCompass();
     this.updateBuffs();
     this.updateBoss();
     this.updatePrompt();
@@ -673,15 +913,16 @@ export class UIManager {
     if (!this.session) return;
     const boss = this.session.monsters.find((monster) => {
       const def = MONSTERS[monster.defId];
-      return def?.boss && monster.state !== "dead" && (monster.hp < def.maxHp || monster.state === "chase" || monster.state === "attack");
+      return def?.boss && monster.state !== "dead" && (monster.hp < (monster.maxHp ?? def.maxHp) || monster.state === "chase" || monster.state === "attack");
     });
     if (!boss) {
       this.dom.bossBar.classList.add("hidden");
       return;
     }
     const def = MONSTERS[boss.defId];
-    this.dom.bossName.textContent = def.name;
-    this.dom.bossFill.style.width = `${Math.max(0, (boss.hp / def.maxHp) * 100)}%`;
+    const maxHp = boss.maxHp ?? def.maxHp;
+    this.dom.bossName.textContent = `${def.name}${boss.phase ? ` · Phase ${boss.phase + 1}` : ""}`;
+    this.dom.bossFill.style.width = `${Math.max(0, (boss.hp / maxHp) * 100)}%`;
     this.dom.bossBar.classList.remove("hidden");
   }
 

@@ -325,14 +325,17 @@ function forestMap() {
   const free = [];
   Object.values(spawns).flat().forEach(([x, y]) => free.push([x, y]));
   gather.forEach(([x, y]) => free.push([x, y]));
-  free.push(chest, [4, 22], [59, 5]);
+  free.push(chest, [4, 22], [59, 5], [59, 42]);
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.darkGrass); m.ensureFree(x, y, TILE.darkGrass); });
   m.clearRect(0, 21, 3, 3, TILE.path);
   m.clearRect(59, 4, 3, 3, TILE.path);
-  m.borderTrees([[0, 20, 4, 5], [58, 2, 6, 6]]);
+  m.clearRect(58, 41, 4, 4, TILE.path);
+  m.borderTrees([[0, 20, 4, 5], [58, 2, 6, 6], [57, 40, 7, 7]]);
   m.clearRect(0, 21, 3, 3, TILE.path);
   m.clearRect(59, 4, 3, 3, TILE.path);
+  m.clearRect(58, 41, 4, 4, TILE.path);
   m.setDecor(59, 5, 0, false);
+  m.setDecor(59, 42, 0, false);
   return {
     map: m.emit("Whispering Forest"),
     zone: {
@@ -349,6 +352,7 @@ function forestMap() {
       portals: [
         portal(0, 21, 3, 3, "village", 47, 19, "Eldoria Village", "to_village"),
         portal(59, 4, 3, 3, "dungeon", 26, 34, "Sunken Barrow", "to_dungeon"),
+        portal(59, 41, 3, 3, "marsh", 4, 22, "Ashen Marsh", "to_marsh"),
       ],
       npcs: [],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
@@ -429,6 +433,192 @@ function dungeonMap() {
   };
 }
 
+function marshMap() {
+  const m = new MapBuilder("marsh", 60, 44);
+  m.fillGround(TILE.darkGrass);
+  const r = mulberry(71);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) {
+    const v = r();
+    if (v < 0.16) m.setGround(x, y, TILE.grass2);
+    else if (v < 0.23) m.setGround(x, y, TILE.dirt2);
+  }
+  for (const [x, y, rx, ry] of [[12, 10, 4, 3], [30, 30, 6, 3], [46, 14, 5, 2], [20, 37, 4, 2], [52, 33, 3, 2]]) m.blob(x, y, rx, ry, TILE.darkWater, 1);
+  m.pathLine([[2, 22], [14, 24], [26, 20], [38, 24], [50, 20], [58, 22]], 1, TILE.path2);
+  m.pathLine([[30, 30], [30, 20]], 1, TILE.bridge);
+  const spawns = {
+    bog_lurker: [[14, 16], [22, 29], [36, 13], [45, 31], [51, 24]],
+    mire_wisp: [[18, 23], [34, 35], [48, 9]],
+    venom_spider: [[26, 12], [40, 34], [54, 28]],
+    miremother: [[30, 7]],
+  };
+  const avoid = [[0, 19, 7, 7], [54, 19, 6, 7], [24, 4, 13, 8], [8, 8, 10, 7], [25, 27, 11, 8]];
+  m.scatter(TILE.tree, 0.04, avoid, 73);
+  m.scatter(TILE.pine, 0.025, avoid, 79);
+  m.scatter(TILE.bush, 0.05, avoid, 83);
+  m.scatter(TILE.rock, 0.02, avoid, 89);
+  const free = Object.values(spawns).flat();
+  free.push([4, 22], [58, 22], [30, 30], [30, 20]);
+  free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.darkGrass); m.ensureFree(x, y, TILE.darkGrass); });
+  m.borderTrees([[0, 20, 4, 5], [57, 20, 4, 5]]);
+  m.clearRect(0, 21, 3, 3, TILE.path2);
+  m.clearRect(57, 21, 3, 3, TILE.path2);
+  m.setDecor(58, 22, 0, false);
+  m.setDecor(30, 8, TILE.torch, false);
+  return {
+    map: m.emit("Ashen Marsh"),
+    zone: {
+      id: "marsh",
+      name: "Ashen Marsh",
+      width: 60,
+      height: 44,
+      tileWidth: 16,
+      tileHeight: 16,
+      blocked: m.blockedRows(),
+      safe: false,
+      ambience: "marsh",
+      spawn: { x: center(4), y: center(22) },
+      portals: [
+        portal(0, 21, 3, 3, "forest", 58, 42, "Whispering Forest", "to_forest_marsh"),
+        portal(57, 21, 3, 3, "frost", 4, 24, "Frostfell Ruins", "to_frost"),
+      ],
+      npcs: [],
+      monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
+      chests: [
+        { id: "marsh_chest_1", x: center(10), y: center(38) },
+        { id: "marsh_chest_2", x: center(52), y: center(8) },
+      ],
+      traps: [
+        { id: "marsh_trap_1", x: center(30), y: center(26), radius: 30, damage: 24, cooldown: 4 },
+        { id: "marsh_trap_2", x: center(44), y: center(18), radius: 28, damage: 26, cooldown: 4 },
+      ],
+      gatherNodes: [
+        { id: "herb_marsh_1", itemId: "herb", x: center(16), y: center(34) },
+        { id: "herb_marsh_2", itemId: "herb", x: center(48), y: center(38) },
+      ],
+    },
+  };
+}
+
+function frostMap() {
+  const m = new MapBuilder("frost", 64, 48);
+  m.fillGround(TILE.caveFloor);
+  const r = mulberry(97);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.38) m.setGround(x, y, TILE.caveFloor2);
+  m.rectGround(18, 18, 28, 14, TILE.caveFloor);
+  m.roomWalls(8, 6, 18, 14, TILE.darkWall);
+  m.roomWalls(38, 6, 18, 14, TILE.darkWall);
+  m.roomWalls(20, 28, 24, 14, TILE.darkWall);
+  m.clearRect(24, 18, 4, 4, TILE.caveFloor);
+  m.clearRect(36, 18, 4, 4, TILE.caveFloor);
+  m.clearRect(24, 24, 16, 4, TILE.caveFloor);
+  m.clearRect(30, 12, 4, 8, TILE.caveFloor);
+  m.clearRect(30, 40, 4, 4, TILE.caveFloor);
+  m.pathLine([[3, 24], [18, 24], [30, 22], [44, 24], [60, 24]], 1, TILE.stone2);
+  for (let y = 2; y < m.h - 2; y += 1) {
+    for (let x = 2; x < m.w - 2; x += 1) {
+      const edge = x < 3 || y < 3 || x >= m.w - 3 || y >= m.h - 3;
+      if (edge) m.setDecor(x, y, TILE.darkWall, true);
+    }
+  }
+  for (const [x, y] of [[8, 8], [25, 8], [40, 8], [55, 8], [9, 18], [54, 18], [21, 30], [42, 30], [31, 41]]) m.setDecor(x, y, TILE.torch, false);
+  const spawns = {
+    frost_wraith: [[12, 12], [50, 12], [18, 32], [46, 34], [26, 22]],
+    ice_revenant: [[24, 38], [40, 38], [36, 12]],
+    frost_revenant: [[32, 8]],
+    hollow_acolyte: [[14, 22], [50, 22]],
+  };
+  const avoid = [[0, 21, 6, 6], [58, 21, 6, 6], [26, 4, 12, 10], [16, 28, 32, 16]];
+  m.scatter(TILE.rock, 0.03, avoid, 101);
+  m.scatter(TILE.bush, 0.01, avoid, 103);
+  const free = Object.values(spawns).flat();
+  free.push([4, 24], [60, 24]);
+  free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.caveFloor); m.ensureFree(x, y, TILE.caveFloor); });
+  m.clearRect(0, 23, 4, 3, TILE.stone2);
+  m.clearRect(59, 23, 4, 3, TILE.stone2);
+  m.setDecor(4, 24, 0, false);
+  m.setDecor(60, 24, 0, false);
+  return {
+    map: m.emit("Frostfell Ruins"),
+    zone: {
+      id: "frost",
+      name: "Frostfell Ruins",
+      width: 64,
+      height: 48,
+      tileWidth: 16,
+      tileHeight: 16,
+      blocked: m.blockedRows(),
+      safe: false,
+      ambience: "frost",
+      spawn: { x: center(4), y: center(24) },
+      portals: [
+        portal(0, 23, 3, 3, "marsh", 56, 22, "Ashen Marsh", "to_marsh_frost"),
+        portal(60, 23, 3, 3, "throne", 4, 18, "Hollow Throne", "to_throne"),
+      ],
+      npcs: [],
+      monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
+      chests: [
+        { id: "frost_chest_1", x: center(12), y: center(8) },
+        { id: "frost_chest_2", x: center(50), y: center(8) },
+        { id: "frost_chest_3", x: center(24), y: center(38) },
+        { id: "frost_chest_4", x: center(40), y: center(38) },
+      ],
+      traps: [
+        { id: "frost_trap_1", x: center(24), y: center(22), radius: 30, damage: 40, cooldown: 4 },
+        { id: "frost_trap_2", x: center(40), y: center(22), radius: 30, damage: 40, cooldown: 4 },
+        { id: "frost_trap_3", x: center(32), y: center(36), radius: 34, damage: 46, cooldown: 5 },
+      ],
+      gatherNodes: [],
+    },
+  };
+}
+
+function throneMap() {
+  const m = new MapBuilder("throne", 48, 36);
+  m.fillGround(TILE.caveFloor2);
+  const r = mulberry(131);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.2) m.setGround(x, y, TILE.caveFloor);
+  m.rectGround(10, 6, 28, 22, TILE.caveFloor);
+  for (let y = 0; y < m.h; y += 1) {
+    for (let x = 0; x < m.w; x += 1) {
+      const edge = x < 2 || y < 2 || x >= m.w - 2 || y >= m.h - 2;
+      if (edge) m.setDecor(x, y, TILE.darkWall, true);
+    }
+  }
+  m.clearRect(21, 28, 6, 6, TILE.caveFloor);
+  m.setDecor(24, 29, TILE.stairs, false);
+  m.setDecor(24, 6, TILE.rug, false);
+  for (const [x, y] of [[10, 7], [37, 7], [10, 26], [37, 26], [20, 6], [27, 6]]) m.setDecor(x, y, TILE.torch, false);
+  const spawns = {
+    hollow_acolyte: [[14, 12], [33, 12], [14, 22], [33, 22]],
+    hollow_king: [[24, 9]],
+  };
+  const free = Object.values(spawns).flat();
+  free.push([24, 31]);
+  free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.caveFloor); m.ensureFree(x, y, TILE.caveFloor); });
+  m.clearRect(21, 31, 6, 4, TILE.caveFloor);
+  return {
+    map: m.emit("Hollow Throne"),
+    zone: {
+      id: "throne",
+      name: "Hollow Throne",
+      width: 48,
+      height: 36,
+      tileWidth: 16,
+      tileHeight: 16,
+      blocked: m.blockedRows(),
+      safe: false,
+      ambience: "throne",
+      spawn: { x: center(24), y: center(31) },
+      portals: [portal(21, 31, 6, 3, "frost", 59, 24, "Frostfell Ruins", "to_frost_throne")],
+      npcs: [],
+      monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
+      chests: [],
+      traps: [],
+      gatherNodes: [],
+    },
+  };
+}
+
 function tsZone(zone) {
   const blocked = zone.blocked.map((row) => `    "${row}",`).join("\n");
   const portals = zone.portals.map((p) => `      { id: "${p.id}", x: ${p.x}, y: ${p.y}, w: ${p.w}, h: ${p.h}, targetZone: "${p.targetZone}", targetX: ${p.targetX}, targetY: ${p.targetY}, label: "${p.label}" },`).join("\n");
@@ -475,7 +665,10 @@ export function buildWorld(mapsDir, generatedDir) {
   const village = villageMap();
   const forest = forestMap();
   const dungeon = dungeonMap();
-  const zones = [village, forest, dungeon];
+  const marsh = marshMap();
+  const frost = frostMap();
+  const throne = throneMap();
+  const zones = [village, forest, dungeon, marsh, frost, throne];
   fs.mkdirSync(mapsDir, { recursive: true });
   for (const z of zones) fs.writeFileSync(path.join(mapsDir, `${z.zone.id}.json`), JSON.stringify(z.map));
   fs.mkdirSync(generatedDir, { recursive: true });
@@ -491,7 +684,7 @@ export const ZONES = {
 ${zones.map((z) => tsZone(z.zone)).join("\n")}
 } satisfies Record<ZoneId, ZoneData>;
 
-export const ZONE_LIST: ZoneData[] = [ZONES.village, ZONES.forest, ZONES.dungeon];
+export const ZONE_LIST: ZoneData[] = [ZONES.village, ZONES.forest, ZONES.dungeon, ZONES.marsh, ZONES.frost, ZONES.throne];
 
 export function getZone(id: ZoneId): ZoneData {
   return ZONES[id];

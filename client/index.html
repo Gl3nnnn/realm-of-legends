@@ -62,11 +62,13 @@
         <div class="hud-controls">
           <button class="icon-btn" data-panel="inventory" title="Inventory (I)">I</button>
           <button class="icon-btn" data-panel="quests" title="Quests (Q)">Q</button>
+          <button class="icon-btn" data-panel="talents" title="Talents (T)">T</button>
           <button class="icon-btn" data-panel="settings" title="Settings (Esc)">⚙</button>
         </div>
         <div class="zone-card">
           <span id="hud-zone">Eldoria Village</span>
           <span id="hud-safe" class="zone-tag">Safe</span>
+          <span id="hud-cycle" class="zone-tag hidden"></span>
           <span id="hud-gold" class="gold">0 g</span>
         </div>
         <canvas id="minimap" width="176" height="132" aria-label="Minimap"></canvas>
@@ -79,14 +81,34 @@
 
       <div id="buff-bar" class="buff-bar"></div>
       <div id="quest-tracker" class="quest-tracker"></div>
+      <div id="quest-compass" class="quest-compass hidden"></div>
+
+      <div id="tutorial" class="tutorial hidden">
+        <div class="tutorial-kicker">Welcome to Eldoria</div>
+        <h2>Your first steps</h2>
+        <div class="tutorial-grid">
+          <span><b>WASD</b> Move and aim with your mouse.</span>
+          <span><b>LMB / Space</b> Basic attack.</span>
+          <span><b>1-5</b> Class abilities.</span>
+          <span><b>Shift</b> Dodge through danger with brief invulnerability.</span>
+          <span><b>Z / X</b> Use bound potions.</span>
+          <span><b>E</b> Talk, loot, and travel.</span>
+        </div>
+        <p>Talk to Captain Rowan near the village gate. Your quest compass points the way.</p>
+        <button class="btn small" id="tutorial-close">Begin the hunt</button>
+      </div>
 
       <div class="hud-bottom">
         <div id="combat-log" class="combat-log" aria-live="polite"></div>
         <div class="ability-wrap">
           <div id="interact-prompt" class="interact-prompt hidden"></div>
-          <div id="ability-bar" class="ability-bar"></div>
-          <div class="hint-line">WASD move · LMB/Space attack · 1-5 skills · E interact · I inventory · Q quests</div>
+          <div class="ability-shell" role="toolbar" aria-label="Abilities">
+            <div id="quickbar" class="quickbar"></div>
+            <div id="ability-bar" class="ability-bar"></div>
+          </div>
+          <div class="hint-line">WASD move · LMB/Space attack · 1-5 skills · Shift dodge · Z/X potions · E interact · I inventory · Q quests</div>
         </div>
+      </div>
       </div>
 
       <div id="death-overlay" class="death-overlay hidden">

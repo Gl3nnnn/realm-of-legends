@@ -89,6 +89,49 @@ describe("save validation", () => {
     expect(() => migrateSave(null)).toThrow();
   });
 
+  it("migrates v2 saves to talents and validates talent choices", () => {
+    const save = base();
+    save.level = 10;
+    const v2 = { ...save, version: 2 } as unknown as Record<string, unknown>;
+    delete v2.talents;
+    const migrated = migrateSave(v2);
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.talents).toEqual([]);
+
+    const invalid = base();
+    invalid.talents = ["not_a_talent"];
+    expect(validateSave(invalid).ok).toBe(false);
+
+    const early = base();
+    early.talents = ["warrior:0:0"];
+    expect(validateSave(early).ok).toBe(false);
+
+    const duplicateTier = base();
+    duplicateTier.level = 10;
+    duplicateTier.talents = ["warrior:0:0", "warrior:0:1"];
+    expect(validateSave(duplicateTier).ok).toBe(false);
+  });
+
+  it("migrates v3 saves to difficulty and boss tracking", () => {
+    const save = base();
+    const v3 = { ...save, version: 3 } as unknown as Record<string, unknown>;
+    delete v3.difficulty;
+    delete v3.ngPlus;
+    delete v3.defeatedBosses;
+    const migrated = migrateSave(v3);
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.difficulty).toBe("normal");
+    expect(migrated.ngPlus).toBe(0);
+    expect(migrated.defeatedBosses).toEqual([]);
+
+    const invalid = base();
+    invalid.difficulty = "impossible" as never;
+    expect(validateSave(invalid).ok).toBe(false);
+    invalid.difficulty = "nightmare";
+    invalid.defeatedBosses = ["not_a_boss"];
+    expect(validateSave(invalid).ok).toBe(false);
+  });
+
   it("summarizes a save for character select", () => {
     const save = base();
     expect(characterSummary(save)).toMatchObject({

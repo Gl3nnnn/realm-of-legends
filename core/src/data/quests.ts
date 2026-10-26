@@ -67,3 +67,110 @@ export function getQuest(id: string): QuestDef {
   if (!def) throw new Error(`Unknown quest: ${id}`);
   return def;
 }
+
+const expansionQuests: QuestDef[] = [
+  {
+    id: "marsh_visit",
+    name: "Into the Mire",
+    giverNpc: "guard",
+    description: "Scouts report a foul new marsh beyond the southern forest. Find a safe path and see what stirs there.",
+    objectives: [{ kind: "visit", zone: "marsh" }],
+    rewards: { xp: 500, gold: 120, items: [{ itemId: "greater_health_potion", qty: 1 }] },
+    requiresLevel: 9,
+  },
+  {
+    id: "marsh_cull",
+    name: "Bog Cull",
+    giverNpc: "guard",
+    description: "Bog lurkers are dragging travelers into the mire. Put down eight of them.",
+    objectives: [{ kind: "kill", monsterId: "bog_lurker", count: 8 }],
+    rewards: { xp: 900, gold: 180, items: [{ itemId: "iron_ore", qty: 3 }] },
+    requiresLevel: 10,
+  },
+  {
+    id: "wisp_light",
+    name: "Wisp Light",
+    giverNpc: "healer",
+    description: "Elara can distill mire wisp light into a powerful tonic. Bring her the essence of six wisps.",
+    objectives: [{ kind: "kill", monsterId: "mire_wisp", count: 6 }],
+    rewards: { xp: 1100, gold: 220, items: [{ itemId: "greater_mana_potion", qty: 2 }] },
+    requiresLevel: 11,
+  },
+  {
+    id: "venom_bounty",
+    name: "Venom Bounty",
+    giverNpc: "guard",
+    description: "Venom spiders have overrun the marsh paths. Clear six of their nests.",
+    objectives: [{ kind: "kill", monsterId: "venom_spider", count: 6 }],
+    rewards: { xp: 1500, gold: 300, items: [{ itemId: "gemstone", qty: 1 }] },
+    requiresLevel: 13,
+  },
+  {
+    id: "miremother_fall",
+    name: "Mother of the Mire",
+    giverNpc: "trainer",
+    description: "The Miremother is no mere beast. End her ancient brood before the marsh spreads into the forest.",
+    objectives: [{ kind: "boss", monsterId: "miremother" }],
+    rewards: { xp: 3500, gold: 600, items: [{ itemId: "gemstone", qty: 2 }] },
+    requiresLevel: 14,
+  },
+  {
+    id: "frost_visit",
+    name: "The Frozen Gate",
+    giverNpc: "guard",
+    description: "Beyond the marsh lies a ruined keep sealed in ice. Scout Frostfell Ruins and return alive.",
+    objectives: [{ kind: "visit", zone: "frost" }],
+    rewards: { xp: 2000, gold: 350, items: [{ itemId: "greater_health_potion", qty: 2 }] },
+    requiresLevel: 16,
+  },
+  {
+    id: "frost_patrol",
+    name: "Frost Patrol",
+    giverNpc: "guard",
+    description: "Frost wraiths drift through the ruins. Destroy eight before they reach the marsh road.",
+    objectives: [{ kind: "kill", monsterId: "frost_wraith", count: 8 }],
+    rewards: { xp: 2600, gold: 450, items: [{ itemId: "iron_ore", qty: 5 }] },
+    requiresLevel: 17,
+  },
+  {
+    id: "revenant_ice",
+    name: "Ice-Cold Remedy",
+    giverNpc: "healer",
+    description: "Elara needs three gemstones to anchor a warming ward against the frost.",
+    objectives: [{ kind: "collect", itemId: "gemstone", count: 3 }],
+    rewards: { xp: 3000, gold: 500, items: [{ itemId: "greater_health_potion", qty: 3 }] },
+    requiresLevel: 18,
+  },
+  {
+    id: "frost_revenant_end",
+    name: "The Frost Revenant",
+    giverNpc: "trainer",
+    description: "A revenant of the old keep has awakened. Break its frozen vigil forever.",
+    objectives: [{ kind: "boss", monsterId: "frost_revenant" }],
+    rewards: { xp: 7000, gold: 1000, items: [{ itemId: "gemstone", qty: 3 }] },
+    requiresLevel: 23,
+  },
+  {
+    id: "hollow_acolytes",
+    name: "Hollow Choir",
+    giverNpc: "guard",
+    description: "Hollow acolytes chant beneath the frozen throne. Silence six of them.",
+    objectives: [{ kind: "kill", monsterId: "hollow_acolyte", count: 6 }],
+    rewards: { xp: 6000, gold: 900, items: [{ itemId: "gemstone", qty: 2 }] },
+    requiresLevel: 22,
+  },
+  {
+    id: "kings_end",
+    name: "The Hollow King",
+    giverNpc: "trainer",
+    description: "The Hollow King waits on a throne of frozen bone. End his reign and close the wound in the world.",
+    objectives: [{ kind: "boss", monsterId: "hollow_king" }],
+    rewards: { xp: 15000, gold: 2500, items: [{ itemId: "gemstone", qty: 5 }] },
+    requiresLevel: 26,
+  },
+];
+
+for (const quest of expansionQuests) {
+  defs.push(quest);
+  QUESTS[quest.id] = quest;
+}

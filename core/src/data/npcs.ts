@@ -12,7 +12,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Slimes have been creeping toward the village. Deal with them and I'll make it worth your while.",
       "The dungeon to the northeast is no place for the unprepared.",
     ],
-    quests: ["slime_trouble", "wolf_menace", "bone_breaker", "forest_bounty"],
+    quests: ["slime_trouble", "wolf_menace", "bone_breaker", "forest_bounty", "marsh_visit", "marsh_cull", "venom_bounty", "frost_visit", "frost_patrol", "hollow_acolytes"],
   },
   merchant: {
     id: "merchant",
@@ -48,7 +48,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Sit. Breathe. The light will do the rest.",
       "Silverleaf grows deep in the forest. I could use a handful, if you're heading that way.",
     ],
-    quests: ["herbal_remedy"],
+    quests: ["herbal_remedy", "wisp_light", "revenant_ice"],
     shop: "healer",
     healer: true,
   },
@@ -63,7 +63,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Your skills awaken as you gain experience. Return when you're stronger.",
       "The Bone Warden in the dungeon guards something old and angry. End it.",
     ],
-    quests: ["wardens_end"],
+    quests: ["wardens_end", "miremother_fall", "frost_revenant_end", "kings_end"],
     trainer: true,
   },
 };

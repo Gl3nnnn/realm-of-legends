@@ -1,4 +1,5 @@
-import type { ClassId, ItemDef } from "../types";
+import type { AffixId, ClassId, Equipment, GearSetId, ItemDef, ItemInstance, ItemStack, StatBonus } from "../types";
+import type { Rng } from "../rng";
 
 type ItemInput = Omit<ItemDef, "sell"> & { sell?: number };
 
@@ -59,6 +60,7 @@ const defs: ItemDef[] = [
     buy: 300,
     classes: STAFF_USERS,
     stats: { attack: 8, maxResource: 20 },
+    set: "ember",
   }),
   item({
     id: "shortbow",
@@ -334,6 +336,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 40,
     stats: { defense: 1, maxResource: 15 },
+    set: "ember",
   }),
   item({
     id: "leather_armor",
@@ -345,6 +348,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 65,
     stats: { defense: 2, maxHp: 10 },
+    set: "wanderer",
   }),
   item({
     id: "chainmail",
@@ -367,6 +371,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 540,
     stats: { defense: 9, maxHp: 45 },
+    set: "ironclad",
   }),
   item({
     id: "leather_cap",
@@ -378,6 +383,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 35,
     stats: { defense: 1, maxHp: 5 },
+    set: "wanderer",
   }),
   item({
     id: "iron_helm",
@@ -389,6 +395,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 170,
     stats: { defense: 3, maxHp: 15 },
+    set: "ironclad",
   }),
   item({
     id: "traveler_boots",
@@ -400,6 +407,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 45,
     stats: { defense: 1, moveSpeed: 5 },
+    set: "wanderer",
   }),
   item({
     id: "swift_boots",
@@ -411,6 +419,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 240,
     stats: { defense: 2, moveSpeed: 10 },
+    set: "ironclad",
   }),
   item({
     id: "copper_ring",
@@ -422,6 +431,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 85,
     stats: { crit: 0.02 },
+    set: "wanderer",
   }),
   item({
     id: "sage_amulet",
@@ -433,6 +443,7 @@ const defs: ItemDef[] = [
     stack: 1,
     buy: 200,
     stats: { maxResource: 20 },
+    set: "ember",
   }),
   item({
     id: "health_potion",
@@ -559,4 +570,146 @@ export function isEquippable(item: ItemDef): boolean {
 
 export function canClassUse(item: ItemDef, classId: ClassId): boolean {
   return !item.classes || item.classes.includes(classId);
+}
+
+export const MAX_UPGRADE = 5;
+
+export interface AffixDef {
+  id: AffixId;
+  name: string;
+  suffix: string;
+  stats: StatBonus;
+}
+
+export const AFFIXES: Record<AffixId, AffixDef> = {
+  fierce: { id: "fierce", name: "Fierce", suffix: "of Fury", stats: { attack: 2 } },
+  keen: { id: "keen", name: "Keen", suffix: "of Precision", stats: { crit: 0.015 } },
+  sturdy: { id: "sturdy", name: "Sturdy", suffix: "of the Bear", stats: { defense: 2 } },
+  vital: { id: "vital", name: "Vital", suffix: "of Vitality", stats: { maxHp: 12 } },
+  swift: { id: "swift", name: "Swift", suffix: "of the Wind", stats: { moveSpeed: 3 } },
+  arcane: { id: "arcane", name: "Arcane", suffix: "of the Arcane", stats: { maxResource: 10 } },
+  warded: { id: "warded", name: "Warded", suffix: "of Warding", stats: { defense: 1, maxHp: 6 } },
+  brutal: { id: "brutal", name: "Brutal", suffix: "of Ruin", stats: { attack: 1, crit: 0.01 } },
+};
+
+export const AFFIX_LIST = Object.values(AFFIXES);
+export const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
+
+const AFFIX_COUNT: Record<string, number> = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+
+export function createItemInstance(itemId: string, rng: Rng, bonusAffixes = 0): ItemInstance | undefined {
+  const def = ITEMS[itemId];
+  if (!def || !isEquippable(def)) return undefined;
+  const count = Math.min(AFFIX_IDS.length, (AFFIX_COUNT[def.rarity] ?? 0) + bonusAffixes);
+  const pool = [...AFFIX_IDS];
+  const affixes: AffixId[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const index = Math.floor(rng.next() * pool.length);
+    const [picked] = pool.splice(index, 1);
+    if (picked) affixes.push(picked);
+  }
+  return { uid: `i_${Math.floor(rng.next() * 0xffffffff).toString(36)}`, affixes, upgrade: 0 };
+}
+
+export function itemStats(stack: ItemStack): StatBonus {
+  const def = getItem(stack.itemId);
+  const total: StatBonus = { ...(def.stats ?? {}) };
+  for (const affixId of stack.instance?.affixes ?? []) {
+    const affix = AFFIXES[affixId];
+    if (!affix) continue;
+    for (const [key, value] of Object.entries(affix.stats) as [keyof StatBonus, number][]) {
+      total[key] = (total[key] ?? 0) + value;
+    }
+  }
+  const multiplier = 1 + (stack.instance?.upgrade ?? 0) * 0.08;
+  for (const key of Object.keys(total) as (keyof StatBonus)[]) {
+    total[key] = Math.round((total[key] ?? 0) * multiplier * 100) / 100;
+  }
+  return total;
+}
+
+export function itemDisplayName(stack: ItemStack): string {
+  const def = getItem(stack.itemId);
+  const upgrade = stack.instance?.upgrade ?? 0;
+  const prefix = upgrade >= 5 ? "Masterwork " : upgrade >= 3 ? "Superior " : upgrade >= 1 ? "Fine " : "";
+  const suffixes = (stack.instance?.affixes ?? []).map((id) => AFFIXES[id]?.suffix).filter(Boolean);
+  return `${prefix}${def.name}${suffixes.length ? ` ${suffixes.join(" & ")}` : ""}`;
+}
+
+export function itemSellValue(stack: ItemStack): number {
+  const def = getItem(stack.itemId);
+  return def.sell + (stack.instance?.affixes.length ?? 0) * 12 + (stack.instance?.upgrade ?? 0) * 18;
+}
+
+export interface GearSetDef {
+  id: GearSetId;
+  name: string;
+  bonuses: { pieces: number; stats: StatBonus; text: string }[];
+}
+
+export const GEAR_SETS: Record<GearSetId, GearSetDef> = {
+  wanderer: {
+    id: "wanderer",
+    name: "Wanderer's Path",
+    bonuses: [
+      { pieces: 2, stats: { defense: 2, moveSpeed: 3 }, text: "+2 Defense, +3 Move Speed" },
+      { pieces: 4, stats: { maxHp: 20, crit: 0.02 }, text: "+20 Health, +2% Crit" },
+    ],
+  },
+  ironclad: {
+    id: "ironclad",
+    name: "Ironclad Bulwark",
+    bonuses: [
+      { pieces: 2, stats: { defense: 4 }, text: "+4 Defense" },
+      { pieces: 3, stats: { maxHp: 40, defense: 4 }, text: "+40 Health, +4 Defense" },
+    ],
+  },
+  ember: {
+    id: "ember",
+    name: "Emberweave",
+    bonuses: [
+      { pieces: 2, stats: { maxResource: 15 }, text: "+15 Resource" },
+      { pieces: 3, stats: { attack: 5, crit: 0.02 }, text: "+5 Attack, +2% Crit" },
+    ],
+  },
+};
+
+export function equipmentSetBonuses(equipment: Equipment): StatBonus {
+  const counts: Partial<Record<GearSetId, number>> = {};
+  for (const stack of Object.values(equipment)) {
+    if (!stack) continue;
+    const set = ITEMS[stack.itemId]?.set;
+    if (set) counts[set] = (counts[set] ?? 0) + 1;
+  }
+  const total: StatBonus = {};
+  for (const [setId, count] of Object.entries(counts) as [GearSetId, number][]) {
+    for (const bonus of GEAR_SETS[setId].bonuses) {
+      if (count < bonus.pieces) continue;
+      for (const [key, value] of Object.entries(bonus.stats) as [keyof StatBonus, number][]) {
+        total[key] = (total[key] ?? 0) + value;
+      }
+    }
+  }
+  return total;
+}
+
+export interface CraftRecipe {
+  id: string;
+  name: string;
+  resultItemId: string;
+  materials: { itemId: string; qty: number }[];
+  gold: number;
+}
+
+export const RECIPES: CraftRecipe[] = [
+  { id: "craft_iron_sword", name: "Iron Sword", resultItemId: "iron_sword", materials: [{ itemId: "iron_ore", qty: 3 }], gold: 20 },
+  { id: "craft_steel_sword", name: "Steel Sword", resultItemId: "steel_sword", materials: [{ itemId: "iron_ore", qty: 6 }, { itemId: "gemstone", qty: 1 }], gold: 120 },
+  { id: "craft_chainmail", name: "Chainmail", resultItemId: "chainmail", materials: [{ itemId: "iron_ore", qty: 5 }, { itemId: "wolf_pelt", qty: 2 }], gold: 100 },
+  { id: "craft_plate_armor", name: "Plate Armor", resultItemId: "plate_armor", materials: [{ itemId: "iron_ore", qty: 10 }, { itemId: "gemstone", qty: 2 }], gold: 300 },
+  { id: "craft_ember_staff", name: "Ember Staff", resultItemId: "ember_staff", materials: [{ itemId: "iron_ore", qty: 4 }, { itemId: "gemstone", qty: 2 }], gold: 150 },
+  { id: "craft_greater_health_potion", name: "Greater Health Potion", resultItemId: "greater_health_potion", materials: [{ itemId: "herb", qty: 3 }, { itemId: "slime_gel", qty: 1 }], gold: 15 },
+];
+
+export function getRecipe(id: string): CraftRecipe | undefined {
+  return RECIPES.find((recipe) => recipe.id === id);
 }

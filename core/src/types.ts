@@ -2,7 +2,11 @@ export type Vec2 = { x: number; y: number };
 
 export type Direction = "down" | "left" | "right" | "up";
 
-export type ZoneId = "village" | "forest" | "dungeon";
+export type ZoneId = "village" | "forest" | "dungeon" | "marsh" | "frost" | "throne";
+
+export type GameDifficulty = "story" | "normal" | "nightmare";
+
+export type EliteAffix = "swift" | "armored" | "venomous" | "volatile";
 
 export type ClassId =
   | "warrior"
@@ -40,6 +44,16 @@ export type EquipSlot = "weapon" | "armor" | "helm" | "boots" | "trinket";
 export type ItemType = EquipSlot | "consumable" | "material";
 
 export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+
+export type AffixId = "fierce" | "keen" | "sturdy" | "vital" | "swift" | "arcane" | "warded" | "brutal";
+
+export type GearSetId = "wanderer" | "ironclad" | "ember";
+
+export interface ItemInstance {
+  uid: string;
+  affixes: AffixId[];
+  upgrade: number;
+}
 
 export interface BaseStats {
   maxHp: number;
@@ -141,11 +155,13 @@ export interface ItemDef {
   classes?: ClassId[];
   heal?: number;
   restore?: number;
+  set?: GearSetId;
 }
 
 export interface ItemStack {
   itemId: string;
   qty: number;
+  instance?: ItemInstance;
 }
 
 export type Equipment = Partial<Record<EquipSlot, ItemStack>>;
@@ -223,6 +239,7 @@ export interface MonsterInstance {
   spawnX: number;
   spawnY: number;
   hp: number;
+  maxHp?: number;
   state: "idle" | "chase" | "attack" | "return" | "dead";
   facing: number;
   attackTimer: number;
@@ -231,6 +248,8 @@ export interface MonsterInstance {
   wanderTimer: number;
   wanderX: number;
   wanderY: number;
+  elite?: EliteAffix;
+  phase?: number;
 }
 
 export interface ProjectileInstance {
@@ -257,6 +276,7 @@ export interface GroundLoot {
   x: number;
   y: number;
   ttl: number;
+  instance?: ItemInstance;
 }
 
 export interface TelegraphInstance {
@@ -353,7 +373,7 @@ export interface ZoneData {
   tileHeight: number;
   blocked: boolean[];
   safe: boolean;
-  ambience: "village" | "forest" | "dungeon";
+  ambience: "village" | "forest" | "dungeon" | "marsh" | "frost" | "throne";
   spawn: Vec2;
   portals: PortalDef[];
   npcs: NpcSpawn[];
@@ -396,9 +416,14 @@ export interface CharacterSave {
   x: number;
   y: number;
   inventory: (ItemStack | null)[];
+  quickSlots: [string | null, string | null];
+  talents: string[];
   equipment: Equipment;
   quests: QuestState[];
   openedChests: string[];
+  difficulty: GameDifficulty;
+  ngPlus: number;
+  defeatedBosses: string[];
   playtime: number;
   rngState: number;
   createdAt: number;
@@ -424,6 +449,8 @@ export type SimEvent =
       damageType: DamageType;
     }
   | { type: "heal"; amount: number; x: number; y: number }
+  | { type: "dodge"; x: number; y: number }
+  | { type: "immune"; x: number; y: number }
   | { type: "death"; who: "player" | "monster"; defId?: string; x: number; y: number }
   | { type: "levelup"; level: number }
   | { type: "xp"; amount: number }

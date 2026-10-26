@@ -1,5 +1,5 @@
 import { LEVEL_CAP } from "./constants";
-import { getItem } from "./data/items";
+import { equipmentSetBonuses, itemStats } from "./data/items";
 import type { AbilityDef, ClassDef, Equipment, ResourceKind, StatBonus } from "./types";
 
 export interface DerivedStats {
@@ -24,19 +24,24 @@ export function totalXpForLevel(level: number): number {
 
 export function equipmentBonuses(equipment: Equipment): StatBonus {
   const total: StatBonus = {};
-  for (const stack of Object.values(equipment)) {
-    if (!stack) continue;
-    const def = getItem(stack.itemId);
-    if (!def.stats) continue;
-    for (const [key, value] of Object.entries(def.stats) as [keyof StatBonus, number][]) {
+  const add = (stats: StatBonus) => {
+    for (const [key, value] of Object.entries(stats) as [keyof StatBonus, number][]) {
       total[key] = (total[key] ?? 0) + value;
     }
+  };
+  for (const stack of Object.values(equipment)) {
+    if (!stack) continue;
+    add(itemStats(stack));
   }
+  add(equipmentSetBonuses(equipment));
   return total;
 }
 
-export function deriveStats(classDef: ClassDef, level: number, equipment: Equipment): DerivedStats {
+export function deriveStats(classDef: ClassDef, level: number, equipment: Equipment, extraBonus: StatBonus = {}): DerivedStats {
   const bonus = equipmentBonuses(equipment);
+  for (const [key, value] of Object.entries(extraBonus) as [keyof StatBonus, number][]) {
+    bonus[key] = (bonus[key] ?? 0) + value;
+  }
   const levels = Math.max(0, level - 1);
   return {
     maxHp: Math.floor(classDef.base.maxHp + classDef.growth.maxHp * levels + (bonus.maxHp ?? 0)),
