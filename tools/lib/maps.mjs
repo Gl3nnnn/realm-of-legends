@@ -590,7 +590,7 @@ function throneMap() {
   const m = new MapBuilder("throne", 48, 36);
   m.fillGround(TILE.caveFloor2);
   const r = mulberry(131);
-  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.2) m.setGround(x, y, TILE.caveFloor);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.2) m.setGround(x, y, TILE.caveFloor); else if (r() < 0.08) m.setGround(x, y, TILE.dirt);
   m.rectGround(10, 6, 28, 22, TILE.caveFloor);
   for (let y = 0; y < m.h; y += 1) {
     for (let x = 0; x < m.w; x += 1) {
