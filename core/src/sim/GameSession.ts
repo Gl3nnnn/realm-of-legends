@@ -26,7 +26,7 @@ import {
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { getQuest, QUESTS } from "../data/quests";
-import { STORY_CHAPTERS } from "../data/story";
+import { CLASS_INTROS, STORY_CHAPTERS } from "../data/story";
 import {
   getTalentChoice,
   talentBonuses,
@@ -140,6 +140,10 @@ export class GameSession {
     const stats = this.stats;
     this.save.hp = Math.max(0, Math.min(this.save.hp, stats.maxHp));
     this.save.resource = Math.max(0, Math.min(this.save.resource, stats.maxResource));
+    if (!this.save.introShown) {
+      this.save.introShown = true;
+      this.emit({ type: "log", text: CLASS_INTROS[save.classId] ?? "Your adventure begins.", tone: "info" });
+    }
   }
 
   get classInfo(): ClassDef {

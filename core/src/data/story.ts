@@ -10,6 +10,13 @@ export interface StoryChapter {
   closing: string;
 }
 
+// A short line about each class, shown with the prologue so the story speaks to the hero's own path.
+export const CLASS_INTROS: Partial<Record<string, string>> = {
+  warrior: "Your sword arm is known in every village, and Master Kael trusts you to hold the line.",
+  mage: "Your magic answers to you alone, and Master Kael believes the cold winds are a sign you were meant to see.",
+  archer: "Your aim is steady and your eyes are sharp, and Master Kael sends you because no one reads the wild better."
+};
+
 export const STORY_CHAPTERS: StoryChapter[] = [
   {
     id: 0,
