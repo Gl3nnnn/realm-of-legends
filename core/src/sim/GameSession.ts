@@ -711,8 +711,7 @@ export class GameSession {
       if (!nextChapter || !nextChapter.bossId || !this.save.defeatedBosses.includes(nextChapter.bossId)) break;
       this.save.storyChapter += 1;
       const next = STORY_CHAPTERS[this.save.storyChapter];
-      this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
-      this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+            this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
     }
   }
 
