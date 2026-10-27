@@ -431,6 +431,20 @@ input[type="text"]:focus {
   font-size: 8px;
 }
 
+.gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.gift-list .btn.small {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.5;
+}
+
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -1980,3 +1994,6 @@ html[data-ui-scale="1.5"] .toasts {
 .story-box-card button { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; background: var(--ink); color: var(--bg); font-weight: 600; }
 
 .story-box-portrait { width: 192px; height: 192px; margin: 0 auto 12px; image-rendering: pixelated; background-repeat: no-repeat; border-radius: 6px; }
+
+.class-card .card-portrait { animation: preview-bob 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .class-card .card-portrait { animation: none; } }

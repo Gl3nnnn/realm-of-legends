@@ -667,7 +667,7 @@ export class GameSession {
         this.save.storyChapter += 1;
         const next = STORY_CHAPTERS[this.save.storyChapter];
         this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
-        this.emit({ type: "story", title: next.title, text: next.text, bossIndex: this.save.storyChapter - 1 });
+        this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
       }
     }
     if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
@@ -1576,6 +1576,26 @@ export class GameSession {
     }
     this.emit({ type: "quest", questId, text: `Quest turned in: ${quest.name}.` });
     this.emit({ type: "log", text: `Turned in ${quest.name}. Earned ${quest.rewards.gold} gold and ${quest.rewards.xp} XP.`, tone: "good" });
+    return true;
+  }
+
+  pickQuestReward(questId: string, index: number): boolean {
+    const quest = QUESTS[questId];
+    if (!quest?.choose) return false;
+    const reward = quest.choose[index];
+    if (!reward) return false;
+    const state = this.save.quests.find((q) => q.id === questId);
+    if (!state || !state.completed) return false;
+    this.save.gold += reward.gold;
+    this.emit({ type: "gold", amount: reward.gold });
+    this.gainXp(reward.xp);
+    for (const item of reward.items ?? []) {
+      const leftover = this.addItem(item.itemId, item.qty);
+      if (leftover > 0) {
+        this.loot.push({ uid: this.nextUid("l"), itemId: item.itemId, qty: leftover, x: this.save.x, y: this.save.y, ttl: 120 });
+      }
+    }
+    this.emit({ type: "log", text: `${quest.name}: you chose your reward.`, tone: "good" });
     return true;
   }
 

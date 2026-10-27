@@ -70,6 +70,21 @@ export function getQuest(id: string): QuestDef {
 
 const expansionQuests: QuestDef[] = [
   {
+    id: "forest_keeper_gift",
+    name: "The Forest Keeper's Gift",
+    giverNpc: "guard",
+    description: "The Forest Keeper rewards those who clear the forest road. Choose one gift to take with you.",
+    objectives: [{ kind: "kill", monsterId: "slime", count: 3 }],
+    rewards: { xp: 0, gold: 0 },
+    choose: [
+      { icon: "🧪", xp: 200, gold: 60, items: [{ itemId: "health_potion", qty: 3 }] },
+      { icon: "🛡️", xp: 120, gold: 90, items: [{ itemId: "leather_cap", qty: 1 }] },
+      { icon: "💎", xp: 150, gold: 150, items: [{ itemId: "gemstone", qty: 1 }] },
+      { icon: "🎁", xp: 300, gold: 40, items: [{ itemId: "mana_potion", qty: 2 }] },
+      { icon: "📜", xp: 250, gold: 80, items: [{ itemId: "iron_ore", qty: 2 }] },
+    ],
+  },
+  {
     id: "marsh_visit",
     name: "Into the Mire",
     giverNpc: "guard",

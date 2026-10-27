@@ -804,6 +804,9 @@ export class UIManager {
       } else if (action === "turnin-quest" && target.dataset.quest) {
         changed = session.turnInQuest(target.dataset.quest);
         if (changed) this.sfx.level();
+      } else if (action === "pick-reward" && target.dataset.quest && target.dataset.index) {
+        changed = session.pickQuestReward(target.dataset.quest, Number(target.dataset.index));
+        if (changed) this.sfx.level();
       } else if (action === "heal") {
         changed = session.healAtNpc();
         if (changed) this.sfx.heal();
@@ -1129,10 +1132,10 @@ export class UIManager {
     ctx.strokeRect(px(session.save.x) - 2.5, py(session.save.y) - 2.5, 5, 5);
   }
 
-  showStoryBox(title: string, text: string, bossIndex: number): void {
+  showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {
     const box = document.createElement("div");
     box.className = "story-box";
-    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p></p><button type="button">Continue</button></div>`;
+    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">Continue</button></div>`;
     const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
     if (bossIndex >= 0 && bossIndex < 4) {
       portrait.style.backgroundImage = "url(assets/boss-portraits.png)";
@@ -1140,7 +1143,9 @@ export class UIManager {
       portrait.style.backgroundSize = "400% 100%";
     }
     (box.querySelector("h3") as HTMLElement).textContent = title;
-    const body = box.querySelector("p") as HTMLElement;
+    const body = box.querySelector(".story-box-text") as HTMLElement;
+    const closingLine = box.querySelector(".story-box-closing") as HTMLElement;
+    closingLine.textContent = "";
     const button = box.querySelector("button") as HTMLButtonElement;
     let index = 0;
     let timer: number | null = null;
@@ -1148,6 +1153,7 @@ export class UIManager {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
       body.textContent = text;
+      closingLine.textContent = closing;
       button.textContent = "Continue";
     };
     button.addEventListener("click", () => {
@@ -1172,7 +1178,7 @@ export class UIManager {
           this.pushLog(event.text, event.tone ?? "info");
           break;
         case "story":
-          this.showStoryBox(event.title, event.text, event.bossIndex);
+          this.showStoryBox(event.title, event.text, event.closing, event.bossIndex);
           break;
         case "damage": {
           if (event.target === "player") {

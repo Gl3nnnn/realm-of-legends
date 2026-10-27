@@ -187,6 +187,7 @@ export interface QuestDef {
   description: string;
   objectives: QuestObjective[];
   rewards: QuestRewards;
+  choose?: (QuestRewards & { icon?: string })[];
   requiresLevel?: number;
   repeatable?: boolean;
 }
@@ -464,7 +465,7 @@ export type SimEvent =
   | { type: "quest"; questId: string; text: string }
   | { type: "zone"; zone: ZoneId }
   | { type: "log"; text: string; tone?: "info" | "good" | "bad" | "quest" }
-  | { type: "story"; title: string; text: string; bossIndex: number }
+  | { type: "story"; title: string; text: string; closing: string; bossIndex: number }
   | { type: "save" }
   | {
       type: "cast";

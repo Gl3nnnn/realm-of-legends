@@ -72,6 +72,7 @@ export class WorldScene extends Phaser.Scene {
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
   private monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private monsterOutlines = new Map<string, Phaser.GameObjects.Sprite>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -93,6 +94,7 @@ export class WorldScene extends Phaser.Scene {
     this.ui = data.ui;
     this.zoneId = data.session.zone.id;
     this.monsterSprites.clear();
+    this.monsterOutlines.clear();
     this.petSprites.clear();
     this.lootSprites.clear();
     this.chestSprites.clear();
@@ -196,6 +198,16 @@ export class WorldScene extends Phaser.Scene {
     if (!ground || !decor) throw new Error("Map layers are missing.");
     ground.setDepth(-10);
     decor.setDepth(-5);
+
+    // Blocked-tile highlight: a faint red mark on every tile the player cannot walk onto.
+    const blockedMarks = this.add.graphics().setDepth(-6);
+    for (let ty = 0; ty < zone.height; ty += 1) {
+      for (let tx = 0; tx < zone.width; tx += 1) {
+        if (!zone.blocked[ty * zone.width + tx]) continue;
+        blockedMarks.fillStyle(0xff3b3b, 0.12);
+        blockedMarks.fillRect(tx * zone.tileWidth, ty * zone.tileHeight, zone.tileWidth, zone.tileHeight);
+      }
+    }
 
     for (const chest of zone.chests) {
       const tx = Math.floor(chest.x / zone.tileWidth);
@@ -328,6 +340,15 @@ export class WorldScene extends Phaser.Scene {
     this.add
       .ellipse(monster.x, monster.y + 10, 18, 6, 0x000000, 0.3)
       .setDepth(monster.y - 1);
+    // Dark outline behind the sprite so monsters stand out from the ground.
+    const outline = this.add
+      .sprite(monster.x, monster.y, "monsters", monsterFrame(def.sprite, 0))
+      .setOrigin(0.5, 0.6)
+      .setTint(0x05060a)
+      .setAlpha(0.85)
+      .setScale(sprite.scaleX * 1.12, sprite.scaleY * 1.12)
+      .setDepth(monster.y - 0.5);
+    this.monsterOutlines.set(monster.uid, outline);
     this.monsterSprites.set(monster.uid, sprite);
   }
 
@@ -625,6 +646,7 @@ export class WorldScene extends Phaser.Scene {
       activeMonsters.add(monster.uid);
       sprite.setPosition(monster.x, monster.y);
       sprite.setDepth(monster.y);
+      this.monsterOutlines.get(monster.uid)?.setPosition(monster.x, monster.y).setDepth(monster.y - 0.5).setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1))).setFlipX(monster.facing < 0);
       sprite.setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1)));
       sprite.setFlipX(monster.facing < 0);
       if (monster.statuses.some((status) => status.kind === "poison")) sprite.setTint(0x9fe8a0);
@@ -638,7 +660,9 @@ export class WorldScene extends Phaser.Scene {
       else sprite.clearTint();
     }
     for (const [uid, sprite] of this.monsterSprites) {
-      if (!activeMonsters.has(uid) && session.monsters.find((m) => m.uid === uid)?.state === "dead") sprite.setVisible(false);
+      const dead = !activeMonsters.has(uid) && session.monsters.find((m) => m.uid === uid)?.state === "dead";
+      if (dead) sprite.setVisible(false);
+      this.monsterOutlines.get(uid)?.setVisible(!dead);
     }
 
     const activePets = new Set<string>();

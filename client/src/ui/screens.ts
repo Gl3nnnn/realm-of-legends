@@ -83,7 +83,7 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
   const cards = visibleClasses.map((def) => {
     const flagship = FLAGSHIP_CLASSES.includes(def.id);
     return `<button class="class-card ${def.id === selectedClass ? "selected" : ""}" data-action="select-class" data-class="${def.id}">
-      ${classPortrait(def.id, 46)}
+      ${classPortrait(def.id, 46, "card-portrait")}
       <span>
         <span class="class-name">${esc(def.name)}</span>
         <span class="class-role">${esc(def.role)} · ${esc(def.difficulty)}</span>
@@ -421,6 +421,16 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
         .join("");
       let action = "";
       if (entry.available) action = `<button class="btn small" data-action="accept-quest" data-quest="${entry.questId}">Accept quest</button>`;
+      else if (entry.canTurnIn && quest.choose) {
+        action = `<div class="gift-list">${quest.choose
+          .map((option, i) => {
+            const items = (option.items ?? []).map((it) => `${it.qty}x ${it.itemId.replace(/_/g, " ")}`);
+            const parts = [`${option.xp} XP`, `${option.gold} gold`, ...items];
+            const icon = option.icon ?? "🎁";
+            return `<button class="btn small" data-action="pick-reward" data-quest="${entry.questId}" data-index="${i}">${icon} ${esc(parts.join(" · "))}</button>`;
+          })
+          .join("")}</div>`;
+      }
       else if (entry.canTurnIn) action = `<button class="btn small" data-action="turnin-quest" data-quest="${entry.questId}">Turn in</button>`;
       else if (state && state.completed && state.completions > 0 && !quest.repeatable) action = `<span class="small muted">Completed</span>`;
       else if (state) action = `<span class="small muted">In progress</span>`;
