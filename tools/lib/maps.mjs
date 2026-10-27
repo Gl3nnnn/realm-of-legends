@@ -375,6 +375,7 @@ function dungeonMap() {
   m.fillGround(TILE.caveFloor);
   const r = mulberry(53);
   for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.35) m.setGround(x, y, TILE.caveFloor2);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.1) m.setGround(x, y, TILE.dirt);
   m.rectGround(20, 18, 13, 11, TILE.caveFloor);
   m.roomWalls(17, 3, 19, 14);
   m.roomWalls(4, 17, 12, 11);
@@ -514,6 +515,7 @@ function frostMap() {
   m.fillGround(TILE.caveFloor);
   const r = mulberry(97);
   for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.38) m.setGround(x, y, TILE.caveFloor2);
+  for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.1) m.setGround(x, y, TILE.dirt);
   m.rectGround(18, 18, 28, 14, TILE.caveFloor);
   m.roomWalls(8, 6, 18, 14, TILE.darkWall);
   m.roomWalls(38, 6, 18, 14, TILE.darkWall);
