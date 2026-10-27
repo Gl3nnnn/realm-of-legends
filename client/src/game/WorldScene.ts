@@ -71,7 +71,7 @@ export class WorldScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
-  private gearIcon!: Phaser.GameObjects.Sprite;
+  private gearIcons!: Phaser.GameObjects.Sprite[];
   private buffGlow!: Phaser.GameObjects.Ellipse;
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
@@ -332,23 +332,31 @@ export class WorldScene extends Phaser.Scene {
       .sprite(save.x, save.y, "characters", charFrame(sprite, "down", 0))
       .setDepth(save.y)
       .setOrigin(0.5, 0.6);
-    // Small floating icon above the hero that shows the main equipped gear.
-    this.gearIcon = this.add.sprite(save.x, save.y - 26, "items", 0).setScale(1.5).setVisible(false).setDepth(save.y + 1);
+    // Row of floating icons above the hero: weapon, armor, helm, boots.
+    this.gearIcons = [0, 1, 2, 3].map((i) =>
+      this.add.sprite(save.x, save.y - 40, "items", 0).setScale(2).setVisible(false).setDepth(save.y + 1).setData("slot", i),
+    );
   }
 
   private updateGearIcon(): void {
     const save = this.session.save;
-    const equipped = save.equipment.weapon ?? save.equipment.armor;
-    if (!equipped) {
-      this.gearIcon.setVisible(false);
-      return;
-    }
-    const def = getItem(equipped.itemId);
-    this.gearIcon
-      .setFrame(itemIcon(def.icon))
-      .setPosition(save.x, save.y - 26)
-      .setDepth(save.y + 1)
-      .setVisible(!this.session.dead);
+    const slots = [save.equipment.weapon, save.equipment.armor, save.equipment.helm, save.equipment.boots];
+    // Spread the icons out in a row, centred over the hero and raised above the head.
+    const gap = 22;
+    const startX = save.x - ((slots.length - 1) * gap) / 2;
+    slots.forEach((item, i) => {
+      const icon = this.gearIcons[i];
+      if (!item || this.session.dead) {
+        icon.setVisible(false);
+        return;
+      }
+      const def = getItem(item.itemId);
+      icon
+        .setFrame(itemIcon(def.icon))
+        .setPosition(startX + i * gap, save.y - 40)
+        .setDepth(save.y + 1)
+        .setVisible(true);
+    });
   }
 
   private updateBuffGlow(active: boolean): void {
