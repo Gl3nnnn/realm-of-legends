@@ -250,6 +250,8 @@ function villageMap() {
   m.house(38, 27, 10, 6, TILE.roofRed);
   m.setDecor(30, 22, TILE.well, true);
   m.setDecor(19, 14, TILE.rug, false);
+  m.setDecor(21, 30, TILE.sign, true);
+  m.setDecor(31, 30, TILE.torch, false);
   m.setDecor(9, 11, TILE.sign, true);
   m.setDecor(42, 11, TILE.sign, true);
   m.setDecor(32, 9, TILE.sign, true);
@@ -308,6 +310,8 @@ function forestMap() {
   m.pathLine([[0, 22], [14, 24], [24, 20], [34, 22], [43, 16], [52, 12], [59, 6]], 1, TILE.path);
   m.blob(26, 13, 5, 3, TILE.water, 1);
   m.setDecor(26, 13, TILE.well, false);
+  m.setDecor(40, 16, TILE.sign, true);
+  m.setDecor(10, 22, TILE.torch, false);
   const spawns = {
     slime: [[13, 26], [19, 31], [28, 18], [36, 27], [43, 33]],
     wolf: [[47, 17], [54, 27], [50, 9], [35, 39]],
@@ -398,6 +402,7 @@ function dungeonMap() {
   m.setDecor(44, 24, TILE.chest, true);
   m.setDecor(16, 9, TILE.crate, true);
   m.setDecor(36, 25, TILE.barrel, true);
+  m.setDecor(26, 6, TILE.sign, true);
   const boss = [26, 9];
   const skeletons = [[10, 22], [21, 24], [30, 21], [43, 22], [14, 9], [39, 8]];
   const traps = [[25, 31, 34, 10, 3], [12, 22, 26, 12, 4], [40, 22, 26, 12, 4]];
@@ -464,6 +469,8 @@ function marshMap() {
   m.clearRect(57, 21, 3, 3, TILE.path2);
   m.setDecor(58, 22, 0, false);
   m.setDecor(30, 8, TILE.torch, false);
+  m.setDecor(33, 29, TILE.sign, true);
+  m.setDecor(6, 18, TILE.torch, false);
   return {
     map: m.emit("Ashen Marsh", "marsh"),
     zone: {
@@ -537,6 +544,8 @@ function frostMap() {
   m.clearRect(59, 23, 4, 3, TILE.stone2);
   m.setDecor(4, 24, 0, false);
   m.setDecor(60, 24, 0, false);
+  m.setDecor(31, 17, TILE.sign, true);
+  m.setDecor(7, 22, TILE.torch, false);
   return {
     map: m.emit("Frostfell Ruins", "frost"),
     zone: {
@@ -587,6 +596,7 @@ function throneMap() {
   m.clearRect(21, 28, 6, 6, TILE.caveFloor);
   m.setDecor(24, 29, TILE.stairs, false);
   m.setDecor(24, 6, TILE.rug, false);
+  m.setDecor(22, 4, TILE.sign, true);
   for (const [x, y] of [[10, 7], [37, 7], [10, 26], [37, 26], [20, 6], [27, 6]]) m.setDecor(x, y, TILE.torch, false);
   const spawns = {
     hollow_acolyte: [[14, 12], [33, 12], [14, 22], [33, 22]],
