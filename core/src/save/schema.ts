@@ -64,6 +64,7 @@ export const saveSchema = z.object({
   ngPlus: z.number().int().min(0).max(99),
   defeatedBosses: z.array(z.enum(BOSS_IDS)).max(32),
   storyChapter: z.number().int().min(0).max(99),
+  relationships: z.record(z.string().min(1).max(40), z.number().int().min(-10).max(10)).default({}),
   playtime: z.number().finite().min(0),
   rngState: z.number().int().min(0).max(0xffffffff),
   createdAt: z.number().int().min(0),
@@ -142,6 +143,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     ngPlus: 0,
     defeatedBosses: [],
     storyChapter: 0,
+    relationships: {},
     playtime: 0,
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
@@ -235,6 +237,10 @@ export function migrateSave(input: unknown): CharacterSave {
   }
   if (migrated.version === 5) {
     migrated.version = 6;
+  }
+  if (migrated.version === 6) {
+    migrated.relationships = {};
+    migrated.version = 7;
   }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);

@@ -431,6 +431,7 @@ export interface CharacterSave {
   ngPlus: number;
   defeatedBosses: string[];
   storyChapter: number;
+  relationships: Record<string, number>;
   playtime: number;
   rngState: number;
   createdAt: number;

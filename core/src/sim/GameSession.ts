@@ -1690,6 +1690,23 @@ export class GameSession {
     return true;
   }
 
+  /** Pick a dialogue choice with an NPC. Changes that NPC's standing and gives a small reward. */
+  pickNpcChoice(npcId: string, choice: "kind" | "rude"): boolean {
+    if (!npcId || (choice !== "kind" && choice !== "rude")) return false;
+    const relationships = this.save.relationships;
+    const current = relationships[npcId] ?? 0;
+    if (choice === "kind") {
+      relationships[npcId] = Math.min(10, current + 1);
+      this.save.gold += 5;
+      this.emit({ type: "gold", amount: 5 });
+      this.emit({ type: "log", text: "They appreciate your kindness. +5 gold.", tone: "good" });
+    } else {
+      relationships[npcId] = Math.max(-10, current - 1);
+      this.emit({ type: "log", text: "They remember that. Their trust drops a little.", tone: "bad" });
+    }
+    return true;
+  }
+
   findInteractable(): InteractResult | null {
     if (this.dead) return null;
     let best: InteractResult | null = null;
