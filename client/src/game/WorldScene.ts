@@ -389,7 +389,8 @@ export class WorldScene extends Phaser.Scene {
     const startX = save.x - ((slots.length - 1) * gap) / 2;
     slots.forEach((item, i) => {
       const icon = this.gearIcons[i];
-      if (!item || this.session.dead) {
+      // The weapon icon is hidden: the bow still works, it just does not float over the hero.
+      if (!item || this.session.dead || i === 0) {
         icon.setVisible(false);
         return;
       }

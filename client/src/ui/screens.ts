@@ -446,6 +446,10 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
       </div>`;
     })
     .join("");
+  const choices = `<div class="gift-list">
+    <button class="btn small" data-action="npc-choice" data-npc="${npc.id}" data-choice="kind">💬 Kind words</button>
+    <button class="btn small" data-action="npc-choice" data-npc="${npc.id}" data-choice="rude">😠 Rude remark</button>
+  </div>`;
   const trainer = npc.trainer
     ? `<div>
         <div class="section-title">Training</div>
@@ -465,6 +469,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
     </div>
   </div>
   <div class="dialogue">"${esc(dialogue)}"</div>
+  ${choices}
   ${questRows ? `<div style="display:grid;gap:9px"><div class="section-title">Quests</div>${questRows}</div>` : ""}
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">

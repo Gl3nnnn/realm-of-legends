@@ -816,6 +816,9 @@ export class UIManager {
       } else if (action === "pick-reward" && target.dataset.quest && target.dataset.index) {
         changed = session.pickQuestReward(target.dataset.quest, Number(target.dataset.index));
         if (changed) this.sfx.level();
+      } else if (action === "npc-choice" && target.dataset.npc && target.dataset.choice) {
+        changed = session.pickNpcChoice(target.dataset.npc, target.dataset.choice as "kind" | "rude");
+        if (changed) this.sfx.level();
       } else if (action === "heal") {
         changed = session.healAtNpc();
         if (changed) this.sfx.heal();
