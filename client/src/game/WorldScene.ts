@@ -384,6 +384,21 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 0.6);
     if (def.boss) sprite.setScale(1.55);
     else if (monster.elite) sprite.setScale(1.2);
+    // Bosses and elites get a coloured glow behind them so they read as special.
+    if (def.boss || monster.elite) {
+      const glowColor = def.boss ? 0xffb347 : 0x9b6bff;
+      const glow = this.add
+        .ellipse(monster.x, monster.y, def.boss ? 60 : 40, def.boss ? 44 : 30, glowColor, def.boss ? 0.35 : 0.25)
+        .setDepth(monster.y - 2);
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: def.boss ? 0.35 : 0.25, to: def.boss ? 0.12 : 0.08 },
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    }
     this.add
       .ellipse(monster.x, monster.y + 10, 18, 6, 0x000000, 0.3)
       .setDepth(monster.y - 1);
