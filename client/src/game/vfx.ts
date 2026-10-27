@@ -70,7 +70,7 @@ const ABILITY_STYLE: Record<string, VfxStyle> = {
   shield_bash: "bash",
   whirlwind: "cleave",
   iron_defense: "shield",
-  berserker_strike: "cleave",
+  berserker_strike: "slash",
   fortified_stance: "shield",
   fireball: "bolt",
   ice_shard: "bolt",
@@ -97,7 +97,7 @@ const ABILITY_STYLE: Record<string, VfxStyle> = {
   purification: "heal",
   holy_nova: "nova",
   sanctuary: "nova",
-  soul_drain: "beam",
+  soul_drain: "bolt",
   bone_spear: "bolt",
   raise_skeleton: "summon",
   curse: "rune",
@@ -139,8 +139,8 @@ const ABILITY_STYLE: Record<string, VfxStyle> = {
   elemental_convergence: "buff",
   dragon_breath: "cone",
   scaled_armor: "shield",
-  dragon_leap: "dash",
-  infernal_strike: "meteor",
+  dragon_leap: "nova",
+  infernal_strike: "slash",
   dragons_wrath: "buff",
 };
 

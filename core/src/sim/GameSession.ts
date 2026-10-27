@@ -12,6 +12,7 @@ import {
   RESOURCE_LABELS,
 } from "../constants";
 import { getClass } from "../data/classes";
+import { PET_SPECIES } from "../data/pets";
 import {
   createItemInstance,
   getItem,
@@ -99,6 +100,8 @@ export class GameSession {
   zone: ZoneData;
   monsters: MonsterInstance[] = [];
   pets: PetInstance[] = [];
+  private hatchlingAttackTimer = 0;
+  private hatchlingHitting = false;
   projectiles: ProjectileInstance[] = [];
   loot: GroundLoot[] = [];
   traps: TrapInstance[] = [];
@@ -387,6 +390,7 @@ export class GameSession {
       return this.drainEvents();
     }
     this.updatePets(clamped);
+    this.updateHatchling(clamped);
     this.updateProjectiles(clamped);
     this.updateTraps(clamped);
     this.updateTelegraphs(clamped);
@@ -706,6 +710,18 @@ export class GameSession {
     this.recordKill(def.id);
   }
 
+  private updateHatchling(dt: number): void {
+    const companion = this.save.companion;
+    if (!companion || !companion.hatched) return;
+    this.hatchlingAttackTimer = Math.max(0, this.hatchlingAttackTimer - dt);
+    const target = this.nearestMonster(this.save.x, this.save.y, 150);
+    if (!target || this.hatchlingAttackTimer > 0) return;
+    this.hatchlingAttackTimer = 1.6;
+    this.hatchlingHitting = true;
+    this.hitMonster(target, 4 + this.save.level, false, "physical", []);
+    this.hatchlingHitting = false;
+  }
+
   private updatePets(dt: number): void {
     for (const pet of this.pets) pet.ttl -= dt;
     this.pets = this.pets.filter((p) => p.ttl > 0 && p.hp > 0);
@@ -802,6 +818,7 @@ export class GameSession {
       x: monster.x,
       y: monster.y,
       damageType,
+      source: this.hatchlingHitting ? "hatchling" : undefined,
     });
     for (const status of statuses) {
       if (status.kind === "stun") {
@@ -1579,6 +1596,15 @@ export class GameSession {
     return true;
   }
 
+  /** Hatch the saved egg companion once. Returns false if there is no unhatched egg. */
+  hatchCompanion(): boolean {
+    const companion = this.save.companion;
+    if (!companion || companion.hatched) return false;
+    companion.hatched = true;
+    this.emit({ type: "log", text: "Your egg hatched! A small hatchling now follows you.", tone: "good" });
+    return true;
+  }
+
   pickQuestReward(questId: string, index: number): boolean {
     const quest = QUESTS[questId];
     if (!quest?.choose) return false;
@@ -1596,6 +1622,11 @@ export class GameSession {
       }
     }
     this.emit({ type: "log", text: `${quest.name}: you chose your reward.`, tone: "good" });
+    if (questId === "forest_keeper_gift" && !this.save.companion) {
+      const species = this.rng.pick(PET_SPECIES);
+      this.save.companion = { kind: "egg", name: "Forest Egg", species: species.id };
+      this.emit({ type: "log", text: "A warm egg has joined you. It will hatch in time.", tone: "good" });
+    }
     return true;
   }
 

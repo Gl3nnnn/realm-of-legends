@@ -1189,7 +1189,8 @@ export class UIManager {
           const now = performance.now();
           if (now - this.lastHitSound > 55) {
             this.lastHitSound = now;
-            if (event.crit) this.sfx.crit();
+            if (event.source === "hatchling") this.sfx.hatchling();
+            else if (event.crit) this.sfx.crit();
             else this.sfx.hit();
           }
           break;

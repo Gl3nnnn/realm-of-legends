@@ -433,6 +433,15 @@ export interface CharacterSave {
   rngState: number;
   createdAt: number;
   updatedAt: number;
+  companion?: CompanionEgg;
+}
+
+export interface CompanionEgg {
+  kind: "egg";
+  name: string;
+  hatched?: boolean;
+  /** Id of the pet species this egg hatches into (see data/pets.ts). */
+  species?: string;
 }
 
 export interface InputState {
@@ -452,6 +461,7 @@ export type SimEvent =
       x: number;
       y: number;
       damageType: DamageType;
+      source?: "hatchling";
     }
   | { type: "heal"; amount: number; x: number; y: number }
   | { type: "dodge"; x: number; y: number }

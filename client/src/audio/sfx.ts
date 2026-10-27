@@ -228,6 +228,11 @@ export class Sfx {
     this.noise(0.09, 0.16);
   }
 
+  hatchling(): void {
+    this.tone(480, 0.07, "triangle", 0.06, 200);
+    this.tone(640, 0.06, "sine", 0.05, 140, 0.04);
+  }
+
   cast(kind = "physical"): void {
     const base = kind === "fire" ? 320 : kind === "ice" ? 520 : kind === "shadow" ? 190 : 380;
     this.tone(base, 0.16, "triangle", 0.2, 180);

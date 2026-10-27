@@ -68,6 +68,7 @@ export const saveSchema = z.object({
   rngState: z.number().int().min(0).max(0xffffffff),
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0),
+  companion: z.object({ kind: z.literal("egg"), name: z.string().min(1).max(16), hatched: z.boolean().optional(), species: z.string().max(24).optional() }).optional(),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -231,6 +232,9 @@ export function migrateSave(input: unknown): CharacterSave {
   if (migrated.version === 4) {
     migrated.storyChapter = 0;
     migrated.version = 5;
+  }
+  if (migrated.version === 5) {
+    migrated.version = 6;
   }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);

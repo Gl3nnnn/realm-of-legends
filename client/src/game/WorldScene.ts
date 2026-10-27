@@ -15,6 +15,7 @@ import {
 import type { UIManager } from "../ui/UIManager";
 import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
 import { damageColor, projectileStyle, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
+import { PET_SPECIES } from "@realm/core";
 
 const DAMAGE_TEXT_COLORS: Record<string, string> = {
   physical: "#fff0cc",
@@ -68,6 +69,7 @@ export class WorldScene extends Phaser.Scene {
   private floatPool: Phaser.GameObjects.Text[] = [];
   private burstPool: Phaser.GameObjects.Arc[] = [];
   private player!: Phaser.GameObjects.Sprite;
+  private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
@@ -78,6 +80,7 @@ export class WorldScene extends Phaser.Scene {
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
   private aim = { x: 0, y: 0 };
+  private hitPauseLeft = 0;
   private pointerMoved = false;
   private zoneId = "";
 
@@ -449,6 +452,12 @@ export class WorldScene extends Phaser.Scene {
     const target = this.session.interact();
     const interactEvents = this.session.drainEvents();
     this.handleSimEvents(interactEvents);
+    if (!target && this.session.save.companion && !this.session.save.companion.hatched) {
+      this.session.hatchCompanion();
+      this.handleSimEvents(this.session.drainEvents());
+      this.ui.requestSave();
+      return;
+    }
     if (target?.kind === "chest") {
       this.removeChest(target.id);
       this.ui.requestSave();
@@ -525,13 +534,17 @@ export class WorldScene extends Phaser.Scene {
       this.handleSimEvents(this.session.drainEvents());
     }
 
-    const events = this.session.step(Math.min(delta / 1000, 0.05), {
-      moveX,
-      moveY,
-      aimX: this.aim.x,
-      aimY: this.aim.y,
-    });
-    this.handleSimEvents(events);
+    // Hit pause: for a moment after a heavy hit, freeze the simulation so the impact lands.
+    this.hitPauseLeft = Math.max(0, this.hitPauseLeft - delta / 1000);
+    if (this.hitPauseLeft <= 0) {
+      const events = this.session.step(Math.min(delta / 1000, 0.05), {
+        moveX,
+        moveY,
+        aimX: this.aim.x,
+        aimY: this.aim.y,
+      });
+      this.handleSimEvents(events);
+    }
 
     if (!this.session.dead) {
       if (this.isDown("attack") || pad.attack || (this.input.activePointer.isDown && this.pointerMoved)) this.cast("basic");
@@ -574,6 +587,17 @@ export class WorldScene extends Phaser.Scene {
           }
           if (event.target === "player" && preferences.screenShake && !preferences.reducedMotion) {
             this.cameras.main.shake(90, Math.min(0.004, event.amount / 30_000));
+          }
+          if (event.source === "hatchling" && event.target === "monster") {
+            this.burst(event.x, event.y, 0x8ef0a0, 9, 1.4);
+            if (!preferences.reducedMotion) {
+              const ring = this.add.circle(event.x, event.y, 6).setStrokeStyle(2, 0x8ef0a0, 0.9).setDepth(event.y + 1);
+              ring.setFillStyle(0x000000, 0);
+              this.tweens.add({ targets: ring, radius: 34, alpha: 0, duration: 600, onComplete: () => ring.destroy() });
+            }
+          }
+          if (!preferences.reducedMotion && (event.crit || event.target === "player")) {
+            this.hitPauseLeft = Math.max(this.hitPauseLeft, event.crit ? 0.07 : 0.04);
           }
           this.flashMonster(event.x, event.y);
           this.burst(event.x, event.y, Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color, 4, 0.6);
@@ -680,6 +704,36 @@ export class WorldScene extends Phaser.Scene {
         sprite.destroy();
         this.petSprites.delete(uid);
       }
+    }
+
+    // The saved egg companion follows the player: a drawn egg, then a hatchling once hatched.
+    const companion = this.session.save.companion;
+    if (companion && !this.eggFollower) {
+      this.eggFollower = this.add.container(0, 0).setDepth(500);
+      const shell = this.add.ellipse(0, 0, 18, 23, 0xf5e6b8, 1).setStrokeStyle(2, 0x8a6a2a);
+      const spotA = this.add.ellipse(-3, -4, 4, 4, 0xc9a86a, 0.9);
+      const spotB = this.add.ellipse(4, 3, 3, 3, 0xc9a86a, 0.9);
+      this.eggFollower.add([shell, spotA, spotB]);
+      this.eggFollower.setData("kind", "egg");
+    }
+    if (!companion && this.eggFollower) {
+      this.eggFollower.destroy();
+      this.eggFollower = undefined;
+    }
+    if (companion && this.eggFollower) {
+      const bob = Math.sin(this.time.now / 300) * 2;
+      if (companion.hatched && this.eggFollower.getData("kind") === "egg") {
+        // Swap the egg for a small hatchling.
+        this.eggFollower.removeAll(true);
+        const species = PET_SPECIES.find((s) => s.id === companion.species) ?? PET_SPECIES[0];
+        const body = this.add.ellipse(0, 0, 14, 12, species.color, 1).setStrokeStyle(1, 0x000000);
+        const eyeL = this.add.circle(-3, -2, 1.4, 0x1a1a1a);
+        const eyeR = this.add.circle(3, -2, 1.4, 0x1a1a1a);
+        const label = this.add.text(0, -14, species.name, { fontSize: "13px", color: "#ffffff", stroke: "#000000", strokeThickness: 3 }).setOrigin(0.5, 1);
+        this.eggFollower.add([body, eyeL, eyeR, label]);
+        this.eggFollower.setData("kind", "hatchling");
+      }
+      this.eggFollower.setPosition(save.x - 22, save.y + 4 + bob).setDepth(save.y);
     }
 
     const activeLoot = new Set<string>();

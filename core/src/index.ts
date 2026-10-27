@@ -6,6 +6,7 @@ export * from "./data/classes";
 export * from "./data/items";
 export * from "./data/monsters";
 export * from "./data/npcs";
+export * from "./data/pets";
 export * from "./data/quests";
 export * from "./data/talents";
 export * from "./save/schema";
