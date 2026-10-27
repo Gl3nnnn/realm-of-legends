@@ -137,7 +137,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, session.zone.width * session.zone.tileWidth, session.zone.height * session.zone.tileHeight);
     this.cameras.main.startFollow(this.player, true, 0.16, 0.16);
-    this.cameras.main.setZoom(2);
+    this.cameras.main.setZoom(loadPreferences().cameraZoom);
     this.cameras.main.roundPixels = true;
     this.cameras.main.fadeIn(260, 10, 8, 14);
     const vignette = this.add.graphics().setScrollFactor(0).setDepth(9500);

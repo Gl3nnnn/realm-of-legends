@@ -362,6 +362,14 @@ export class UIManager {
         this.preferences = updatePreferences({ touchControls: input.checked });
         this.refreshTouchVisibility();
       }
+      if (input.id === "zoom-select") {
+        const zoom = Number(input.value) === 1.5 ? 1.5 : Number(input.value) === 2.5 ? 2.5 : 2;
+        this.preferences = updatePreferences({ cameraZoom: zoom });
+      }
+      if (input.id === "effect-select") {
+        const strength = Number(input.value) === 0.5 ? 0.5 : Number(input.value) === 1.5 ? 1.5 : 1;
+        this.preferences = updatePreferences({ effectIntensity: strength });
+      }
       if (input.id === "difficulty-select" && this.session) {
         this.session.setDifficulty(input.value as "story" | "normal" | "nightmare");
         void this.persist();

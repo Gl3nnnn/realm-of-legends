@@ -18,6 +18,8 @@ export interface GamePreferences {
   showDamage: boolean;
   screenShake: boolean;
   touchControls: boolean;
+  cameraZoom: 1.5 | 2 | 2.5;
+  effectIntensity: 0.5 | 1 | 1.5;
   keybinds: Keybinds;
 }
 
@@ -55,6 +57,8 @@ const DEFAULTS: GamePreferences = {
   showDamage: true,
   screenShake: true,
   touchControls: false,
+  cameraZoom: 2,
+  effectIntensity: 1,
   keybinds: { ...DEFAULT_KEYBINDS },
 };
 
@@ -95,6 +99,8 @@ export function loadPreferences(): GamePreferences {
       showDamage: parsed.showDamage !== false,
       screenShake: parsed.screenShake !== false,
       touchControls: Boolean(parsed.touchControls),
+      cameraZoom: parsed.cameraZoom === 1.5 || parsed.cameraZoom === 2.5 ? parsed.cameraZoom : 2,
+      effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
       keybinds: sanitizeKeybinds(parsed.keybinds),
     };
   } catch {

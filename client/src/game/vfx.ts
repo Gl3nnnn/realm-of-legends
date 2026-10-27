@@ -1,4 +1,5 @@
 import type { AbilityDef, ClassId, DamageType } from "@realm/core";
+import { loadPreferences } from "../ui/preferences";
 
 export type VfxStyle =
   | "slash"
@@ -206,13 +207,15 @@ export function resolveAbilityVfx(classId: ClassId, ability: AbilityDef, classAc
   const signature = ability.signature === true;
   // Spirit Storm is made more dramatic: a wider, longer burst with a bigger shake.
   const dramatic = ability.id === "spirit_storm";
+  // The player's effect intensity setting scales how big and how strong the effect looks.
+  const intensity = loadPreferences().effectIntensity;
   return {
     style,
     color,
     accent: classAccent,
-    radius: signature ? Math.round(radius * 1.3) : dramatic ? Math.round(radius * 1.5) : radius,
+    radius: Math.round((signature ? radius * 1.3 : dramatic ? radius * 1.5 : radius) * intensity),
     duration: signature ? Math.round(STYLE_DURATION[style] * 1.25) : dramatic ? Math.round(STYLE_DURATION[style] * 1.4) : STYLE_DURATION[style],
-    shake: signature ? 0.004 : dramatic ? 0.004 : heavy ? 0.0025 : 0,
+    shake: (signature ? 0.004 : dramatic ? 0.004 : heavy ? 0.0025 : 0) * intensity,
   };
 }
 

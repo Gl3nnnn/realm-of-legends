@@ -543,6 +543,20 @@ export function settingsPanelHtml(
         <label class="small"><input type="checkbox" id="damage-toggle" ${preferences.showDamage ? "checked" : ""} /> Floating damage</label>
         <label class="small"><input type="checkbox" id="shake-toggle" ${preferences.screenShake ? "checked" : ""} /> Screen shake</label>
         <label class="small"><input type="checkbox" id="touch-toggle" ${preferences.touchControls ? "checked" : ""} /> Touch controls</label>
+        <label class="small">Camera zoom
+          <select id="zoom-select">
+            <option value="1.5" ${preferences.cameraZoom === 1.5 ? "selected" : ""}>Wide</option>
+            <option value="2" ${preferences.cameraZoom === 2 ? "selected" : ""}>Normal</option>
+            <option value="2.5" ${preferences.cameraZoom === 2.5 ? "selected" : ""}>Close</option>
+          </select>
+        </label>
+        <label class="small">Effect size
+          <select id="effect-select">
+            <option value="0.5" ${preferences.effectIntensity === 0.5 ? "selected" : ""}>Subtle</option>
+            <option value="1" ${preferences.effectIntensity === 1 ? "selected" : ""}>Normal</option>
+            <option value="1.5" ${preferences.effectIntensity === 1.5 ? "selected" : ""}>Bold</option>
+          </select>
+        </label>
         <button class="btn ghost small" data-action="reset-tutorial">Show tutorial again</button>
       </div>
     </div>
