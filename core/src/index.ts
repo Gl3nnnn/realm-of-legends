@@ -4,6 +4,7 @@ export * from "./rng";
 export * from "./progression";
 export * from "./data/classes";
 export * from "./data/items";
+export * from "./data/lore";
 export * from "./data/monsters";
 export * from "./data/npcs";
 export * from "./data/pets";

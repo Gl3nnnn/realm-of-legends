@@ -2,6 +2,7 @@ import {
   CLASS_LIST,
   FLAGSHIP_CLASSES,
   ITEMS,
+  LORE_ENTRIES,
   MAX_CHARACTERS,
   MAX_UPGRADE,
   MONSTERS,
@@ -17,6 +18,7 @@ import {
   isEquippable,
   itemDisplayName,
   itemSellValue,
+  revealedLore,
   talentTierChosen,
   type CharacterSave,
   type ClassId,
@@ -383,9 +385,27 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
 
 export function questsPanelHtml(session: GameSession): string {
   const active = session.save.quests.filter((state) => QUESTS[state.id]);
+  const lore = revealedLore(session.save);
+  const loreRows =
+    lore.length === 0
+      ? `<div class="small muted">Nothing recorded yet. Old stories surface as you travel and fight.</div>`
+      : lore
+          .map(
+            (entry) => `<details class="lore-entry">
+        <summary>${esc(entry.title)}</summary>
+        <div class="small">${esc(entry.text)}</div>
+      </details>`,
+          )
+          .join("");
+  const loreSection = `<div class="lore-section">
+      <div class="qtitle">Records of the Barrow</div>
+      <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
+      ${loreRows}
+    </div>`;
   if (active.length === 0) {
     return `<div class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
-      <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>`;
+      <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      ${loreSection}`;
   }
   const rows = active
     .map((state) => {
@@ -403,6 +423,7 @@ export function questsPanelHtml(session: GameSession): string {
     })
     .join("");
   return `<div style="display:grid;gap:10px">${rows}</div>
+    ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
 }
 

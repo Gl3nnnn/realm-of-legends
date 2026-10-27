@@ -2043,3 +2043,8 @@ html[data-ui-scale="1.5"] .toasts {
 
 .class-card .card-portrait { animation: preview-bob 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .class-card .card-portrait { animation: none; } }
+
+.lore-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.12); display: grid; gap: 8px; }
+.lore-entry { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); border-radius: 6px; padding: 8px 10px; }
+.lore-entry summary { cursor: pointer; font-weight: 600; }
+.lore-entry .small { margin-top: 6px; line-height: 1.45; }
