@@ -406,10 +406,25 @@ export function questsPanelHtml(session: GameSession): string {
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
 }
 
+/** Pick an NPC line that fits the player's level, accepted quests and beaten bosses. */
+function npcDialogueFor(session: GameSession, npcId: string): string {
+  const npc = NPCS[npcId];
+  if (!npc || npc.dialogue.length === 0) return "";
+  const save = session.save;
+  const hasBoss = save.defeatedBosses.length > 0;
+  const hasQuest = save.quests.some((q) => !q.completed);
+  const lines = npc.dialogue;
+  // Later lines are for players who have progressed further.
+  if (hasBoss && lines.length > 2) return lines[2];
+  if (hasQuest && lines.length > 1) return lines[1];
+  if (save.level >= 5 && lines.length > 1) return lines[1];
+  return lines[0];
+}
+
 export function npcPanelHtml(session: GameSession, npcId: string): string {
   const npc = NPCS[npcId];
   if (!npc) return `<div class="empty-state">This person is not here.</div>`;
-  const dialogue = npc.dialogue[session.save.id.length % npc.dialogue.length] ?? npc.dialogue[0] ?? "";
+  const dialogue = npcDialogueFor(session, npcId);
   const questStates = session.getNpcQuestStates(npcId);
   const questRows = questStates
     .map((entry) => {

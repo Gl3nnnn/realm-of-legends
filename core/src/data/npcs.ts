@@ -9,7 +9,7 @@ export const NPCS: Record<string, NpcDef> = {
     color: "#5b7fa6",
     dialogue: [
       "Keep your blade close, traveler. The forest has grown restless.",
-      "Slimes have been creeping toward the village. Deal with them and I'll make it worth your while.",
+      "Clear the slimes and I'll reward you.",
       "The dungeon to the northeast is no place for the unprepared.",
     ],
     quests: ["slime_trouble", "wolf_menace", "bone_breaker", "forest_bounty", "forest_keeper_gift", "marsh_visit", "marsh_cull", "venom_bounty", "frost_visit", "frost_patrol", "hollow_acolytes"],
