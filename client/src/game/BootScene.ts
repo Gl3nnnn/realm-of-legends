@@ -8,8 +8,14 @@ export class BootScene extends Phaser.Scene {
   preload(): void {
     this.load.setBaseURL(import.meta.env.BASE_URL);
     const progress = document.getElementById("boot-progress");
+    const track = document.getElementById("boot-progress-track");
+    const messages = ["Waking the realm…", "Loading the lands…", "Summoning heroes…", "Almost ready…"];
     this.load.on("progress", (value: number) => {
-      if (progress) progress.textContent = `${Math.round(value * 100)}%`;
+      const pct = Math.round(value * 100);
+      if (progress) {
+        progress.textContent = `${messages[Math.min(messages.length - 1, Math.floor(value * messages.length))]} ${pct}%`;
+      }
+      if (track) track.style.width = `${pct}%`;
     });
     this.load.on("loaderror", (file: Phaser.Loader.File) => {
       console.error("Failed to load asset", file.key);
@@ -40,7 +46,9 @@ export class BootScene extends Phaser.Scene {
       /* fonts are optional */
     }
     // Hold the loading screen briefly so the bar and percentage can be seen.
-    await new Promise((resolve) => setTimeout(resolve, 1800));
+    const progress = document.getElementById("boot-progress");
+    if (progress) progress.textContent = "Ready! 100%";
+    await new Promise((resolve) => setTimeout(resolve, 2400));
     this.game.events.emit("boot-ready");
   }
 }
