@@ -1826,3 +1826,129 @@ html[data-ui-scale="1.5"] .toasts {
   color: var(--muted);
   margin-top: 2px;
 }
+
+.keybind-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.keybind-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.keybind-btn b {
+  color: var(--gold);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.keybind-btn.listening {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.touch-stick {
+  position: absolute;
+  left: 20px;
+  bottom: 24px;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 192, 90, 0.35);
+  background: rgba(12, 10, 18, 0.42);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 192, 90, 0.55);
+  background: rgba(232, 192, 90, 0.22);
+}
+
+.touch-actions {
+  position: absolute;
+  right: 18px;
+  bottom: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, 58px);
+  grid-auto-rows: 58px;
+  gap: 8px;
+  align-items: end;
+  justify-items: end;
+  pointer-events: auto;
+}
+
+.touch-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 192, 90, 0.4);
+  background: rgba(20, 16, 28, 0.66);
+  color: var(--text);
+  font: inherit;
+  font-size: 9px;
+  pointer-events: auto;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.touch-btn.small {
+  width: 46px;
+  height: 46px;
+  font-size: 8px;
+}
+
+.touch-btn.attack {
+  width: 74px;
+  height: 74px;
+  background: rgba(196, 84, 72, 0.62);
+  border-color: rgba(255, 160, 130, 0.6);
+}
+
+.touch-btn:active {
+  transform: scale(0.94);
+  filter: brightness(1.25);
+}
+
+@media (pointer: coarse) {
+  .hint-line { display: none; }
+  .hud-top-right { top: 8px; right: 8px; }
+  .ability-bar { gap: 5px; }
+}
+
+@media (max-width: 640px) {
+  .touch-stick { width: 96px; height: 96px; }
+  .touch-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
+  .touch-actions { grid-template-columns: repeat(3, 50px); grid-auto-rows: 50px; }
+  .touch-btn { width: 50px; height: 50px; }
+  .touch-btn.small { width: 42px; height: 42px; }
+  .touch-btn.attack { width: 64px; height: 64px; }
+}

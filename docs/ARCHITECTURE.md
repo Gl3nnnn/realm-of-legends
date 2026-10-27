@@ -15,24 +15,27 @@ Realm of Legends is a two-workspace TypeScript project. The simulation has no br
 
 `core/src/sim/GameSession.ts` is the gameplay authority. It owns:
 
-- player position, facing, health, resource, stats, cooldowns, and status effects
-- monsters, pets, projectiles, loot, traps, and gather nodes
-- quest progress, inventory, equipment, gold, and zone state
+- player position, facing, health, resource, stats, cooldowns, status effects, dodge state, and quick-slot cooldowns
+- monsters, elites, multi-phase bosses, pets, projectiles, loot, traps, and gather nodes
+- quest progress, inventory, item instances, equipment, talents, gold, difficulty, New Game+, and defeated bosses
 - the seeded RNG state saved with each character
 
 `step(dt, input)` advances the simulation and returns `SimEvent[]`. Events include hits, deaths, loot, level-ups, quest updates, and zone transitions. Immediate actions such as casting or interacting drain their events through `drainEvents()`.
 
-Data lives in `core/src/data/` and generated zone layouts live in `core/src/generated/world-data.ts`. Save schema validation and migration are in `core/src/save/schema.ts`; `SAVE_VERSION` is bumped whenever the persisted shape changes.
+Data lives in `core/src/data/` and generated zone layouts live in `core/src/generated/world-data.ts`. Save schema validation and migration are in `core/src/save/schema.ts`; `SAVE_VERSION` is 4 and is bumped whenever the persisted shape changes. Migrations are cumulative so version 1 and 2 saves continue to load.
+
+Difficulty scales monster health, damage, and rewards; New Game+ multiplies those values further and increases elite frequency. Bosses switch phases at 66% and 33% health. Elite affixes are assigned during spawn and stored on each monster instance.
 
 ## Client layers
 
 - `client/src/game/BootScene.ts`: asset preload and boot progress.
-- `client/src/game/WorldScene.ts`: tilemap, cameras, entity sprites, effects, input, and zone restarts.
-- `client/src/ui/UIManager.ts`: character select, HUD, modal panels, keyboard shortcuts, autosave, and event presentation.
-- `client/src/ui/screens.ts`: HTML templates for panels and the ability bar.
+- `client/src/game/WorldScene.ts`: tilemap, cameras, entity sprites, ambience, pooled effects, keyboard/gamepad/touch input, and zone restarts.
+- `client/src/ui/UIManager.ts`: character select, HUD, modal panels, shortcuts, autosave, touch controls, rebinding, and event presentation.
+- `client/src/ui/preferences.ts`: validated preferences, keybind defaults, rebinding helpers, and accessibility settings.
+- `client/src/ui/screens.ts`: HTML templates for panels, settings, keybinds, and the ability bar.
 - `client/src/ui/helpers.ts`: escaping, icons, portraits, and formatting.
 - `client/src/persistence/db.ts`: IndexedDB repository, JSON export, and import validation.
-- `client/src/audio/sfx.ts`: synthesized Web Audio effects.
+- `client/src/audio/sfx.ts`: synthesized Web Audio effects plus zone ambience and boss music with crossfades.
 
 All text interpolated into HTML passes through `esc()`. Save imports are schema-validated before reaching the simulation.
 
@@ -67,6 +70,7 @@ The GitHub Pages workflow builds with `VITE_BASE_PATH=/<repository>/`, runs the 
 
 - `npm run typecheck`
 - `npm test`
+- `npm run test:e2e` (Playwright Chromium)
 - `npm run build`
 - `$env:VITE_BASE_PATH="/<repo>/"; npm run build; npm run verify:pages`
 

@@ -23,7 +23,7 @@ import {
   type GameSession,
   type ItemStack,
 } from "@realm/core";
-import type { GamePreferences } from "./preferences";
+import { KEYBIND_LABELS, type GamePreferences, type KeybindAction } from "./preferences";
 import {
   abilityIconHtml,
   charIconHtml,
@@ -493,15 +493,22 @@ export function settingsPanelHtml(
   session: GameSession | null,
   volume: number,
   muted: boolean,
+  musicVolume: number,
   preferences: GamePreferences,
+  rebinding: KeybindAction | null = null,
 ): string {
   const classInfo = session ? getClass(session.save.classId) : null;
   return `<div class="settings-grid">
     <div class="setting-row">
-      <div><strong>Sound</strong><div class="small muted">Synthesized chiptune effects</div></div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <input type="range" id="volume-range" min="0" max="100" value="${Math.round(volume * 100)}" />
-        <label class="small"><input type="checkbox" id="mute-toggle" ${muted ? "checked" : ""} /> Mute</label>
+      <div><strong>Sound</strong><div class="small muted">Synthesized effects and procedural music</div></div>
+      <div class="settings-controls">
+        <label class="small">Effects
+          <input type="range" id="volume-range" min="0" max="100" value="${Math.round(volume * 100)}" />
+        </label>
+        <label class="small">Music
+          <input type="range" id="music-range" min="0" max="100" value="${Math.round(musicVolume * 100)}" />
+        </label>
+        <label class="small"><input type="checkbox" id="mute-toggle" ${muted ? "checked" : ""} /> Mute effects</label>
       </div>
     </div>
     <div class="setting-row">
@@ -517,7 +524,16 @@ export function settingsPanelHtml(
         <label class="small"><input type="checkbox" id="contrast-toggle" ${preferences.highContrast ? "checked" : ""} /> High contrast</label>
         <label class="small"><input type="checkbox" id="motion-toggle" ${preferences.reducedMotion ? "checked" : ""} /> Reduce motion</label>
         <label class="small"><input type="checkbox" id="damage-toggle" ${preferences.showDamage ? "checked" : ""} /> Floating damage</label>
+        <label class="small"><input type="checkbox" id="shake-toggle" ${preferences.screenShake ? "checked" : ""} /> Screen shake</label>
+        <label class="small"><input type="checkbox" id="touch-toggle" ${preferences.touchControls ? "checked" : ""} /> Touch controls</label>
         <button class="btn ghost small" data-action="reset-tutorial">Show tutorial again</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div><strong>Keybinds</strong><div class="small muted">Click a binding, then press a key. Arrow keys always move.</div></div>
+      <div class="keybind-grid">
+        ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${rebinding === action ? "listening" : ""}" data-action="rebind-key" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${rebinding === action ? "Press a key" : preferences.keybinds[action]}</b></button>`).join("")}
+        <button class="btn ghost small" data-action="reset-keys">Reset keybinds</button>
       </div>
     </div>
     ${session ? `<div class="setting-row">

@@ -12,7 +12,8 @@ The repository includes `.github/workflows/deploy-pages.yml`.
 The workflow:
 
 - installs dependencies with `npm ci`
-- runs the test suite
+- runs the Vitest suite
+- installs Chromium and runs the Playwright browser smoke tests
 - builds with the repository name as the Vite base path
 - verifies the base-path build
 - uploads `client/dist` as the Pages artifact

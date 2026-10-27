@@ -15,7 +15,7 @@ import {
   type GameSession,
   type SimEvent,
 } from "@realm/core";
-import type { Sfx } from "../audio/sfx";
+import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { classColor, esc, formatNumber, questObjectiveText } from "./helpers";
 import {
@@ -33,11 +33,15 @@ import {
   type InventorySort,
 } from "./screens";
 import {
+  DEFAULT_KEYBINDS,
+  KEYBIND_LABELS,
   TUTORIAL_STORAGE_KEY,
   applyPreferences,
+  keyNameFromEvent,
   loadPreferences,
   updatePreferences,
   type GamePreferences,
+  type KeybindAction,
 } from "./preferences";
 
 type PanelState =
@@ -78,6 +82,10 @@ export class UIManager {
   private selectedEquip: string | null = null;
   private inventoryFilter: InventoryFilter = "all";
   private inventorySort: InventorySort = "default";
+  private rebinding: KeybindAction | null = null;
+  private touchMove = { x: 0, y: 0 };
+  private touchPointer: number | null = null;
+  public keybindVersion = 0;
   private preferences: GamePreferences = loadPreferences();
 
   private abilitySignature = "";
@@ -131,6 +139,9 @@ export class UIManager {
     safe: must("hud-safe"),
     cycle: must("hud-cycle"),
     gold: must("hud-gold"),
+    touchControls: must("touch-controls"),
+    touchStick: must("touch-stick"),
+    touchKnob: must("touch-knob"),
     importFile: must<HTMLInputElement>("import-file"),
   };
 
@@ -151,6 +162,10 @@ export class UIManager {
     return this.panel !== null;
   }
 
+  get touchVector(): { x: number; y: number } {
+    return this.touchMove;
+  }
+
   private async renderSelect(): Promise<void> {
     try {
       this.saves = await this.repo.list();
@@ -164,6 +179,7 @@ export class UIManager {
 
   async showCharacterSelect(): Promise<void> {
     this.session = null;
+    this.sfx.stopMusic();
     this.closePanel(false);
     this.dom.hud.classList.add("hidden");
     this.dom.boot.classList.add("hidden");
@@ -171,6 +187,7 @@ export class UIManager {
     this.dom.death.classList.add("hidden");
     this.dom.tutorial.classList.add("hidden");
     this.dom.compass.classList.add("hidden");
+    this.dom.touchControls.classList.add("hidden");
     this.dom.log.innerHTML = "";
     await this.renderSelect();
   }
@@ -196,6 +213,7 @@ export class UIManager {
     this.logLines = [];
     this.dom.log.innerHTML = "";
     this.showTutorialIfNeeded();
+    this.refreshTouchVisibility();
 
     const def = session.classInfo;
     this.dom.portrait.style.borderColor = classColor(def.id);
@@ -229,6 +247,7 @@ export class UIManager {
 
   private dismissTutorial(): void {
     this.dom.tutorial.classList.add("hidden");
+    this.refreshTouchVisibility();
     try {
       localStorage.setItem(TUTORIAL_STORAGE_KEY, "seen");
     } catch {
@@ -320,6 +339,7 @@ export class UIManager {
     this.dom.overlay.addEventListener("input", (event) => {
       const input = event.target as HTMLInputElement;
       if (input.id === "volume-range") this.sfx.setVolume(Number(input.value) / 100);
+      if (input.id === "music-range") this.sfx.setMusicVolume(Number(input.value) / 100);
     });
     this.dom.overlay.addEventListener("change", (event) => {
       const input = event.target as HTMLInputElement;
@@ -331,6 +351,11 @@ export class UIManager {
       if (input.id === "contrast-toggle") this.preferences = updatePreferences({ highContrast: input.checked });
       if (input.id === "motion-toggle") this.preferences = updatePreferences({ reducedMotion: input.checked });
       if (input.id === "damage-toggle") this.preferences = updatePreferences({ showDamage: input.checked });
+      if (input.id === "shake-toggle") this.preferences = updatePreferences({ screenShake: input.checked });
+      if (input.id === "touch-toggle") {
+        this.preferences = updatePreferences({ touchControls: input.checked });
+        this.refreshTouchVisibility();
+      }
       if (input.id === "difficulty-select" && this.session) {
         this.session.setDifficulty(input.value as "story" | "normal" | "nightmare");
         void this.persist();
@@ -352,10 +377,91 @@ export class UIManager {
     });
     window.addEventListener("pointerdown", () => this.sfx.resume(), { once: true });
     window.addEventListener("keydown", () => this.sfx.resume(), { once: true });
+    this.setupTouchControls();
+  }
+
+  private setupTouchControls(): void {
+    const stick = this.dom.touchStick;
+    const knob = this.dom.touchKnob;
+    const move = (event: PointerEvent) => {
+      const rect = stick.getBoundingClientRect();
+      const radius = rect.width / 2;
+      let dx = event.clientX - (rect.left + radius);
+      let dy = event.clientY - (rect.top + radius);
+      const distance = Math.hypot(dx, dy);
+      if (distance > radius * 0.8) {
+        dx = (dx / distance) * radius * 0.8;
+        dy = (dy / distance) * radius * 0.8;
+      }
+      this.touchMove = { x: dx / (radius * 0.8), y: dy / (radius * 0.8) };
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const release = () => {
+      this.touchPointer = null;
+      this.touchMove = { x: 0, y: 0 };
+      knob.style.transform = "translate(0, 0)";
+    };
+    stick.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      this.touchPointer = event.pointerId;
+      stick.setPointerCapture(event.pointerId);
+      move(event);
+    });
+    stick.addEventListener("pointermove", (event) => {
+      if (this.touchPointer !== event.pointerId) return;
+      event.preventDefault();
+      move(event);
+    });
+    stick.addEventListener("pointerup", release);
+    stick.addEventListener("pointercancel", release);
+    for (const button of this.dom.touchControls.querySelectorAll<HTMLElement>("[data-touch]")) {
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        const action = button.dataset.touch ?? "";
+        window.dispatchEvent(new CustomEvent("realm-touch-action", { detail: action }));
+      });
+    }
+    this.refreshTouchVisibility();
+  }
+
+  private refreshTouchVisibility(): void {
+    const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+    const show = Boolean(this.session) && !this.modalOpen && this.dom.tutorial.classList.contains("hidden") && (coarse || this.preferences.touchControls);
+    this.dom.touchControls.classList.toggle("hidden", !show);
+    for (const [action, key] of [["quick1", "quick1"], ["quick2", "quick2"], ["interact", "interact"]] as const) {
+      const button = this.dom.touchControls.querySelector<HTMLElement>(`[data-touch="${action}"]`);
+      if (button) button.textContent = this.preferences.keybinds[key];
+    }
   }
 
   private onKeyDown(event: KeyboardEvent): void {
     if (event.repeat) return;
+    if (this.rebinding) {
+      event.preventDefault();
+      if (event.key === "Escape") {
+        this.rebinding = null;
+        this.renderPanel();
+        return;
+      }
+      const key = keyNameFromEvent(event);
+      if (!key) {
+        this.toast("Use a letter, number, arrow, Space, Shift, or Tab.", "bad");
+        return;
+      }
+      const action = this.rebinding;
+      const keybinds = { ...this.preferences.keybinds, [action]: key };
+      const duplicate = (Object.entries(keybinds) as [KeybindAction, string][]).find(([other, value]) => other !== action && value === key);
+      if (duplicate) {
+        this.toast(`${key} is already bound to ${KEYBIND_LABELS[duplicate[0]]}.`, "bad");
+        return;
+      }
+      this.preferences = updatePreferences({ keybinds });
+      this.keybindVersion += 1;
+      this.rebinding = null;
+      this.renderPanel();
+      this.toast(`${KEYBIND_LABELS[action]} bound to ${key}.`, "good");
+      return;
+    }
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") {
       if (event.key === "Escape") (event.target as HTMLElement).blur();
@@ -385,9 +491,9 @@ export class UIManager {
     } else if (event.key === "t" || event.key === "T") {
       event.preventDefault();
       this.openPanel("talents");
-    } else if (event.key === "z" || event.key === "Z" || event.key === "x" || event.key === "X") {
+    } else if (keyNameFromEvent(event) === this.preferences.keybinds.quick1 || keyNameFromEvent(event) === this.preferences.keybinds.quick2) {
       event.preventDefault();
-      this.session.useQuickSlot(event.key.toLowerCase() === "z" ? 0 : 1);
+      this.session.useQuickSlot(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
     }
@@ -509,6 +615,7 @@ export class UIManager {
     this.selectedEquip = null;
     this.renderPanel();
     this.updateCompass();
+    this.refreshTouchVisibility();
     this.sfx.ui();
   }
 
@@ -518,6 +625,7 @@ export class UIManager {
     this.dom.overlay.classList.add("hidden");
     this.dom.overlay.innerHTML = "";
     this.updateHud(true);
+    this.refreshTouchVisibility();
     if (persist) this.schedulePersist();
   }
 
@@ -538,7 +646,7 @@ export class UIManager {
       body = talentsPanelHtml(this.session);
     } else if (this.panel.kind === "settings") {
       title = "Settings";
-      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted, this.preferences);
+      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted, this.sfx.currentMusicVolume, this.preferences, this.rebinding);
       narrow = true;
     } else if (this.panel.kind === "npc" && this.session) {
       const npc = NPCS[this.panel.id];
@@ -561,6 +669,18 @@ export class UIManager {
       this.closePanel();
       return;
     }
+    if (action === "rebind-key") {
+      this.rebinding = (target.dataset.key ?? "") as KeybindAction;
+      this.renderPanel();
+      return;
+    }
+    if (action === "reset-keys") {
+      this.preferences = updatePreferences({ keybinds: { ...DEFAULT_KEYBINDS } });
+      this.keybindVersion += 1;
+      this.renderPanel();
+      this.toast("Keybinds restored to defaults.", "good");
+      return;
+    }
     if (action === "reset-tutorial") {
       try {
         localStorage.removeItem(TUTORIAL_STORAGE_KEY);
@@ -570,6 +690,7 @@ export class UIManager {
       this.dismissTutorial();
       this.closePanel(false);
       this.dom.tutorial.classList.remove("hidden");
+      this.refreshTouchVisibility();
       return;
     }
     if (this.panel?.kind === "inventory" && (action === "inv-filter" || action === "inv-sort")) {
@@ -917,8 +1038,10 @@ export class UIManager {
     });
     if (!boss) {
       this.dom.bossBar.classList.add("hidden");
+      this.sfx.playMusic(this.session.zone.ambience as MusicTheme);
       return;
     }
+    this.sfx.playMusic("boss");
     const def = MONSTERS[boss.defId];
     const maxHp = boss.maxHp ?? def.maxHp;
     this.dom.bossName.textContent = `${def.name}${boss.phase ? ` · Phase ${boss.phase + 1}` : ""}`;
