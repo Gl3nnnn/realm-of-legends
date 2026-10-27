@@ -71,6 +71,7 @@ export class WorldScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
+  private buffGlow!: Phaser.GameObjects.Ellipse;
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
   private monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
@@ -325,10 +326,27 @@ export class WorldScene extends Phaser.Scene {
     const save = this.session.save;
     const sprite = this.session.classInfo.sprite;
     this.playerShadow = this.add.ellipse(save.x, save.y + 12, 20, 7, 0x000000, 0.32).setDepth(save.y - 1);
+    this.buffGlow = this.add.ellipse(save.x, save.y + 12, 34, 14, 0xffd76a, 0.28).setVisible(false).setDepth(save.y - 1);
     this.player = this.add
       .sprite(save.x, save.y, "characters", charFrame(sprite, "down", 0))
       .setDepth(save.y)
       .setOrigin(0.5, 0.6);
+  }
+
+  private updateBuffGlow(active: boolean): void {
+    const save = this.session.save;
+    this.buffGlow.setPosition(save.x, save.y + 12).setDepth(save.y - 1);
+    if (!active) {
+      this.buffGlow.setVisible(false);
+      return;
+    }
+    this.buffGlow.setVisible(true);
+    if (loadPreferences().reducedMotion) {
+      this.buffGlow.setAlpha(0.28);
+      return;
+    }
+    const pulse = 0.5 + 0.5 * Math.sin(this.session.animationTime * 4);
+    this.buffGlow.setAlpha(0.18 + pulse * 0.2);
   }
 
   private spawnMonster(monster: MonsterInstance): void {
@@ -588,6 +606,10 @@ export class WorldScene extends Phaser.Scene {
           if (event.target === "player" && preferences.screenShake && !preferences.reducedMotion) {
             this.cameras.main.shake(90, Math.min(0.004, event.amount / 30_000));
           }
+          if (event.target === "player" && !preferences.reducedMotion) {
+            this.player.setTint(0xff5555);
+            this.time.delayedCall(120, () => this.player.clearTint());
+          }
           if (event.source === "hatchling" && event.target === "monster") {
             this.burst(event.x, event.y, 0x8ef0a0, 9, 1.4);
             if (!preferences.reducedMotion) {
@@ -654,6 +676,7 @@ export class WorldScene extends Phaser.Scene {
     this.player.setDepth(save.y);
     this.player.setAlpha(session.dead ? 0.25 : 1);
     this.playerShadow.setPosition(save.x, save.y + 12).setDepth(save.y - 1).setAlpha(session.dead ? 0.12 : 0.32);
+    this.updateBuffGlow(session.buffs.length > 0 && !session.dead);
 
     const activeMonsters = new Set<string>();
     for (const monster of session.monsters) {
@@ -849,6 +872,9 @@ export class WorldScene extends Phaser.Scene {
     if (!preferences.reducedMotion && preferences.screenShake && vfx.shake > 0) {
       this.cameras.main.shake(80, vfx.shake);
     }
+    if (this.session.save.classId === "ranger" && event.abilityId === "basic") {
+      this.bowDrawFx(event.x, event.y, angle, color, vfx.duration);
+    }
     switch (vfx.style) {
       case "slash":
         this.arcFx(event.x, event.y, angle, color, 34, 4, 0.95, vfx.duration);
@@ -857,6 +883,7 @@ export class WorldScene extends Phaser.Scene {
       case "cleave":
         this.arcFx(event.x, event.y, angle, color, 50, 6, 1.35, vfx.duration);
         this.arcFx(event.x, event.y, angle, 0xffffff, 42, 2, 1.1, vfx.duration - 40);
+        this.burst(event.targetX, event.targetY, color, 6, 0.9);
         break;
       case "thrust":
         this.thrustFx(event.x, event.y, event.targetX, event.targetY, color, accent, vfx.duration);
@@ -937,6 +964,11 @@ export class WorldScene extends Phaser.Scene {
         this.burst(event.x, event.y, color, 5, 0.8);
         break;
     }
+    // Extra sparks for ultimates and the six strongest normal skills, in the skill's own colour.
+    const sparkSkills = ["dragon_breath", "infernal_strike", "holy_nova", "elemental_burst", "meteor", "ground_slam"];
+    if (ability.signature === true || sparkSkills.includes(ability.id)) {
+      this.burst(event.targetX, event.targetY, color, 10, 1.6);
+    }
   }
 
   private drawProjectile(g: Phaser.GameObjects.Graphics, projectile: ProjectileInstance): void {
@@ -991,6 +1023,45 @@ export class WorldScene extends Phaser.Scene {
       g.fillStyle(0xffffff, 0.8);
       g.fillCircle(projectile.x - dx * 2, projectile.y - dy * 2, Math.max(1, projectile.radius * 0.4));
     }
+  }
+
+  private bowDrawFx(x: number, y: number, angle: number, color: number, duration: number): void {
+    // A bow arc in front of the Ranger that bends back as it is drawn,
+    // then a thin arrow that flies out along the aim line.
+    const bow = this.add.graphics().setPosition(x, y).setDepth(y + 3);
+    bow.rotation = angle;
+    bow.lineStyle(3, color, 1);
+    bow.beginPath();
+    bow.arc(0, 0, 18, -Math.PI / 2.6, Math.PI / 2.6, false);
+    bow.strokePath();
+    bow.lineStyle(1, 0xffffff, 0.7);
+    bow.beginPath();
+    bow.moveTo(18 * Math.cos(-Math.PI / 2.6), 18 * Math.sin(-Math.PI / 2.6));
+    bow.lineTo(4, 0);
+    bow.lineTo(18 * Math.cos(Math.PI / 2.6), 18 * Math.sin(Math.PI / 2.6));
+    bow.strokePath();
+    this.tweens.add({
+      targets: bow,
+      alpha: 0,
+      duration: Math.max(120, duration * 0.6),
+      onComplete: () => bow.destroy(),
+    });
+
+    const arrow = this.add.graphics().setPosition(x, y).setDepth(y + 4);
+    arrow.rotation = angle;
+    arrow.lineStyle(2, color, 1);
+    arrow.beginPath();
+    arrow.moveTo(0, 0);
+    arrow.lineTo(26, 0);
+    arrow.strokePath();
+    this.tweens.add({
+      targets: arrow,
+      x: x + Math.cos(angle) * 60,
+      y: y + Math.sin(angle) * 60,
+      alpha: 0,
+      duration: Math.max(160, duration),
+      onComplete: () => arrow.destroy(),
+    });
   }
 
   private arcFx(x: number, y: number, angle: number, color: number, radius: number, width: number, spread: number, duration: number): void {
@@ -1306,7 +1377,7 @@ export class WorldScene extends Phaser.Scene {
       this.tweens.killTweensOf(dot);
       dot
         .setPosition(x, y)
-        .setRadius(1.6 + Math.random() * 1.4)
+        .setRadius(2.6 + Math.random() * 2.2)
         .setFillStyle(color, 0.95)
         .setAlpha(1)
         .setVisible(true);

@@ -555,8 +555,8 @@ const classes: ClassDef[] = [
         dmg(14, 0.7, "arcane", 50),
       ]),
       skill("elemental_burst", "Elemental Burst", "burst", "Release a storm of fire and ice around you.", 28, 14, 0, 7, "self", [
-        dmg(30, 1.5, "fire", 85),
-        dmg(20, 1.0, "ice", 85),
+        dmg(38, 1.5, "fire", 85),
+        dmg(25, 1.0, "ice", 85),
       ]),
       skill("elemental_convergence", "Elemental Convergence", "burst", "Signature: fuse steel and elements, greatly increasing attack.", 40, 32, 0, 9, "self", [
         { kind: "buff", stat: "attack", percent: 45, duration: 8, name: "Elemental Convergence" },
