@@ -39,6 +39,8 @@ export class BootScene extends Phaser.Scene {
     } catch {
       /* fonts are optional */
     }
+    // Hold the loading screen briefly so the bar and percentage can be seen.
+    await new Promise((resolve) => setTimeout(resolve, 1800));
     this.game.events.emit("boot-ready");
   }
 }

@@ -111,8 +111,23 @@ p {
 
 #boot-screen {
   background:
-    radial-gradient(circle at 50% 35%, #2a2138 0, #15111d 55%, #0a090f 100%);
+    radial-gradient(circle at 50% 35%, #3a2d4d 0, #15111d 55%, #0a090f 100%);
   z-index: 100;
+}
+
+@keyframes logo-glow {
+  0%, 100% { box-shadow: 6px 6px 0 #000, 0 0 12px rgba(242, 212, 106, 0.25); }
+  50% { box-shadow: 6px 6px 0 #000, 0 0 28px rgba(242, 212, 106, 0.6); }
+}
+
+@keyframes boot-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes boot-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 .boot-inner {
@@ -133,7 +148,7 @@ p {
   font-family: "Press Start 2P", monospace;
   font-size: 14px;
   transform: rotate(-3deg);
-  box-shadow: 6px 6px 0 #000;
+  animation: logo-glow 2.4s ease-in-out infinite;
 }
 
 .boot-bar {
@@ -147,14 +162,17 @@ p {
 #boot-progress-track {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--gold), #f2d46a);
-  transition: width 0.2s ease;
+  background: linear-gradient(90deg, #b8891e, var(--gold), #fff3b0, var(--gold), #b8891e);
+  background-size: 200% 100%;
+  animation: boot-shimmer 1.6s linear infinite;
+  transition: width 0.4s ease;
 }
 
 #boot-progress {
   font-family: "Press Start 2P", monospace;
   font-size: 10px;
   color: var(--muted);
+  animation: boot-pulse 1.6s ease-in-out infinite;
 }
 
 #char-select {
@@ -317,36 +335,64 @@ input[type="text"]:focus {
   gap: 10px;
 }
 
+/* Cards fade and rise in one after another when the picker opens. */
+.class-grid > .class-card {
+  animation: card-rise 0.42s ease-out both;
+}
+.class-grid > .class-card:nth-child(2) { animation-delay: 0.05s; }
+.class-grid > .class-card:nth-child(3) { animation-delay: 0.1s; }
+.class-grid > .class-card:nth-child(4) { animation-delay: 0.15s; }
+.class-grid > .class-card:nth-child(5) { animation-delay: 0.2s; }
+.class-grid > .class-card:nth-child(6) { animation-delay: 0.25s; }
+.class-grid > .class-card:nth-child(n + 7) { animation-delay: 0.3s; }
+
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .class-grid > .class-card { animation: none; }
+}
+
 .class-card {
   display: grid;
-  grid-template-columns: 46px 1fr;
-  gap: 10px;
+  grid-template-columns: 52px 1fr;
+  gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
   text-align: left;
-  background: #17131f;
+  background: linear-gradient(160deg, #211a2c 0%, #14101c 100%);
   border: 2px solid var(--line);
   color: var(--ink);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: border-color 0.1s ease, transform 0.1s ease;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .class-card:hover {
-  transform: translateY(-1px);
-  border-color: #6a5b7a;
+  transform: translateY(-2px);
+  border-color: #8a7a9e;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.class-card:active {
+  transform: translateY(0);
 }
 
 .class-card.selected {
   border-color: var(--gold);
-  box-shadow: inset 0 0 0 1px var(--gold), 0 0 18px rgba(232, 192, 90, 0.16);
+  background: linear-gradient(160deg, #2c2238 0%, #1a1424 100%);
+  box-shadow: inset 0 0 0 1px var(--gold), 0 0 22px rgba(232, 192, 90, 0.28);
 }
 
 .class-card .portrait-frame {
-  width: 46px;
-  height: 46px;
-  background-size: 230px 138px;
+  width: 52px;
+  height: 52px;
+  background-size: 260px 156px;
   border-width: 1px;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .class-card .class-name {

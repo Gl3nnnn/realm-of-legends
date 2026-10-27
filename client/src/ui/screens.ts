@@ -83,7 +83,7 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
   const cards = visibleClasses.map((def) => {
     const flagship = FLAGSHIP_CLASSES.includes(def.id);
     return `<button class="class-card ${def.id === selectedClass ? "selected" : ""}" data-action="select-class" data-class="${def.id}">
-      ${classPortrait(def.id, 46, "card-portrait")}
+      ${classPortrait(def.id, 52, "card-portrait")}
       <span>
         <span class="class-name">${esc(def.name)}</span>
         <span class="class-role">${esc(def.role)} · ${esc(def.difficulty)}</span>

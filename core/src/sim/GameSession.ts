@@ -957,19 +957,27 @@ export class GameSession {
       this.castSelf(ability);
       return;
     }
-    for (const effect of damageEffects) {
+    // Several arrows (like Multi-Shot) fan out in a tight spread instead of stacking.
+    const count = damageEffects.length;
+    const spreadStep = count > 1 ? 0.14 : 0;
+    damageEffects.forEach((effect, index) => {
       const speed = effect.projectile?.speed ?? 430;
       const radius = effect.projectile?.radius ?? 6;
       const damageType = effect.damageType ?? "physical";
       const damage = this.effectDamage(effect);
       const crit = damage > 0 && this.rng.chance(this.stats.crit);
+      const angle = (index - (count - 1) / 2) * spreadStep;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const aimX = dir.x * cos - dir.y * sin;
+      const aimY = dir.x * sin + dir.y * cos;
       this.projectiles.push({
         uid: this.nextUid("p"),
         abilityId: ability.id,
-        x: this.save.x + dir.x * 14,
-        y: this.save.y + dir.y * 14,
-        dirX: dir.x,
-        dirY: dir.y,
+        x: this.save.x + aimX * 14,
+        y: this.save.y + aimY * 14,
+        dirX: aimX,
+        dirY: aimY,
         speed,
         ttl: Math.max(0.5, ability.range / speed),
         radius,
@@ -980,7 +988,7 @@ export class GameSession {
         statuses: this.statusesFromEffects(ability.effects, damageType),
         owner: "player",
       });
-    }
+    });
   }
 
   private castPoint(ability: AbilityDef, point: Vec2): void {
