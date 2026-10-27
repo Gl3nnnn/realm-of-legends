@@ -359,6 +359,26 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  private statusMarkers = new Map<string, Phaser.GameObjects.Text>();
+
+  private updateStatusMarkers(uid: string, x: number, y: number, kinds: string[]): void {
+    const glyphs: Record<string, string> = { poison: "☠", burn: "🔥", slow: "❄", stun: "★" };
+    const shown = kinds.filter((kind) => glyphs[kind]);
+    const existing = this.statusMarkers.get(uid);
+    if (shown.length === 0) {
+      existing?.destroy();
+      this.statusMarkers.delete(uid);
+      return;
+    }
+    const text = shown.map((kind) => glyphs[kind]).join(" ");
+    let marker = existing;
+    if (!marker) {
+      marker = this.add.text(x, y - 30, text, { fontSize: "12px" }).setOrigin(0.5, 1);
+      this.statusMarkers.set(uid, marker);
+    }
+    marker.setText(text).setPosition(x, y - 30).setDepth(y + 1);
+  }
+
   private updateBuffGlow(active: boolean): void {
     const save = this.session.save;
     this.buffGlow.setPosition(save.x, save.y + 12).setDepth(save.y - 1);
@@ -747,6 +767,7 @@ export class WorldScene extends Phaser.Scene {
       else if (monster.elite === "venomous") sprite.setTint(0x9fe8a0);
       else if (monster.elite === "volatile") sprite.setTint(0xff9a6a);
       else sprite.clearTint();
+      this.updateStatusMarkers(monster.uid, monster.x, monster.y, monster.statuses.map((status) => status.kind));
     }
     for (const [uid, sprite] of this.monsterSprites) {
       const dead = !activeMonsters.has(uid) && session.monsters.find((m) => m.uid === uid)?.state === "dead";
