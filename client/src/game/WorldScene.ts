@@ -854,6 +854,39 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Short body motion on cast: a lunge for melee classes, a raised-arm pulse for casters. */
+  private castMotion(classId: string, y: number, angle: number, preferences: GamePreferences): void {
+    if (preferences.reducedMotion || !this.player) return;
+    const sprite = this.player;
+    const casters = ["mage", "priest", "necromancer", "druid", "summoner", "spellblade"];
+    this.tweens.killTweensOf(sprite);
+    if (casters.includes(classId)) {
+      // Raised-arm pulse: a quick lift and settle, held a little longer.
+      this.tweens.add({
+        targets: sprite,
+        y: y - 6,
+        scaleX: 1.08,
+        scaleY: 1.08,
+        duration: 140,
+        yoyo: true,
+        hold: 220,
+        ease: "Sine.easeOut",
+      });
+    } else {
+      // Melee lunge: a short step toward the target and back.
+      const dx = Math.cos(angle) * 10;
+      const dy = Math.sin(angle) * 10;
+      this.tweens.add({
+        targets: sprite,
+        x: sprite.x + dx,
+        y: sprite.y + dy,
+        duration: 90,
+        yoyo: true,
+        ease: "Quad.easeOut",
+      });
+    }
+  }
+
   private floatText(x: number, y: number, text: string, color: string, size: number): void {
     const label = this.floatPool.pop() ?? this.add
       .text(0, 0, "", {
@@ -902,6 +935,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.session.save.classId === "ranger" && event.abilityId === "basic") {
       this.bowDrawFx(event.x, event.y, angle, color, vfx.duration);
     }
+    this.castMotion(this.session.save.classId, event.y, angle, preferences);
     switch (vfx.style) {
       case "slash":
         this.arcFx(event.x, event.y, angle, color, 34, 4, 0.95, vfx.duration);
