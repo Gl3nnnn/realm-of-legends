@@ -9,10 +9,12 @@ import {
   type Direction,
   type GameSession,
   type MonsterInstance,
+  type ProjectileInstance,
   type SimEvent,
 } from "@realm/core";
 import type { UIManager } from "../ui/UIManager";
-import { loadPreferences, type KeybindAction } from "../ui/preferences";
+import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
+import { damageColor, projectileStyle, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
 
 const DAMAGE_TEXT_COLORS: Record<string, string> = {
   physical: "#fff0cc",
@@ -109,7 +111,7 @@ export class WorldScene extends Phaser.Scene {
       : session.zone.ambience === "forest" || session.zone.ambience === "marsh"
         ? "#111a13"
         : session.zone.ambience === "frost"
-          ? "#111a24"
+          ? "#15263a"
           : "#141a17";
     this.cameras.main.setBackgroundColor(bg);
     this.buildMap();
@@ -130,6 +132,13 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setZoom(2);
     this.cameras.main.roundPixels = true;
     this.cameras.main.fadeIn(260, 10, 8, 14);
+    const vignette = this.add.graphics().setScrollFactor(0).setDepth(9500);
+    const vw = this.scale.width;
+    const vh = this.scale.height;
+    vignette.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0.45, 0.45, 0, 0);
+    vignette.fillRect(0, 0, vw, vh * 0.25);
+    vignette.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.45, 0.45);
+    vignette.fillRect(0, vh * 0.75, vw, vh * 0.25);
 
     if (session.zone.ambience === "dungeon" || session.zone.ambience === "throne") {
       const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2);
@@ -178,7 +187,9 @@ export class WorldScene extends Phaser.Scene {
   private buildMap(): void {
     const zone = this.session.zone;
     const map = this.make.tilemap({ key: `map-${zone.id}` });
-    const tileset = map.addTilesetImage("eldoria", "tileset", 16, 16, 0, 0);
+    const palette = zone.id === "village" ? "eldoria" : zone.id;
+    const tilesetKey = zone.id === "village" ? "tileset" : `tileset-${zone.id}`;
+    const tileset = map.addTilesetImage(palette, tilesetKey, 16, 16, 0, 0);
     if (!tileset) throw new Error("Tileset could not be loaded.");
     const ground = map.createLayer("ground", tileset, 0, 0);
     const decor = map.createLayer("decor", tileset, 0, 0);
@@ -191,6 +202,45 @@ export class WorldScene extends Phaser.Scene {
       const ty = Math.floor(chest.y / zone.tileHeight);
       decor.removeTileAt(tx, ty);
     }
+
+    // Automatic tall-tile split: a decor tile with another decor tile directly
+    // above it is part of a tall object (tree, wall, house). Those tiles move to
+    // a y-sorted layer so characters can walk behind them; flat decor stays put.
+    const tallTiles: { x: number; y: number }[] = [];
+    decor.forEachTile((tile) => {
+      if (tile.index < 0) return;
+      const above = decor.getTileAt(tile.x, tile.y - 1);
+      if (above && above.index >= 0) tallTiles.push({ x: tile.x, y: tile.y });
+    });
+    for (const t of tallTiles) {
+      const tile = decor.getTileAt(t.x, t.y);
+      if (!tile) continue;
+      const frame = tile.index;
+      decor.removeTileAt(t.x, t.y);
+      this.add
+        .image((t.x + 0.5) * zone.tileWidth, (t.y + 1) * zone.tileHeight, tilesetKey, frame)
+        .setOrigin(0.5, 1)
+        .setDepth((t.y + 1) * zone.tileHeight);
+    }
+
+    // Torch glows: a soft warm light on every torch tile, drawn above the ground
+    // but behind characters so it never hides them.
+    const torchTile = 28;
+    decor.forEachTile((tile) => {
+      if (tile.index !== torchTile) return;
+      const glow = this.add
+        .circle((tile.x + 0.5) * zone.tileWidth, (tile.y + 0.5) * zone.tileHeight, 22, 0xffb347, 0.22)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(-6);
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.16, to: 0.28 },
+        duration: 900 + ((tile.x * 37 + tile.y * 13) % 300),
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    });
   }
 
   private createPortals(): void {
@@ -275,6 +325,9 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 0.6);
     if (def.boss) sprite.setScale(1.55);
     else if (monster.elite) sprite.setScale(1.2);
+    this.add
+      .ellipse(monster.x, monster.y + 10, 18, 6, 0x000000, 0.3)
+      .setDepth(monster.y - 1);
     this.monsterSprites.set(monster.uid, sprite);
   }
 
@@ -389,18 +442,18 @@ export class WorldScene extends Phaser.Scene {
   private createAmbience(): void {
     const ambience = this.session.zone.ambience;
     const config = {
-      village: { color: 0xe8d8a0, count: 8, radius: 1.2, drift: 10, alpha: 0.16 },
-      forest: { color: 0xa8e8a0, count: 14, radius: 1.4, drift: 14, alpha: 0.18 },
-      marsh: { color: 0x9fe8a0, count: 18, radius: 1.8, drift: 8, alpha: 0.14 },
-      dungeon: { color: 0xc9b8e8, count: 12, radius: 1.2, drift: 6, alpha: 0.12 },
-      frost: { color: 0xd8f0ff, count: 22, radius: 1.5, drift: 18, alpha: 0.24 },
-      throne: { color: 0xffb070, count: 16, radius: 1.4, drift: 12, alpha: 0.2 },
+      village: { color: 0xe8d8a0, count: 5, radius: 1.2, drift: 10, alpha: 0.1 },
+      forest: { color: 0xa8e8a0, count: 8, radius: 1.4, drift: 14, alpha: 0.11 },
+      marsh: { color: 0x9fe8a0, count: 10, radius: 1.8, drift: 8, alpha: 0.09 },
+      dungeon: { color: 0xc9b8e8, count: 7, radius: 1.2, drift: 6, alpha: 0.08 },
+      frost: { color: 0xd8f0ff, count: 12, radius: 1.5, drift: 18, alpha: 0.14 },
+      throne: { color: 0xffb070, count: 9, radius: 1.4, drift: 12, alpha: 0.12 },
     }[ambience];
     const zone = this.session.zone;
     for (let i = 0; i < config.count; i += 1) {
       const x = Math.random() * zone.width * zone.tileWidth;
       const y = Math.random() * zone.height * zone.tileHeight;
-      const dot = this.add.circle(x, y, config.radius + Math.random(), config.color, config.alpha).setDepth(9100);
+      const dot = this.add.circle(x, y, config.radius + Math.random(), config.color, config.alpha).setDepth(-2);
       this.tweens.add({
         targets: dot,
         y: y - config.drift - Math.random() * 12,
@@ -502,9 +555,11 @@ export class WorldScene extends Phaser.Scene {
             this.cameras.main.shake(90, Math.min(0.004, event.amount / 30_000));
           }
           this.flashMonster(event.x, event.y);
+          this.burst(event.x, event.y, Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color, 4, 0.6);
           break;
         case "heal":
           if (preferences.showDamage) this.floatText(event.x, event.y - 12, `+${Math.round(event.amount)}`, "#8ef0a0", 9);
+          this.healSparkle(event.x, event.y);
           break;
         case "dodge":
           this.floatText(event.x, event.y - 18, "DODGE", "#9ecbff", 8);
@@ -517,7 +572,7 @@ export class WorldScene extends Phaser.Scene {
           if (event.who === "monster") this.burst(event.x, event.y, 0xb24a4a);
           break;
         case "cast":
-          this.castFlash(event.x, event.y, event.color);
+          this.playCastVfx(event, preferences);
           break;
         case "levelup":
           this.floatText(this.session.save.x, this.session.save.y - 24, "LEVEL UP", "#ffe27a", 12);
@@ -652,13 +707,7 @@ export class WorldScene extends Phaser.Scene {
       g.strokePath();
     }
     for (const projectile of this.session.projectiles) {
-      const color = Phaser.Display.Color.HexStringToColor(projectile.color).color;
-      g.fillStyle(color, 0.2);
-      g.fillCircle(projectile.x, projectile.y, projectile.radius + 5);
-      g.fillStyle(color, 1);
-      g.fillCircle(projectile.x, projectile.y, projectile.radius);
-      g.fillStyle(0xffffff, 0.7);
-      g.fillCircle(projectile.x - projectile.dirX * 4, projectile.y - projectile.dirY * 4, Math.max(1, projectile.radius * 0.4));
+      this.drawProjectile(g, projectile);
     }
 
     const bars = this.barFx;
@@ -709,15 +758,472 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private castFlash(x: number, y: number, color: string): void {
-    const tint = Phaser.Display.Color.HexStringToColor(color).color;
-    const circle = this.add.circle(x, y, 16, tint, 0.3).setDepth(y + 1);
-    this.tweens.add({ targets: circle, scale: 2.2, alpha: 0, duration: 300, ease: "Cubic.easeOut", onComplete: () => circle.destroy() });
+  private playCastVfx(event: Extract<SimEvent, { type: "cast" }>, preferences: GamePreferences): void {
+    const ability =
+      event.abilityId === "basic"
+        ? this.session.classInfo.basic
+        : this.session.classInfo.abilities.find((entry) => entry.id === event.abilityId);
+    if (!ability) return;
+    const vfx: VfxDescriptor = resolveAbilityVfx(this.session.save.classId, ability, event.color);
+    const color = this.hexColor(vfx.color);
+    const accent = this.hexColor(vfx.accent);
+    const angle = Math.atan2(event.targetY - event.y, event.targetX - event.x);
+    if (!preferences.reducedMotion && preferences.screenShake && vfx.shake > 0) {
+      this.cameras.main.shake(80, vfx.shake);
+    }
+    switch (vfx.style) {
+      case "slash":
+        this.arcFx(event.x, event.y, angle, color, 34, 4, 0.95, vfx.duration);
+        this.burst(event.targetX, event.targetY, color, 3, 0.6);
+        break;
+      case "cleave":
+        this.arcFx(event.x, event.y, angle, color, 50, 6, 1.35, vfx.duration);
+        this.arcFx(event.x, event.y, angle, 0xffffff, 42, 2, 1.1, vfx.duration - 40);
+        break;
+      case "thrust":
+        this.thrustFx(event.x, event.y, event.targetX, event.targetY, color, accent, vfx.duration);
+        break;
+      case "bash":
+        this.ringFx(event.targetX, event.targetY, 20, color, 3, vfx.duration);
+        this.arcFx(event.x, event.y, angle, accent, 24, 5, 1.1, vfx.duration);
+        break;
+      case "flurry":
+        this.flurryFx(event.targetX, event.targetY, color, angle, vfx.duration);
+        break;
+      case "fist":
+        this.ringFx(event.targetX, event.targetY, 14, color, 2, vfx.duration);
+        this.burst(event.targetX, event.targetY, color, 5, 0.8);
+        break;
+      case "arrow":
+        this.arcFx(event.x, event.y, angle, accent, 20, 3, 1.2, 180);
+        this.burst(event.x + Math.cos(angle) * 14, event.y + Math.sin(angle) * 14, color, 2, 0.3);
+        break;
+      case "arrowVolley":
+        for (let i = -1; i <= 1; i += 1) {
+          this.arcFx(event.x, event.y, angle + i * 0.16, accent, 22, 2, 1.1, 220);
+        }
+        break;
+      case "gun":
+      case "gunVolley":
+        this.muzzleFx(event.x, event.y, angle, color, vfx.style === "gunVolley" ? 3 : 1);
+        break;
+      case "bolt":
+        this.orbFx(event.x, event.y, color, accent, 10);
+        this.burst(event.x + Math.cos(angle) * 16, event.y + Math.sin(angle) * 16, color, 3, 0.35);
+        break;
+      case "beam":
+        this.beamFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        break;
+      case "nova":
+        this.novaFx(event.x, event.y, vfx.radius, color, accent, vfx.duration);
+        break;
+      case "rune":
+      case "trap":
+        this.runeFx(event.targetX, event.targetY, vfx.radius, color, accent, vfx.duration);
+        break;
+      case "meteor":
+        this.meteorFx(event.targetX, event.targetY, vfx.radius, color, vfx.duration);
+        break;
+      case "rain":
+        this.rainFx(event.targetX, event.targetY, vfx.radius, color, vfx.duration);
+        break;
+      case "summon":
+        this.summonFx(event.x, event.y, color, accent, vfx.duration);
+        break;
+      case "dash":
+        this.dashFx(event.x, event.y, event.targetX, event.targetY, color, accent, vfx.duration);
+        break;
+      case "heal":
+        this.healSparkle(event.x, event.y);
+        this.ringFx(event.x, event.y, 24, color, 2, vfx.duration);
+        break;
+      case "shield":
+        this.bubbleFx(event.x, event.y, color, accent, vfx.duration);
+        break;
+      case "buff":
+        this.buffFx(event.x, event.y, color, accent, vfx.duration);
+        break;
+      case "smoke":
+        this.smokeFx(event.x, event.y, color, vfx.duration);
+        break;
+      case "mark":
+        this.markFx(event.targetX, event.targetY, color, accent, vfx.duration);
+        break;
+      case "cone":
+        this.coneFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        break;
+      case "chain":
+        this.chainFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        break;
+      default:
+        this.burst(event.x, event.y, color, 5, 0.8);
+        break;
+    }
   }
 
-  private burst(x: number, y: number, color: number): void {
+  private drawProjectile(g: Phaser.GameObjects.Graphics, projectile: ProjectileInstance): void {
+    const style = projectileStyle(projectile.abilityId, this.session.save.classId);
+    const color = this.hexColor(projectile.color);
+    const length = Math.hypot(projectile.dirX, projectile.dirY) || 1;
+    const dx = projectile.dirX / length;
+    const dy = projectile.dirY / length;
+    const tail = 14 + projectile.radius * 1.5;
+    const tx = projectile.x - dx * tail;
+    const ty = projectile.y - dy * tail;
+    if (style === "arrow" || style === "arrowVolley") {
+      g.lineStyle(2, color, 0.35);
+      g.lineBetween(tx, ty, projectile.x, projectile.y);
+      g.lineStyle(1, 0xffffff, 0.9);
+      g.lineBetween(tx, ty, projectile.x, projectile.y);
+      g.fillStyle(color, 1);
+      g.fillTriangle(
+        projectile.x + dx * 6,
+        projectile.y + dy * 6,
+        projectile.x - dy * 3,
+        projectile.y + dx * 3,
+        projectile.x + dy * 3,
+        projectile.y - dx * 3,
+      );
+    } else if (style === "gun" || style === "gunVolley") {
+      g.lineStyle(1, color, 0.55);
+      g.lineBetween(projectile.x - dx * 24, projectile.y - dy * 24, projectile.x, projectile.y);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(projectile.x, projectile.y, Math.max(1.5, projectile.radius * 0.5));
+    } else if (style === "thrust") {
+      g.lineStyle(3, color, 0.8);
+      g.lineBetween(tx, ty, projectile.x, projectile.y);
+      g.lineStyle(1, 0xffffff, 0.9);
+      g.lineBetween(tx, ty, projectile.x, projectile.y);
+      g.fillStyle(color, 1);
+      g.fillTriangle(
+        projectile.x + dx * 7,
+        projectile.y + dy * 7,
+        projectile.x - dy * 4,
+        projectile.y + dx * 4,
+        projectile.x + dy * 4,
+        projectile.y - dx * 4,
+      );
+    } else {
+      g.fillStyle(color, 0.16);
+      g.fillCircle(projectile.x, projectile.y, projectile.radius + 7);
+      g.lineStyle(2, color, 0.45);
+      g.lineBetween(tx, ty, projectile.x, projectile.y);
+      g.fillStyle(color, 1);
+      g.fillCircle(projectile.x, projectile.y, projectile.radius);
+      g.fillStyle(0xffffff, 0.8);
+      g.fillCircle(projectile.x - dx * 2, projectile.y - dy * 2, Math.max(1, projectile.radius * 0.4));
+    }
+  }
+
+  private arcFx(x: number, y: number, angle: number, color: number, radius: number, width: number, spread: number, duration: number): void {
+    const g = this.add.graphics().setPosition(x, y).setDepth(y + 3);
+    g.rotation = angle;
+    g.lineStyle(width, color, 0.9);
+    g.beginPath();
+    g.arc(0, 0, radius, -spread, spread);
+    g.strokePath();
+    g.lineStyle(Math.max(1, width - 2), 0xffffff, 0.75);
+    g.beginPath();
+    g.arc(0, 0, radius - 2, -spread * 0.8, spread * 0.8);
+    g.strokePath();
+    this.tweens.add({
+      targets: g,
+      alpha: 0,
+      scaleX: 1.25,
+      scaleY: 1.25,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  private lineFx(x1: number, y1: number, x2: number, y2: number, color: number, width: number, alpha: number, duration: number): void {
+    const g = this.add.graphics().setDepth(Math.max(y1, y2) + 3);
+    g.lineStyle(width, color, alpha);
+    g.lineBetween(x1, y1, x2, y2);
+    this.tweens.add({ targets: g, alpha: 0, duration, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
+  }
+
+  private ringFx(x: number, y: number, radius: number, color: number, width: number, duration: number): void {
+    const ring = this.add.circle(x, y, radius, color, 0.08).setDepth(y + 3);
+    ring.setStrokeStyle(width, color, 0.9);
+    this.tweens.add({
+      targets: ring,
+      scale: 1.45,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+  }
+
+  private thrustFx(x: number, y: number, tx: number, ty: number, color: number, accent: number, duration: number): void {
+    const angle = Math.atan2(ty - y, tx - x);
+    const sx = x + Math.cos(angle) * 10;
+    const sy = y + Math.sin(angle) * 10;
+    this.lineFx(sx, sy, tx, ty, color, 5, 0.8, duration);
+    this.lineFx(sx, sy, tx, ty, 0xffffff, 2, 0.95, duration - 40);
+    this.burst(tx, ty, accent, 4, 0.6);
+  }
+
+  private flurryFx(x: number, y: number, color: number, angle: number, duration: number): void {
+    for (let i = 0; i < 3; i += 1) {
+      this.time.delayedCall(i * 55, () => {
+        this.arcFx(x, y, angle + i * 2.1, color, 20, 3, 1.2, 180);
+      });
+    }
+    this.burst(x, y, color, 5, 0.7);
+    this.ringFx(x, y, 18, color, 2, duration);
+  }
+
+  private muzzleFx(x: number, y: number, angle: number, color: number, count: number): void {
+    for (let i = 0; i < count; i += 1) {
+      const spread = (i - (count - 1) / 2) * 0.08;
+      const a = angle + spread;
+      const mx = x + Math.cos(a) * 26;
+      const my = y + Math.sin(a) * 26;
+      this.lineFx(x, y, mx, my, color, 2, 0.9, 120);
+      this.burst(mx, my, color, 3, 0.35);
+    }
+  }
+
+  private orbFx(x: number, y: number, color: number, accent: number, radius: number): void {
+    const orb = this.add.circle(x, y, radius, color, 0.35).setDepth(y + 4);
+    orb.setStrokeStyle(2, accent, 0.9);
+    this.tweens.add({
+      targets: orb,
+      scale: 1.7,
+      alpha: 0,
+      duration: 260,
+      ease: "Cubic.easeOut",
+      onComplete: () => orb.destroy(),
+    });
+  }
+
+  private beamFx(x1: number, y1: number, x2: number, y2: number, color: number, duration: number): void {
+    this.lineFx(x1, y1, x2, y2, color, 7, 0.25, duration);
+    this.lineFx(x1, y1, x2, y2, color, 3, 0.85, duration);
+    this.lineFx(x1, y1, x2, y2, 0xffffff, 1, 0.9, duration - 60);
+    this.burst(x2, y2, color, 5, 0.7);
+  }
+
+  private novaFx(x: number, y: number, radius: number, color: number, accent: number, duration: number): void {
+    this.ringFx(x, y, radius, color, 4, duration);
+    this.ringFx(x, y, radius * 0.6, accent, 2, duration - 80);
+    const flash = this.add.circle(x, y, radius * 0.45, color, 0.22).setDepth(y + 2);
+    this.tweens.add({
+      targets: flash,
+      scale: 2.2,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => flash.destroy(),
+    });
+    this.burst(x, y, color, 10, 1.4);
+  }
+
+  private runeFx(x: number, y: number, radius: number, color: number, accent: number, duration: number): void {
+    const g = this.add.graphics().setPosition(x, y).setDepth(y + 2);
+    g.lineStyle(2, color, 0.8);
+    g.strokeCircle(0, 0, radius);
+    g.lineStyle(1, accent, 0.7);
+    g.strokeCircle(0, 0, radius * 0.68);
+    for (let i = 0; i < 4; i += 1) {
+      const a = (Math.PI / 2) * i + Math.PI / 4;
+      g.lineBetween(Math.cos(a) * radius * 0.25, Math.sin(a) * radius * 0.25, Math.cos(a) * radius * 0.9, Math.sin(a) * radius * 0.9);
+    }
+    this.tweens.add({
+      targets: g,
+      angle: 45,
+      alpha: 0,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => g.destroy(),
+    });
+    this.burst(x, y, color, 4, 0.5);
+  }
+
+  private meteorFx(x: number, y: number, radius: number, color: number, duration: number): void {
+    this.lineFx(x - 16, y - 120, x, y, color, 8, 0.35, 180);
+    this.lineFx(x - 16, y - 120, x, y, 0xffffff, 2, 0.8, 160);
+    this.time.delayedCall(120, () => {
+      this.ringFx(x, y, radius, color, 5, duration);
+      this.burst(x, y, color, 14, 1.6);
+    });
+  }
+
+  private rainFx(x: number, y: number, radius: number, color: number, duration: number): void {
+    this.ringFx(x, y, radius, color, 2, duration);
     for (let i = 0; i < 7; i += 1) {
-      const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.4;
+      const ox = (Math.random() * 2 - 1) * radius * 0.8;
+      const oy = (Math.random() * 2 - 1) * radius * 0.6;
+      this.time.delayedCall(i * 60, () => {
+        this.lineFx(x + ox, y + oy - 26, x + ox, y + oy, color, 2, 0.75, 180);
+      });
+    }
+  }
+
+  private summonFx(x: number, y: number, color: number, accent: number, duration: number): void {
+    this.runeFx(x, y, 28, color, accent, duration);
+    for (let i = 0; i < 8; i += 1) {
+      const a = (Math.PI * 2 * i) / 8;
+      const dot = this.add.circle(x + Math.cos(a) * 18, y + Math.sin(a) * 10, 2, color, 0.9).setDepth(y + 4);
+      this.tweens.add({
+        targets: dot,
+        y: y - 28 - Math.random() * 18,
+        alpha: 0,
+        duration: 420 + i * 30,
+        ease: "Cubic.easeOut",
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  private dashFx(x1: number, y1: number, x2: number, y2: number, color: number, accent: number, duration: number): void {
+    this.lineFx(x1, y1, x2, y2, accent, 6, 0.25, duration);
+    for (let i = 1; i <= 3; i += 1) {
+      const t = i / 4;
+      const ghost = this.add.circle(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 7, color, 0.18).setDepth(y1 + 2);
+      this.tweens.add({ targets: ghost, alpha: 0, scale: 1.6, duration: 220 + i * 40, onComplete: () => ghost.destroy() });
+    }
+    this.burst(x2, y2, color, 4, 0.5);
+  }
+
+  private healSparkle(x: number, y: number): void {
+    for (let i = 0; i < 6; i += 1) {
+      const dot = this.add.circle(x + (Math.random() * 2 - 1) * 18, y + 6, 1.8, 0x8ef0a0, 0.9).setDepth(y + 5);
+      this.tweens.add({
+        targets: dot,
+        y: y - 26 - Math.random() * 18,
+        alpha: 0,
+        duration: 480 + Math.random() * 220,
+        ease: "Cubic.easeOut",
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  private bubbleFx(x: number, y: number, color: number, accent: number, duration: number): void {
+    const bubble = this.add.circle(x, y, 26, color, 0.1).setDepth(y + 3);
+    bubble.setStrokeStyle(3, accent, 0.8);
+    this.tweens.add({
+      targets: bubble,
+      scale: 1.25,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => bubble.destroy(),
+    });
+    this.ringFx(x, y, 18, color, 2, duration - 80);
+  }
+
+  private buffFx(x: number, y: number, color: number, accent: number, duration: number): void {
+    this.ringFx(x, y, 22, color, 3, duration);
+    for (let i = 0; i < 5; i += 1) {
+      const dot = this.add.circle(x + (Math.random() * 2 - 1) * 16, y + 8, 2, accent, 0.9).setDepth(y + 4);
+      this.tweens.add({
+        targets: dot,
+        y: y - 24 - Math.random() * 16,
+        alpha: 0,
+        duration: 450 + i * 50,
+        ease: "Cubic.easeOut",
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  private smokeFx(x: number, y: number, color: number, duration: number): void {
+    for (let i = 0; i < 5; i += 1) {
+      const puff = this.add.circle(x + (Math.random() * 2 - 1) * 12, y + (Math.random() * 2 - 1) * 8, 6 + Math.random() * 5, color, 0.28).setDepth(y + 3);
+      this.tweens.add({
+        targets: puff,
+        scale: 2.4,
+        alpha: 0,
+        x: puff.x + (Math.random() * 2 - 1) * 20,
+        y: puff.y - 12 - Math.random() * 12,
+        duration: duration + i * 40,
+        ease: "Cubic.easeOut",
+        onComplete: () => puff.destroy(),
+      });
+    }
+  }
+
+  private markFx(x: number, y: number, color: number, accent: number, duration: number): void {
+    const g = this.add.graphics().setDepth(y + 3);
+    g.lineStyle(2, accent, 0.9);
+    g.strokeCircle(x, y, 18);
+    g.lineBetween(x - 26, y, x - 8, y);
+    g.lineBetween(x + 8, y, x + 26, y);
+    g.lineBetween(x, y - 26, x, y - 8);
+    g.lineBetween(x, y + 8, x, y + 26);
+    g.lineStyle(1, color, 0.8);
+    g.strokeCircle(x, y, 10);
+    this.tweens.add({
+      targets: g,
+      angle: 90,
+      alpha: 0,
+      scaleX: 1.3,
+      scaleY: 1.3,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  private coneFx(x1: number, y1: number, x2: number, y2: number, color: number, duration: number): void {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const length = Math.max(60, Math.hypot(x2 - x1, y2 - y1));
+    const spread = 0.42;
+    const g = this.add.graphics().setDepth(Math.max(y1, y2) + 2);
+    g.fillStyle(color, 0.18);
+    g.beginPath();
+    g.moveTo(x1, y1);
+    g.lineTo(x1 + Math.cos(angle - spread) * length, y1 + Math.sin(angle - spread) * length);
+    g.lineTo(x1 + Math.cos(angle + spread) * length, y1 + Math.sin(angle + spread) * length);
+    g.closePath();
+    g.fillPath();
+    g.lineStyle(2, color, 0.65);
+    g.beginPath();
+    g.arc(x1, y1, length, angle - spread, angle + spread);
+    g.strokePath();
+    this.tweens.add({ targets: g, alpha: 0, duration, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
+    this.burst(x1 + Math.cos(angle) * length * 0.7, y1 + Math.sin(angle) * length * 0.7, color, 7, 1.1);
+  }
+
+  private chainFx(x1: number, y1: number, x2: number, y2: number, color: number, duration: number): void {
+    const g = this.add.graphics().setDepth(Math.max(y1, y2) + 3);
+    g.lineStyle(3, color, 0.8);
+    g.beginPath();
+    g.moveTo(x1, y1);
+    const steps = 4;
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      const jitter = i === steps ? 0 : (i % 2 === 0 ? 1 : -1) * 12;
+      g.lineTo(x1 + (x2 - x1) * t + jitter, y1 + (y2 - y1) * t - jitter);
+    }
+    g.strokePath();
+    g.lineStyle(1, 0xffffff, 0.9);
+    g.beginPath();
+    g.moveTo(x1, y1);
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      const jitter = i === steps ? 0 : (i % 2 === 0 ? 1 : -1) * 8;
+      g.lineTo(x1 + (x2 - x1) * t + jitter, y1 + (y2 - y1) * t - jitter);
+    }
+    g.strokePath();
+    this.tweens.add({ targets: g, alpha: 0, duration, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
+    this.burst(x2, y2, color, 5, 0.7);
+  }
+
+  private hexColor(value: string): number {
+    return Phaser.Display.Color.HexStringToColor(value).color;
+  }
+
+  private burst(x: number, y: number, color: number, count = 7, spread = 1): void {
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
       const dot = this.burstPool.pop() ?? this.add.circle(x, y, 2, color, 0.95).setDepth(9300);
       this.tweens.killTweensOf(dot);
       dot
@@ -728,8 +1234,8 @@ export class WorldScene extends Phaser.Scene {
         .setVisible(true);
       this.tweens.add({
         targets: dot,
-        x: x + Math.cos(angle) * (12 + Math.random() * 16),
-        y: y + Math.sin(angle) * (10 + Math.random() * 14),
+        x: x + Math.cos(angle) * (12 + Math.random() * 16) * spread,
+        y: y + Math.sin(angle) * (10 + Math.random() * 14) * spread,
         alpha: 0,
         duration: 380 + Math.random() * 160,
         ease: "Cubic.easeOut",

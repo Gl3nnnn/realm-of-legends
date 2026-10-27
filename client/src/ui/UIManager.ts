@@ -78,6 +78,7 @@ export class UIManager {
   private panel: PanelState | null = null;
   private saves: CharacterSave[] = [];
   private selectedClass: ClassId = "warrior";
+  private classRoleFilter = "all";
   private selectedSlot: number | null = null;
   private selectedEquip: string | null = null;
   private inventoryFilter: InventoryFilter = "all";
@@ -280,6 +281,11 @@ export class UIManager {
       if (action === "select-class" && target.dataset.class) {
         const currentName = (this.dom.createPanel.querySelector<HTMLInputElement>("#char-name")?.value) ?? "";
         this.selectedClass = target.dataset.class as ClassId;
+        this.renderCreate(currentName);
+        this.sfx.ui();
+      } else if (action === "class-role-filter") {
+        const currentName = (this.dom.createPanel.querySelector<HTMLInputElement>("#char-name")?.value) ?? "";
+        this.classRoleFilter = target.dataset.value ?? "all";
         this.renderCreate(currentName);
         this.sfx.ui();
       } else if (action === "cancel-create") {
@@ -540,7 +546,7 @@ export class UIManager {
   }
 
   private renderCreate(name: string): void {
-    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass);
+    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter);
     const input = this.dom.createPanel.querySelector<HTMLInputElement>("#char-name");
     if (input) {
       input.value = name;
@@ -1123,6 +1129,39 @@ export class UIManager {
     ctx.strokeRect(px(session.save.x) - 2.5, py(session.save.y) - 2.5, 5, 5);
   }
 
+  showStoryBox(title: string, text: string, bossIndex: number): void {
+    const box = document.createElement("div");
+    box.className = "story-box";
+    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p></p><button type="button">Continue</button></div>`;
+    const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
+    if (bossIndex >= 0 && bossIndex < 4) {
+      portrait.style.backgroundImage = "url(assets/boss-portraits.png)";
+      portrait.style.backgroundPosition = `${-bossIndex * 100}% 0`;
+      portrait.style.backgroundSize = "400% 100%";
+    }
+    (box.querySelector("h3") as HTMLElement).textContent = title;
+    const body = box.querySelector("p") as HTMLElement;
+    const button = box.querySelector("button") as HTMLButtonElement;
+    let index = 0;
+    let timer: number | null = null;
+    const finish = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+      body.textContent = text;
+      button.textContent = "Continue";
+    };
+    button.addEventListener("click", () => {
+      if (timer !== null) finish();
+      else box.remove();
+    });
+    timer = window.setInterval(() => {
+      index += 1;
+      body.textContent = text.slice(0, index);
+      if (index >= text.length) finish();
+    }, 28);
+    document.body.appendChild(box);
+  }
+
   handleEvents(events: SimEvent[]): void {
     const session = this.session;
     if (!session) return;
@@ -1131,6 +1170,9 @@ export class UIManager {
       switch (event.type) {
         case "log":
           this.pushLog(event.text, event.tone ?? "info");
+          break;
+        case "story":
+          this.showStoryBox(event.title, event.text, event.bossIndex);
           break;
         case "damage": {
           if (event.target === "player") {

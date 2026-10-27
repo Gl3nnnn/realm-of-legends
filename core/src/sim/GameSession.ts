@@ -25,6 +25,7 @@ import {
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { getQuest, QUESTS } from "../data/quests";
+import { STORY_CHAPTERS } from "../data/story";
 import {
   getTalentChoice,
   talentBonuses,
@@ -660,7 +661,15 @@ export class GameSession {
     monster.respawnTimer = def.respawn > 0 ? def.respawn : 0;
     this.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y });
     this.lastCombat = this.elapsed;
-    if (def.boss && !this.save.defeatedBosses.includes(def.id)) this.save.defeatedBosses.push(def.id);
+    if (def.boss && !this.save.defeatedBosses.includes(def.id)) {
+      this.save.defeatedBosses.push(def.id);
+      if (this.save.storyChapter < STORY_CHAPTERS.length - 1) {
+        this.save.storyChapter += 1;
+        const next = STORY_CHAPTERS[this.save.storyChapter];
+        this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
+        this.emit({ type: "story", title: next.title, text: next.text, bossIndex: this.save.storyChapter - 1 });
+      }
+    }
     if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
       this.damagePlayer(def.attack * this.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
       this.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
@@ -866,7 +875,28 @@ export class GameSession {
     this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
-    this.emit({ type: "cast", abilityId: ability.id, x: this.save.x, y: this.save.y, color: this.classDef.accent, icon: ability.icon });
+    const castRadius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 0);
+    const castRange = ability.range > 0 ? ability.range : ability.targeting === "point" ? 160 : 0;
+    const castTarget =
+      ability.targeting === "self"
+        ? { x: this.save.x, y: this.save.y }
+        : {
+            x: this.save.x + dir.x * Math.min(castRange, Math.max(0, length(aim.x - this.save.x, aim.y - this.save.y))),
+            y: this.save.y + dir.y * Math.min(castRange, Math.max(0, length(aim.x - this.save.x, aim.y - this.save.y))),
+          };
+    this.emit({
+      type: "cast",
+      abilityId: ability.id,
+      x: this.save.x,
+      y: this.save.y,
+      targetX: castTarget.x,
+      targetY: castTarget.y,
+      targeting: ability.targeting,
+      radius: castRadius,
+      basic,
+      color: this.classDef.accent,
+      icon: ability.icon,
+    });
 
     if (ability.targeting === "self") {
       this.castSelf(ability);
@@ -918,6 +948,7 @@ export class GameSession {
       const crit = damage > 0 && this.rng.chance(this.stats.crit);
       this.projectiles.push({
         uid: this.nextUid("p"),
+        abilityId: ability.id,
         x: this.save.x + dir.x * 14,
         y: this.save.y + dir.y * 14,
         dirX: dir.x,

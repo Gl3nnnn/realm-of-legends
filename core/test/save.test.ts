@@ -132,6 +132,19 @@ describe("save validation", () => {
     expect(validateSave(invalid).ok).toBe(false);
   });
 
+  it("migrates v4 saves to story chapter tracking", () => {
+    const save = base();
+    const v4 = { ...save, version: 4 } as unknown as Record<string, unknown>;
+    delete v4.storyChapter;
+    const migrated = migrateSave(v4);
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.storyChapter).toBe(0);
+
+    const invalid = base();
+    invalid.storyChapter = 150;
+    expect(validateSave(invalid).ok).toBe(false);
+  });
+
   it("summarizes a save for character select", () => {
     const save = base();
     expect(characterSummary(save)).toMatchObject({

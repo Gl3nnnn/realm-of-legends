@@ -80,6 +80,8 @@ export type StatBonus = Partial<{
   moveSpeed: number;
 }>;
 
+export type AbilityTargeting = "melee" | "direction" | "point" | "self";
+
 export type EffectKind =
   | "damage"
   | "heal"
@@ -118,7 +120,7 @@ export interface AbilityDef {
   cooldown: number;
   range: number;
   unlockLevel: number;
-  targeting: "melee" | "direction" | "point" | "self";
+  targeting: AbilityTargeting;
   effects: AbilityEffect[];
   signature?: boolean;
   basic?: boolean;
@@ -254,6 +256,7 @@ export interface MonsterInstance {
 
 export interface ProjectileInstance {
   uid: string;
+  abilityId: string;
   x: number;
   y: number;
   dirX: number;
@@ -424,6 +427,7 @@ export interface CharacterSave {
   difficulty: GameDifficulty;
   ngPlus: number;
   defeatedBosses: string[];
+  storyChapter: number;
   playtime: number;
   rngState: number;
   createdAt: number;
@@ -460,8 +464,21 @@ export type SimEvent =
   | { type: "quest"; questId: string; text: string }
   | { type: "zone"; zone: ZoneId }
   | { type: "log"; text: string; tone?: "info" | "good" | "bad" | "quest" }
+  | { type: "story"; title: string; text: string; bossIndex: number }
   | { type: "save" }
-  | { type: "cast"; abilityId: string; x: number; y: number; color: string; icon: string }
+  | {
+      type: "cast";
+      abilityId: string;
+      x: number;
+      y: number;
+      targetX: number;
+      targetY: number;
+      targeting: AbilityTargeting;
+      radius: number;
+      basic: boolean;
+      color: string;
+      icon: string;
+    }
   | { type: "telegraph"; x: number; y: number; radius: number; remaining: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }

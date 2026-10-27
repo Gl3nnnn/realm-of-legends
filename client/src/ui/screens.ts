@@ -74,8 +74,13 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
   return `${cards}${newCard}`;
 }
 
-export function createPanelHtml(selectedClass: ClassId): string {
-  const cards = CLASS_LIST.map((def) => {
+export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "all"): string {
+  const roles = Array.from(new Set(CLASS_LIST.map((def) => def.role)));
+  const filterButtons = ["all", ...roles]
+    .map((role) => `<button class="chip-btn ${roleFilter === role ? "active" : ""}" data-action="class-role-filter" data-value="${esc(role)}">${role === "all" ? "All" : esc(role)}</button>`)
+    .join("");
+  const visibleClasses = CLASS_LIST.filter((def) => roleFilter === "all" || def.role === roleFilter);
+  const cards = visibleClasses.map((def) => {
     const flagship = FLAGSHIP_CLASSES.includes(def.id);
     return `<button class="class-card ${def.id === selectedClass ? "selected" : ""}" data-action="select-class" data-class="${def.id}">
       ${classPortrait(def.id, 46)}
@@ -113,8 +118,10 @@ export function createPanelHtml(selectedClass: ClassId): string {
   <div>
     <div class="section-title">Choose a class — ${esc(def.name)}</div>
     <div class="muted small" style="margin-bottom:10px">${esc(def.description)}</div>
+    <div class="role-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${filterButtons}</div>
     <div class="class-grid">${cards}</div>
     <div class="class-preview">
+      <div class="preview-hero">${classPortrait(def.id, 128, "preview-portrait")}</div>
       <div>
         <div class="section-title">Starting stats</div>
         <div class="preview-stats">${previewStats}</div>

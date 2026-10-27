@@ -50,6 +50,36 @@ const COLS = 16;
 const ROWS = 3;
 const COUNT = COLS * ROWS;
 
+export const TILE_PALETTES = {
+  village: { r: 1, g: 1, b: 1, sat: 1, lift: 0 },
+  forest: { r: 0.82, g: 1.03, b: 0.8, sat: 1.12, lift: 2 },
+  dungeon: { r: 0.62, g: 0.56, b: 0.8, sat: 0.72, lift: -2 },
+  marsh: { r: 0.7, g: 0.9, b: 0.62, sat: 0.8, lift: -1 },
+  frost: { r: 0.76, g: 0.94, b: 1.2, sat: 0.68, lift: 4 },
+  throne: { r: 0.82, g: 0.52, b: 0.68, sat: 0.86, lift: -3 },
+};
+
+export function tintTileset(image, palette) {
+  const out = makeImage(image.w, image.h);
+  for (let i = 0; i < image.data.length; i += 4) {
+    const a = image.data[i + 3];
+    if (a === 0) continue;
+    const r = image.data[i];
+    const g = image.data[i + 1];
+    const b = image.data[i + 2];
+    const avg = (r + g + b) / 3;
+    const rr = avg + (r - avg) * palette.sat;
+    const gg = avg + (g - avg) * palette.sat;
+    const bb = avg + (b - avg) * palette.sat;
+    const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    out.data[i] = clamp(rr * palette.r + palette.lift);
+    out.data[i + 1] = clamp(gg * palette.g + palette.lift);
+    out.data[i + 2] = clamp(bb * palette.b + palette.lift);
+    out.data[i + 3] = a;
+  }
+  return out;
+}
+
 function speckle(im, ox, oy, base, amount = 14, density = 26, seed = 1) {
   const r = mulberry(seed);
   for (let y = 0; y < 16; y += 1) {

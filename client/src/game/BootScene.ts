@@ -17,6 +17,9 @@ export class BootScene extends Phaser.Scene {
       this.game.events.emit("boot-error");
     });
     this.load.spritesheet("tileset", "assets/tilesets/eldoria.png", { frameWidth: 16, frameHeight: 16 });
+    for (const zone of ["forest", "dungeon", "marsh", "frost", "throne"]) {
+      this.load.spritesheet(`tileset-${zone}`, `assets/tilesets/${zone}.png`, { frameWidth: 16, frameHeight: 16 });
+    }
     this.load.spritesheet("characters", "assets/characters.png", { frameWidth: 32, frameHeight: 32 });
     this.load.spritesheet("monsters", "assets/monsters.png", { frameWidth: 32, frameHeight: 32 });
     this.load.image("portraits", "assets/portraits.png");

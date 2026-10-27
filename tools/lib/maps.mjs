@@ -184,7 +184,7 @@ class MapBuilder {
     return rows;
   }
 
-  emit(name) {
+  emit(name, tilesetName = "eldoria") {
     const ground = this.ground.map((t) => t + 1);
     const decor = this.decor.map((t) => (t === 0 ? 0 : t + 1));
     return {
@@ -208,8 +208,8 @@ class MapBuilder {
       ],
       tilesets: [{
         firstgid: 1,
-        name: "eldoria",
-        image: "../tilesets/eldoria.png",
+        name: tilesetName,
+        image: `../tilesets/${tilesetName}.png`,
         imagewidth: 256,
         imageheight: 48,
         tilewidth: 16,
@@ -337,7 +337,7 @@ function forestMap() {
   m.setDecor(59, 5, 0, false);
   m.setDecor(59, 42, 0, false);
   return {
-    map: m.emit("Whispering Forest"),
+    map: m.emit("Whispering Forest", "forest"),
     zone: {
       id: "forest",
       name: "Whispering Forest",
@@ -408,7 +408,7 @@ function dungeonMap() {
   }
   m.clearRect(24, 36, 4, 2, TILE.caveFloor);
   return {
-    map: m.emit("Sunken Barrow"),
+    map: m.emit("Sunken Barrow", "dungeon"),
     zone: {
       id: "dungeon",
       name: "Sunken Barrow",
@@ -465,7 +465,7 @@ function marshMap() {
   m.setDecor(58, 22, 0, false);
   m.setDecor(30, 8, TILE.torch, false);
   return {
-    map: m.emit("Ashen Marsh"),
+    map: m.emit("Ashen Marsh", "marsh"),
     zone: {
       id: "marsh",
       name: "Ashen Marsh",
@@ -538,7 +538,7 @@ function frostMap() {
   m.setDecor(4, 24, 0, false);
   m.setDecor(60, 24, 0, false);
   return {
-    map: m.emit("Frostfell Ruins"),
+    map: m.emit("Frostfell Ruins", "frost"),
     zone: {
       id: "frost",
       name: "Frostfell Ruins",
@@ -597,7 +597,7 @@ function throneMap() {
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.caveFloor); m.ensureFree(x, y, TILE.caveFloor); });
   m.clearRect(21, 31, 6, 4, TILE.caveFloor);
   return {
-    map: m.emit("Hollow Throne"),
+    map: m.emit("Hollow Throne", "throne"),
     zone: {
       id: "throne",
       name: "Hollow Throne",

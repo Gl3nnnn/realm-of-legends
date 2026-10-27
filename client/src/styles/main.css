@@ -1952,3 +1952,31 @@ html[data-ui-scale="1.5"] .toasts {
   .touch-btn.small { width: 42px; height: 42px; }
   .touch-btn.attack { width: 64px; height: 64px; }
 }
+
+.preview-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+}
+
+.preview-portrait {
+  animation: preview-bob 1.6s ease-in-out infinite;
+}
+
+@keyframes preview-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-portrait { animation: none; }
+}
+
+.story-box { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.story-box-card { background: var(--panel); color: var(--ink); border: 1px solid var(--panel-2); border-radius: 10px; padding: 22px 26px; max-width: 460px; width: 88%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.story-box-card h3 { margin: 0 0 10px; font-size: 20px; }
+.story-box-card p { margin: 0 0 16px; line-height: 1.5; color: var(--muted); }
+.story-box-card button { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; background: var(--ink); color: var(--bg); font-weight: 600; }
+
+.story-box-portrait { width: 192px; height: 192px; margin: 0 auto 12px; image-rendering: pixelated; background-repeat: no-repeat; border-radius: 6px; }

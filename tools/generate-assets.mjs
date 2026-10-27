@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeImage, savePng, rect, upscale } from "./lib/pixels.mjs";
-import { drawTileset } from "./lib/tiles.mjs";
+import { drawTileset, tintTileset, TILE_PALETTES } from "./lib/tiles.mjs";
 import { drawCharacters, CHAR_ORDER } from "./lib/characters.mjs";
 import { drawMonsters, drawPortraits, MONSTER_ORDER } from "./lib/creatures.mjs";
 import { drawAtlas, drawIcon } from "./lib/icons.mjs";
@@ -60,6 +60,10 @@ function main() {
 
   const tileset = drawTileset();
   savePng(path.join(ASSETS, "tilesets", "eldoria.png"), tileset.image);
+  for (const [name, palette] of Object.entries(TILE_PALETTES)) {
+    if (name === "village") continue;
+    savePng(path.join(ASSETS, "tilesets", `${name}.png`), tintTileset(tileset.image, palette));
+  }
 
   const chars = drawCharacters();
   savePng(path.join(ASSETS, "characters.png"), chars);
