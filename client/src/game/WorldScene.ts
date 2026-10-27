@@ -72,6 +72,7 @@ export class WorldScene extends Phaser.Scene {
   private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private gearIcons!: Phaser.GameObjects.Sprite[];
+  private npcSprites: { id: string; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Text; baseY: number; lastMark: string }[] = [];
   private buffGlow!: Phaser.GameObjects.Ellipse;
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
@@ -310,6 +311,30 @@ export class WorldScene extends Phaser.Scene {
         .sprite(spawn.x, spawn.y, "characters", charFrame(def.sprite, "down", 0))
         .setDepth(spawn.y);
       this.tweens.add({ targets: sprite, scaleY: { from: 1, to: 1.015 }, duration: 1700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      // Idle life: a gentle bob with a staggered start, so NPCs do not move in step.
+      this.tweens.add({
+        targets: sprite,
+        y: { from: spawn.y, to: spawn.y - 2 },
+        duration: 1300 + (spawn.x % 5) * 120,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+        delay: (spawn.x % 7) * 150,
+      });
+      // Quest marker above the NPC: "!" when a quest is free, "?" when one is ready to turn in.
+      const marker = this.add
+        .text(spawn.x, spawn.y - 34, "", {
+          fontFamily: '"Press Start 2P", monospace',
+          fontSize: "10px",
+          color: "#ffd76a",
+          stroke: "#000000",
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(9200)
+        .setVisible(false);
+      this.tweens.add({ targets: marker, y: { from: spawn.y - 34, to: spawn.y - 38 }, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.npcSprites.push({ id: spawn.id, sprite, marker, baseY: spawn.y, lastMark: "" });
       this.add
         .text(spawn.x, spawn.y - 20, def.name, {
           fontFamily: '"Press Start 2P", monospace',
@@ -320,6 +345,24 @@ export class WorldScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 1)
         .setDepth(9200);
+    }
+  }
+
+  // Shows the right quest marker above each NPC, and hops an NPC when a quest is ready to turn in.
+  private updateNpcQuestMarks(): void {
+    for (const entry of this.npcSprites) {
+      const quests = this.session.getNpcQuestStates(entry.id);
+      const canTurnIn = quests.some((q) => q.canTurnIn);
+      const available = quests.some((q) => q.available);
+      const mark = canTurnIn ? "?" : available ? "!" : "";
+      if (mark !== entry.lastMark) {
+        entry.lastMark = mark;
+        entry.marker.setText(mark).setVisible(mark !== "");
+        if (canTurnIn) {
+          // A short hop when the quest is ready, so the player notices.
+          this.tweens.add({ targets: entry.sprite, y: { from: entry.baseY, to: entry.baseY - 6 }, duration: 180, yoyo: true, repeat: 2, ease: "Quad.easeOut" });
+        }
+      }
     }
   }
 
@@ -729,6 +772,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private syncEntities(): void {
+    this.updateNpcQuestMarks();
     const session = this.session;
     const save = session.save;
     const playerFrame = session.moving ? Math.floor(session.animationTime * 9) % 4 : 0;
