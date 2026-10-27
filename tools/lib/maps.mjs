@@ -237,6 +237,9 @@ function villageMap() {
     const v = r();
     if (v < 0.12) m.setGround(x, y, TILE.grass2);
     else if (v > 0.96) m.setGround(x, y, TILE.darkGrass);
+    else if (v > 0.9 && v <= 0.93) m.setGround(x, y, TILE.dirt);
+    else if (v > 0.93 && v <= 0.945) m.setGround(x, y, TILE.grassFlowerRed);
+    else if (v > 0.945 && v <= 0.96) m.setGround(x, y, TILE.grassFlowerWhite);
   }
   m.pathLine([[0, 19], [51, 19]], 1, TILE.path);
   m.pathLine([[25, 0], [25, 37]], 1, TILE.path);
