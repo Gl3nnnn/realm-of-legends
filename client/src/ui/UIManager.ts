@@ -18,6 +18,7 @@ import {
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { classColor, esc, formatNumber, questObjectiveText } from "./helpers";
+import { STORY_CHAPTERS } from "../../../core/src/data/story";
 import {
   abilityBarHtml,
   characterSelectHtml,
@@ -1013,10 +1014,18 @@ export class UIManager {
       .filter((state) => QUESTS[state.id] && (!state.completed || (QUESTS[state.id].repeatable && state.completions >= 0)))
       .filter((state) => !(state.completed && !QUESTS[state.id].repeatable && state.completions > 0))
       .slice(0, 5);
-    const signature = active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|");
+    const storyIndex = this.session.save.storyChapter + 1;
+    const nextStory = storyIndex < STORY_CHAPTERS.length ? STORY_CHAPTERS[storyIndex] : null;
+    const storyKey = nextStory ? `story:${storyIndex}` : "story:done";
+    const signature = `${storyKey}|` + active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|");
     if (signature === this.questSignature) return;
     this.questSignature = signature;
-    this.dom.questTracker.innerHTML = active
+    const storyBossId = nextStory?.bossId ?? "";
+    const storyBossName = storyBossId ? (MONSTERS[storyBossId]?.name ?? storyBossId) : "";
+    const storyLine = nextStory
+      ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat the ${esc(storyBossName)} to continue the story.</div></div>`
+      : "";
+    this.dom.questTracker.innerHTML = storyLine + active
       .map((state) => {
         const quest = QUESTS[state.id];
         const lines = quest.objectives

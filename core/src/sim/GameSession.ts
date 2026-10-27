@@ -703,6 +703,19 @@ export class GameSession {
     monster.respawnTimer = 0;
   }
 
+  private advanceStoryFromBoss(): void {
+    // Unlock the next chapter only when its own boss has fallen.
+    // A boss defeated out of order is still recorded, so its chapter unlocks when the earlier chapters are done.
+    while (this.save.storyChapter < STORY_CHAPTERS.length - 1) {
+      const nextChapter = STORY_CHAPTERS[this.save.storyChapter + 1];
+      if (!nextChapter || !nextChapter.bossId || !this.save.defeatedBosses.includes(nextChapter.bossId)) break;
+      this.save.storyChapter += 1;
+      const next = STORY_CHAPTERS[this.save.storyChapter];
+      this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
+      this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+    }
+  }
+
   private killMonster(monster: MonsterInstance): void {
     if (monster.state === "dead") return;
     monster.state = "dead";
@@ -712,16 +725,8 @@ export class GameSession {
     this.lastCombat = this.elapsed;
     if (def.boss && !this.save.defeatedBosses.includes(def.id)) {
       this.save.defeatedBosses.push(def.id);
-      if (this.save.storyChapter < STORY_CHAPTERS.length - 1) {
-        const nextChapter = STORY_CHAPTERS[this.save.storyChapter + 1];
-        if (nextChapter && nextChapter.bossId === def.id) {
-          this.save.storyChapter += 1;
-          const next = STORY_CHAPTERS[this.save.storyChapter];
-          this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
-          this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
-        }
-      }
     }
+    if (def.boss) this.advanceStoryFromBoss();
     if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
       this.damagePlayer(def.attack * this.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
       this.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
