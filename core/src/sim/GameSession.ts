@@ -713,10 +713,13 @@ export class GameSession {
     if (def.boss && !this.save.defeatedBosses.includes(def.id)) {
       this.save.defeatedBosses.push(def.id);
       if (this.save.storyChapter < STORY_CHAPTERS.length - 1) {
-        this.save.storyChapter += 1;
-        const next = STORY_CHAPTERS[this.save.storyChapter];
-        this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
-        this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+        const nextChapter = STORY_CHAPTERS[this.save.storyChapter + 1];
+        if (nextChapter && nextChapter.bossId === def.id) {
+          this.save.storyChapter += 1;
+          const next = STORY_CHAPTERS[this.save.storyChapter];
+          this.emit({ type: "log", text: `Chapter ${this.save.storyChapter + 1}: ${next.title}`, tone: "quest" });
+          this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+        }
       }
     }
     if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
