@@ -874,8 +874,8 @@ export class WorldScene extends Phaser.Scene {
       });
     } else {
       // Melee lunge: a short step toward the target and back.
-      const dx = Math.cos(angle) * 10;
-      const dy = Math.sin(angle) * 10;
+      const dx = Math.cos(angle) * 6;
+      const dy = Math.sin(angle) * 6;
       this.tweens.add({
         targets: sprite,
         x: sprite.x + dx,
