@@ -840,10 +840,43 @@ export class WorldScene extends Phaser.Scene {
     }
     for (const telegraph of this.session.telegraphs) {
       const progress = 1 - Math.max(0, telegraph.remaining) / Math.max(0.001, telegraph.total);
-      g.fillStyle(telegraph.kind === "boss" ? 0xd94a4a : 0xe08a3a, 0.1 + progress * 0.2);
-      g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
+      const fillColor = telegraph.kind === "boss" ? 0xd94a4a : 0xe08a3a;
+      const shape = telegraph.shape ?? "ring";
+      const angle = telegraph.angle ?? 0;
+      g.fillStyle(fillColor, 0.1 + progress * 0.2);
       g.lineStyle(2, 0xff6a6a, 0.9);
-      g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
+      if (shape === "line") {
+        const half = 14;
+        const len = telegraph.radius;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const ox = telegraph.x;
+        const oy = telegraph.y;
+        const px = -sin * half;
+        const py = cos * half;
+        const corners = [
+          new Phaser.Math.Vector2(ox + px, oy + py),
+          new Phaser.Math.Vector2(ox + cos * len + px, oy + sin * len + py),
+          new Phaser.Math.Vector2(ox + cos * len - px, oy + sin * len - py),
+          new Phaser.Math.Vector2(ox - px, oy - py),
+        ];
+        g.fillPoints(corners, true);
+        g.strokePoints(corners, true);
+      } else if (shape === "cone") {
+        const spread = Math.PI / 2;
+        g.beginPath();
+        g.moveTo(telegraph.x, telegraph.y);
+        g.arc(telegraph.x, telegraph.y, telegraph.radius, angle - spread / 2, angle + spread / 2, false);
+        g.closePath();
+        g.fillPath();
+        g.strokePath();
+      } else if (shape === "spot") {
+        g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
+        g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
+      } else {
+        g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
+        g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
+      }
       g.lineStyle(3, 0xffd0a0, 0.5);
       g.beginPath();
       g.arc(telegraph.x, telegraph.y, telegraph.radius - 2, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);

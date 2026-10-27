@@ -523,7 +523,7 @@ export class GameSession {
       }
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
-        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25);
+        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25, this.bossShape(def.id, 0), Math.atan2(player.y - monster.y, player.x - monster.x));
       }
 
       if (def.boss) {
@@ -533,7 +533,7 @@ export class GameSession {
           monster.phase = nextPhase;
           monster.attackTimer = Math.max(monster.attackTimer, 0.8);
           this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
-          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5);
+          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5, this.bossShape(def.id, 1), Math.atan2(player.y - monster.y, player.x - monster.x));
           if (def.id === "hollow_king") {
             for (let i = 0; i < nextPhase; i += 1) {
               const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
@@ -551,7 +551,26 @@ export class GameSession {
     }
   }
 
-  private spawnTelegraph(x: number, y: number, radius: number, damage: number, delay: number): void {
+  private bossShape(bossId: string, strike: number): "ring" | "line" | "cone" | "spot" {
+    const shapes: Record<string, ("ring" | "line" | "cone" | "spot")[]> = {
+      bone_warden: ["cone", "cone"],
+      miremother: ["spot", "spot"],
+      ice_revenant: ["ring", "ring"],
+      hollow_king: ["line", "ring"],
+    };
+    const list = shapes[bossId] ?? ["ring", "cone"];
+    return list[strike % list.length];
+  }
+
+  private spawnTelegraph(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    delay: number,
+    shape: "ring" | "line" | "cone" | "spot" = "ring",
+    angle = 0,
+  ): void {
     const telegraph: TelegraphInstance = {
       uid: this.nextUid("t"),
       x,
@@ -561,21 +580,47 @@ export class GameSession {
       total: delay,
       damage,
       kind: "boss",
+      shape,
+      angle,
     };
     this.telegraphs.push(telegraph);
-    this.emit({ type: "telegraph", x, y, radius, remaining: delay });
+    this.emit({ type: "telegraph", x, y, radius, remaining: delay, shape, angle });
   }
 
   private updateTelegraphs(dt: number): void {
     for (const telegraph of this.telegraphs) {
       telegraph.remaining -= dt;
       if (telegraph.remaining <= 0) {
-        if (dist2(this.save.x, this.save.y, telegraph.x, telegraph.y) <= telegraph.radius * telegraph.radius) {
+        if (this.telegraphHits(telegraph)) {
           this.damagePlayer(telegraph.damage, "Bone Warden");
         }
       }
     }
     this.telegraphs = this.telegraphs.filter((t) => t.remaining > 0);
+  }
+
+  private telegraphHits(t: TelegraphInstance): boolean {
+    const px = this.save.x;
+    const py = this.save.y;
+    const shape = t.shape ?? "ring";
+    if (shape === "ring" || shape === "spot") {
+      return dist2(px, py, t.x, t.y) <= t.radius * t.radius;
+    }
+    const dx = px - t.x;
+    const dy = py - t.y;
+    if (shape === "cone") {
+      if (dx * dx + dy * dy > t.radius * t.radius) return false;
+      const a = Math.atan2(dy, dx);
+      let diff = Math.abs(a - (t.angle ?? 0));
+      if (diff > Math.PI) diff = Math.PI * 2 - diff;
+      return diff <= Math.PI / 4;
+    }
+    // line: a thin strip reaching out from the boss along its angle
+    const cos = Math.cos(t.angle ?? 0);
+    const sin = Math.sin(t.angle ?? 0);
+    const along = dx * cos + dy * sin;
+    const across = -dx * sin + dy * cos;
+    return along >= 0 && along <= t.radius && Math.abs(across) <= 14;
   }
 
   private updateTraps(dt: number): void {

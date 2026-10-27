@@ -292,6 +292,8 @@ export interface TelegraphInstance {
   total: number;
   damage: number;
   kind: "boss" | "trap";
+  shape?: "ring" | "line" | "cone" | "spot";
+  angle?: number;
 }
 
 export interface PetInstance {
@@ -490,7 +492,7 @@ export type SimEvent =
       color: string;
       icon: string;
     }
-  | { type: "telegraph"; x: number; y: number; radius: number; remaining: number }
+  | { type: "telegraph"; x: number; y: number; radius: number; remaining: number; shape?: "ring" | "line" | "cone" | "spot"; angle?: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }
   | { type: "error"; message: string };
