@@ -71,6 +71,7 @@ export class WorldScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
+  private gearIcon!: Phaser.GameObjects.Sprite;
   private buffGlow!: Phaser.GameObjects.Ellipse;
   private floorFx!: Phaser.GameObjects.Graphics;
   private barFx!: Phaser.GameObjects.Graphics;
@@ -331,6 +332,23 @@ export class WorldScene extends Phaser.Scene {
       .sprite(save.x, save.y, "characters", charFrame(sprite, "down", 0))
       .setDepth(save.y)
       .setOrigin(0.5, 0.6);
+    // Small floating icon above the hero that shows the main equipped gear.
+    this.gearIcon = this.add.sprite(save.x, save.y - 26, "items", 0).setScale(1.5).setVisible(false).setDepth(save.y + 1);
+  }
+
+  private updateGearIcon(): void {
+    const save = this.session.save;
+    const equipped = save.equipment.weapon ?? save.equipment.armor;
+    if (!equipped) {
+      this.gearIcon.setVisible(false);
+      return;
+    }
+    const def = getItem(equipped.itemId);
+    this.gearIcon
+      .setFrame(itemIcon(def.icon))
+      .setPosition(save.x, save.y - 26)
+      .setDepth(save.y + 1)
+      .setVisible(!this.session.dead);
   }
 
   private updateBuffGlow(active: boolean): void {
@@ -675,6 +693,7 @@ export class WorldScene extends Phaser.Scene {
     this.player.setFrame(charFrame(session.classInfo.sprite, session.facing, playerFrame));
     this.player.setDepth(save.y);
     this.player.setAlpha(session.dead ? 0.25 : 1);
+    this.updateGearIcon();
     this.playerShadow.setPosition(save.x, save.y + 12).setDepth(save.y - 1).setAlpha(session.dead ? 0.12 : 0.32);
     this.updateBuffGlow(session.buffs.length > 0 && !session.dead);
 
