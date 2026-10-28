@@ -189,6 +189,7 @@ export interface QuestDef {
   rewards: QuestRewards;
   choose?: (QuestRewards & { icon?: string })[];
   requiresLevel?: number;
+  requires?: string[];
   repeatable?: boolean;
 }
 

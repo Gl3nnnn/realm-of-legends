@@ -58,6 +58,7 @@ import type {
   PetInstance,
   PortalDef,
   ProjectileInstance,
+  QuestDef,
   QuestState,
   SimEvent,
   StatusInstance,
@@ -1605,16 +1606,22 @@ export class GameSession {
     return npc.quests.map((questId) => {
       const quest = getQuest(questId);
       const state = this.save.quests.find((q) => q.id === questId) ?? null;
-      const available = !state && this.save.level >= (quest.requiresLevel ?? 1);
+      const available = !state && this.questUnlocked(quest);
       const canTurnIn = Boolean(state && state.completed && (quest.repeatable || state.completions === 0));
       return { questId, name: quest.name, level: quest.requiresLevel ?? 1, state, available, canTurnIn, description: quest.description, repeatable: Boolean(quest.repeatable) };
     });
   }
 
+  // A quest unlocks when the level is high enough and every quest it requires is done.
+  private questUnlocked(quest: QuestDef): boolean {
+    if (this.save.level < (quest.requiresLevel ?? 1)) return false;
+    return (quest.requires ?? []).every((id) => this.save.quests.some((q) => q.id === id && q.completions > 0));
+  }
+
   acceptQuest(questId: string): boolean {
     const quest = QUESTS[questId];
     if (!quest) return false;
-    if (this.save.level < (quest.requiresLevel ?? 1)) return false;
+    if (!this.questUnlocked(quest)) return false;
     const existing = this.save.quests.find((q) => q.id === questId);
     if (existing) return false;
     const state: QuestState = { id: questId, progress: quest.objectives.map(() => 0), completed: false, completions: 0 };

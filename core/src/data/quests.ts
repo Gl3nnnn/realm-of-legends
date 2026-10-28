@@ -56,6 +56,17 @@ const defs: QuestDef[] = [
     objectives: [{ kind: "boss", monsterId: "bone_warden" }],
     rewards: { xp: 2000, gold: 400, items: [{ itemId: "gemstone", qty: 1 }] },
     requiresLevel: 7,
+    requires: ["bone_breaker"],
+  },
+  {
+    id: "wolf_hunt_chain",
+    name: "The Wolf Pack's Alpha",
+    giverNpc: "guard",
+    description: "The wolves that circled the village answer to a single alpha. Track the pack's leader before it leads them into the village again.",
+    objectives: [{ kind: "kill", monsterId: "wolf", count: 8 }],
+    rewards: { xp: 600, gold: 150, items: [{ itemId: "leather_cap", qty: 1 }, { itemId: "health_potion", qty: 3 }] },
+    requiresLevel: 3,
+    requires: ["wolf_menace"],
   },
 ];
 

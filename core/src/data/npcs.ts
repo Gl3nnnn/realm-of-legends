@@ -12,7 +12,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Clear the slimes and I'll reward you.",
       "The dungeon to the northeast is no place for the unprepared.",
     ],
-    quests: ["slime_trouble", "wolf_menace", "bone_breaker", "forest_bounty", "forest_keeper_gift", "marsh_visit", "marsh_cull", "venom_bounty", "frost_visit", "frost_patrol", "hollow_acolytes"],
+    quests: ["slime_trouble", "wolf_menace", "wolf_hunt_chain", "bone_breaker", "forest_bounty", "forest_keeper_gift", "marsh_visit", "marsh_cull", "venom_bounty", "frost_visit", "frost_patrol", "hollow_acolytes"],
   },
   merchant: {
     id: "merchant",
