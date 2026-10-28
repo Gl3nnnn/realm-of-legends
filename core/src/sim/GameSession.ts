@@ -8,11 +8,9 @@ import {
   PICKUP_RANGE,
   PLAYER_RADIUS,
   POTION_COOLDOWN,
-  RESPAWN_SECONDS,
   RESOURCE_LABELS,
 } from "../constants";
 import { getClass } from "../data/classes";
-import { PET_SPECIES } from "../data/pets";
 import {
   createItemInstance,
   getItem,
@@ -23,10 +21,9 @@ import {
   canClassUse,
   isEquippable,
 } from "../data/items";
-import { getMonster, SUMMON_IDS } from "../data/monsters";
+import { getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
-import { getQuest, QUESTS } from "../data/quests";
-import { CLASS_INTROS, NG_PLUS_HOLLOW_ENDING, NG_PLUS_OPENINGS, STORY_CHAPTERS } from "../data/story";
+import { CLASS_INTROS, NG_PLUS_OPENINGS } from "../data/story";
 import {
   getTalentChoice,
   talentBonuses,
@@ -37,6 +34,12 @@ import {
 import { getZone, ZONES } from "../generated/world-data";
 import { deriveStats, isAbilityUnlocked, rageDecayPerSecond, resourceRegen, unlockedAbilities, xpToNext, type DerivedStats } from "../progression";
 import { Rng } from "../rng";
+import { dist2, length, normalize } from "./geometry";
+import { travel, openChest, gatherNode } from "./world";
+import { killPlayer, respawn, respawnMonster } from "./death";
+import * as combat from "./combat";
+import * as abilities from "./abilities";
+import * as quests from "./quests";
 import { cloneSave } from "../save/schema";
 import { LEVEL_CAP } from "../constants";
 import type {
@@ -59,7 +62,6 @@ import type {
   PortalDef,
   ProjectileInstance,
   QuestDef,
-  QuestObjective,
   QuestState,
   SimEvent,
   StatusInstance,
@@ -69,7 +71,7 @@ import type {
   ZoneData,
 } from "../types";
 
-const DAMAGE_COLORS: Record<DamageType, string> = {
+export const DAMAGE_COLORS: Record<DamageType, string> = {
   physical: "#e8e0d0",
   fire: "#ff8a3c",
   ice: "#7fd4ff",
@@ -82,28 +84,13 @@ const DAMAGE_COLORS: Record<DamageType, string> = {
 
 const RESOURCE_GAIN: Record<ClassDef["resource"], number> = { rage: 9, energy: 6, mana: 4 };
 
-function length(x: number, y: number): number {
-  return Math.hypot(x, y);
-}
-
-function normalize(x: number, y: number): Vec2 {
-  const l = Math.hypot(x, y);
-  return l > 0.0001 ? { x: x / l, y: y / l } : { x: 0, y: 1 };
-}
-
-function dist2(ax: number, ay: number, bx: number, by: number): number {
-  const dx = ax - bx;
-  const dy = ay - by;
-  return dx * dx + dy * dy;
-}
-
 export class GameSession {
   readonly save: CharacterSave;
   zone: ZoneData;
   monsters: MonsterInstance[] = [];
   pets: PetInstance[] = [];
-  private hatchlingAttackTimer = 0;
-  private hatchlingHitting = false;
+  hatchlingAttackTimer = 0;
+  hatchlingHitting = false;
   projectiles: ProjectileInstance[] = [];
   loot: GroundLoot[] = [];
   traps: TrapInstance[] = [];
@@ -123,15 +110,15 @@ export class GameSession {
   animationTime = 0;
   elapsed = 0;
 
-  private events: SimEvent[] = [];
-  private rng: Rng;
-  private uidCounter = 1;
-  private readonly classDef: ClassDef;
-  private lastCombat = -999;
-  private gathered = new Set<string>();
-  private lastAim: Vec2 = { x: 0, y: 1 };
-  private dodgeDir: Vec2 = { x: 0, y: 1 };
-  private lastImmuneEvent = -999;
+  events: SimEvent[] = [];
+  rng: Rng;
+  uidCounter = 1;
+  readonly classDef: ClassDef;
+  lastCombat = -999;
+  gathered = new Set<string>();
+  lastAim: Vec2 = { x: 0, y: 1 };
+  dodgeDir: Vec2 = { x: 0, y: 1 };
+  lastImmuneEvent = -999;
 
   constructor(save: CharacterSave) {
     this.save = save;
@@ -237,12 +224,12 @@ export class GameSession {
     };
   }
 
-  private nextUid(prefix: string): string {
+  nextUid(prefix: string): string {
     this.uidCounter += 1;
     return `${prefix}_${this.uidCounter}`;
   }
 
-  private emit(event: SimEvent): void {
+  emit(event: SimEvent): void {
     this.events.push(event);
   }
 
@@ -252,7 +239,7 @@ export class GameSession {
     return out;
   }
 
-  private loadZone(): void {
+  loadZone(): void {
     const zone = getZone(this.save.zone);
     this.zone = zone;
     this.monsters = zone.monsterSpawns
@@ -703,135 +690,24 @@ export class GameSession {
     }
   }
 
-  private damagePlayer(raw: number, source: string): void {
-    if (this.dead) return;
-    if (this.invulnerable > 0) {
-      if (this.elapsed - this.lastImmuneEvent > 0.35) {
-        this.lastImmuneEvent = this.elapsed;
-        this.emit({ type: "immune", x: this.save.x, y: this.save.y });
-      }
-      return;
-    }
-    const stats = this.stats;
-    const reduced = raw * (1 - this.modifiers.damageReduction / 100);
-    const mitigated = Math.max(1, Math.round(reduced * (100 / (100 + stats.defense * 2))));
-    let damage = mitigated;
-    if (this.shield > 0) {
-      const absorbed = Math.min(this.shield, damage);
-      this.shield -= absorbed;
-      damage -= absorbed;
-      if (absorbed > 0) this.emit({ type: "log", text: `Shield absorbs ${Math.round(absorbed)} damage.`, tone: "info" });
-    }
-    this.save.hp = Math.max(0, this.save.hp - damage);
-    this.lastCombat = this.elapsed;
-    if (damage > 0) this.emit({ type: "damage", target: "player", amount: Math.round(damage), crit: false, x: this.save.x, y: this.save.y, damageType: "physical" });
-    if (this.save.hp <= 0) this.killPlayer(source);
+  damagePlayer(raw: number, source: string): void {
+    combat.damagePlayer(this, raw, source);
   }
 
-  private killPlayer(_source: string): void {
-    if (this.dead) return;
-    this.dead = true;
-    this.moving = false;
-    this.respawnTimer = RESPAWN_SECONDS;
-    this.pets = [];
-    this.projectiles = [];
-    this.emit({ type: "death", who: "player", x: this.save.x, y: this.save.y });
-    this.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
+  killPlayer(source: string): void {
+    killPlayer(this, source);
   }
 
   private respawn(): void {
-    const zone = ZONES.village;
-    this.save.zone = "village";
-    this.save.x = zone.spawn.x;
-    this.save.y = zone.spawn.y;
-    const stats = this.stats;
-    this.save.hp = stats.maxHp;
-    this.save.resource = this.classDef.resource === "rage" ? 0 : stats.maxResource;
-    this.dead = false;
-    this.shield = 0;
-    this.loadZone();
-    this.emit({ type: "respawn" });
-    this.emit({ type: "zone", zone: "village" });
-    this.emit({ type: "log", text: "Elara's light pulls you back. You wake in Eldoria Village.", tone: "good" });
+    respawn(this);
   }
 
   private respawnMonster(monster: MonsterInstance): void {
-    const def = getMonster(monster.defId);
-    monster.x = monster.spawnX;
-    monster.y = monster.spawnY;
-    monster.hp = monster.maxHp ?? def.maxHp;
-    monster.state = "idle";
-    monster.attackTimer = 0;
-    monster.statuses = [];
-    monster.respawnTimer = 0;
-  }
-
-  private advanceStoryFromBoss(): void {
-    // Unlock the next chapter only when its own boss has fallen.
-    // A boss defeated out of order is still recorded, so its chapter unlocks when the earlier chapters are done.
-    while (this.save.storyChapter < STORY_CHAPTERS.length - 1) {
-      const nextChapter = STORY_CHAPTERS[this.save.storyChapter + 1];
-      if (!nextChapter || !nextChapter.bossId || !this.save.defeatedBosses.includes(nextChapter.bossId)) break;
-      this.save.storyChapter += 1;
-      const next = STORY_CHAPTERS[this.save.storyChapter];
-      this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
-    }
-    // The final boss's ending changes on later cycles, so a replay has a new story to see.
-    const finalChapter = STORY_CHAPTERS[STORY_CHAPTERS.length - 1];
-    if (this.save.ngPlus > 0 && this.save.defeatedBosses.includes("hollow_king") && this.save.storyChapter === STORY_CHAPTERS.length - 1) {
-      this.emit({ type: "story", title: finalChapter.title, text: finalChapter.text, closing: NG_PLUS_HOLLOW_ENDING, bossIndex: STORY_CHAPTERS.length - 1 });
-    }
+    respawnMonster(this, monster);
   }
 
   private killMonster(monster: MonsterInstance): void {
-    if (monster.state === "dead") return;
-    monster.state = "dead";
-    const def = getMonster(monster.defId);
-    // A boss that was already defeated never comes back, so it has no respawn timer.
-    monster.respawnTimer = def.respawn > 0 && !def.boss ? def.respawn : 0;
-    this.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y });
-    this.lastCombat = this.elapsed;
-    const firstBossKill = def.boss && !this.save.defeatedBosses.includes(def.id);
-    if (firstBossKill) {
-      this.save.defeatedBosses.push(def.id);
-    }
-    if (def.boss) this.advanceStoryFromBoss();
-    if (monster.elite === "volatile" && length(this.save.x - monster.x, this.save.y - monster.y) <= 90) {
-      this.damagePlayer(def.attack * this.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
-      this.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
-    }
-    if (SUMMON_IDS.has(def.id)) return;
-    // A boss pays its xp, gold and loot only on the first kill.
-    if (def.boss && !firstBossKill) return;
-    if (def.xp > 0) this.gainXp(Math.round(def.xp * this.difficultyScale.xp));
-    const gold = Math.round(this.rng.int(def.goldMin, def.goldMax) * this.difficultyScale.gold);
-    if (gold > 0) {
-      this.save.gold += gold;
-      this.emit({ type: "gold", amount: gold });
-    }
-    const drops: ItemStack[] = [];
-    for (const entry of def.loot) {
-      if (!this.rng.chance(entry.chance)) continue;
-      const item = ITEMS[entry.itemId];
-      const qty = this.rng.int(entry.min, entry.max);
-      const instance = item && isEquippable(item) ? createItemInstance(entry.itemId, this.rng) : undefined;
-      drops.push({ itemId: entry.itemId, qty: instance ? 1 : qty, instance });
-    }
-    for (const drop of drops) {
-      const item = ITEMS[drop.itemId];
-      if (!item) continue;
-      this.loot.push({
-        uid: this.nextUid("l"),
-        itemId: drop.itemId,
-        qty: drop.qty,
-        x: monster.x + this.rng.between(-10, 10),
-        y: monster.y + this.rng.between(-10, 10),
-        ttl: 90,
-        instance: drop.instance,
-      });
-      this.emit({ type: "loot", itemId: drop.itemId, qty: drop.qty, x: monster.x, y: monster.y });
-    }
-    this.recordKill(def.id);
+    combat.killMonster(this, monster);
   }
 
   private updateHatchling(dt: number): void {
@@ -933,51 +809,11 @@ export class GameSession {
     return best;
   }
 
-  private hitMonster(monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[]): void {
-    if (monster.state === "dead") return;
-    const def = getMonster(monster.defId);
-    const mods = this.modifiers;
-    const marked = monster.statuses.some((s) => s.kind === "mark");
-    const maxHp = monster.maxHp ?? def.maxHp;
-    const execute = monster.hp / maxHp <= 0.3 ? 1 + mods.execute / 100 : 1;
-    const eliteDefense = monster.elite === "armored" ? 1.35 : 1;
-    const mitigated = Math.max(1, Math.round(raw * (100 / (100 + def.defense * 2.5 * eliteDefense)) * (marked ? 1.2 : 1) * execute));
-    monster.hp -= mitigated;
-    if (mods.lifesteal > 0) this.healPlayer(mitigated * (mods.lifesteal / 100));
-    this.lastCombat = this.elapsed;
-    this.emit({
-      type: "damage",
-      target: "monster",
-      uid: monster.uid,
-      amount: mitigated,
-      crit,
-      x: monster.x,
-      y: monster.y,
-      damageType,
-      source: this.hatchlingHitting ? "hatchling" : undefined,
-    });
-    for (const status of statuses) {
-      if (status.kind === "stun") {
-        const existing = monster.statuses.find((s) => s.kind === "stun");
-        if (existing) existing.remaining = Math.max(existing.remaining, status.remaining);
-        else monster.statuses.push({ ...status });
-      } else if (status.kind === "slow" || status.kind === "mark") {
-        const existing = monster.statuses.find((s) => s.kind === status.kind);
-        if (existing) {
-          existing.remaining = Math.max(existing.remaining, status.remaining);
-          existing.value = Math.max(existing.value, status.value);
-        } else monster.statuses.push({ ...status });
-      } else {
-        monster.statuses.push({ ...status });
-      }
-    }
-    if (monster.hp <= 0) {
-      if (mods.healOnKill > 0) this.healPlayer(this.stats.maxHp * (mods.healOnKill / 100));
-      this.killMonster(monster);
-    }
+  hitMonster(monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[]): void {
+    combat.hitMonster(this, monster, raw, crit, damageType, statuses);
   }
 
-  private gainXp(amount: number): void {
+  gainXp(amount: number): void {
     if (this.save.level >= LEVEL_CAP || amount <= 0) return;
     this.save.xp += amount;
     this.emit({ type: "xp", amount });
@@ -1071,7 +907,7 @@ export class GameSession {
     return true;
   }
 
-  private statusesFromEffects(effects: AbilityEffect[], damageType: DamageType): StatusInstance[] {
+  statusesFromEffects(effects: AbilityEffect[], damageType: DamageType): StatusInstance[] {
     const statuses: StatusInstance[] = [];
     for (const effect of effects) {
       if (effect.kind === "slow") statuses.push({ kind: "slow", remaining: effect.duration ?? 2, value: effect.percent ?? 30 });
@@ -1086,7 +922,7 @@ export class GameSession {
   }
 
   /** Rolls damage and the critical hit once. The same result drives the damage and the crit indicator. */
-  private effectDamage(effect: AbilityEffect): { damage: number; crit: boolean } {
+  effectDamage(effect: AbilityEffect): { damage: number; crit: boolean } {
     const stats = this.stats;
     const raw = (effect.amount ?? 0) + (effect.scaling ?? 0) * stats.attack;
     const crit = this.rng.chance(stats.crit);
@@ -1094,181 +930,36 @@ export class GameSession {
     return { damage, crit };
   }
 
-  private castDirection(ability: AbilityDef, dir: Vec2): void {
-    const damageEffects = ability.effects.filter((e) => e.kind === "damage");
-    if (damageEffects.length === 0) {
-      this.castSelf(ability);
-      return;
-    }
-    // Several arrows (like Multi-Shot) fan out in a tight spread instead of stacking.
-    const count = damageEffects.length;
-    const spreadStep = count > 1 ? 0.14 : 0;
-    damageEffects.forEach((effect, index) => {
-      const speed = effect.projectile?.speed ?? 430;
-      const radius = effect.projectile?.radius ?? 6;
-      const damageType = effect.damageType ?? "physical";
-      const { damage, crit: rolledCrit } = this.effectDamage(effect);
-      const crit = damage > 0 && rolledCrit;
-      const angle = (index - (count - 1) / 2) * spreadStep;
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
-      const aimX = dir.x * cos - dir.y * sin;
-      const aimY = dir.x * sin + dir.y * cos;
-      this.projectiles.push({
-        uid: this.nextUid("p"),
-        abilityId: ability.id,
-        abilityName: ability.name,
-        x: this.save.x + aimX * 14,
-        y: this.save.y + aimY * 14,
-        dirX: aimX,
-        dirY: aimY,
-        speed,
-        ttl: Math.max(0.5, ability.range / speed),
-        radius,
-        damage,
-        crit: crit ? 1 : 0,
-        damageType,
-        color: DAMAGE_COLORS[damageType],
-        statuses: this.statusesFromEffects(ability.effects, damageType),
-        owner: "player",
-      });
-    });
+  castDirection(ability: AbilityDef, dir: Vec2): void {
+    abilities.castDirection(this, ability, dir);
   }
 
-  private castPoint(ability: AbilityDef, point: Vec2): void {
-    const radius = ability.effects.find((e) => e.radius)?.radius ?? 40;
-    const targets = this.monsters.filter((m) => m.state !== "dead" && dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2);
-    if (targets.length === 0) {
-      this.emit({ type: "log", text: `${ability.name} missed: nothing was in the area.`, tone: "info" });
-    }
-    this.applyEffects(ability, targets, point);
+  castPoint(ability: AbilityDef, point: Vec2): void {
+    abilities.castPoint(this, ability, point);
   }
 
-  private castSelf(ability: AbilityDef): void {
-    const radius = ability.effects.find((e) => e.radius)?.radius ?? 72;
-    const damageEffects = ability.effects.some((e) => e.kind === "damage");
-    const targets = damageEffects
-      ? this.monsters.filter((m) => m.state !== "dead" && dist2(m.x, m.y, this.save.x, this.save.y) <= (radius + 12) ** 2)
-      : [];
-    this.applyEffects(ability, targets, { x: this.save.x, y: this.save.y });
+  castSelf(ability: AbilityDef): void {
+    abilities.castSelf(this, ability);
   }
 
-  private castMelee(ability: AbilityDef, dir: Vec2): void {
-    const candidates = this.monsters
-      .filter((m) => m.state !== "dead")
-      .map((m) => ({ m, d: length(m.x - this.save.x, m.y - this.save.y), dot: normalize(m.x - this.save.x, m.y - this.save.y).x * dir.x + normalize(m.x - this.save.x, m.y - this.save.y).y * dir.y }))
-      .filter((entry) => entry.d <= ability.range + 14)
-      .sort((a, b) => b.dot - a.dot || a.d - b.d);
-    const primary = candidates[0]?.m;
-    const radius = ability.effects.find((e) => e.radius)?.radius;
-    const targets = primary
-      ? this.monsters.filter((m) => m.state !== "dead" && (m === primary || (radius && dist2(m.x, m.y, primary.x, primary.y) <= radius * radius)))
-      : [];
-    if (targets.length === 0) {
-      if (ability.targeting === "melee" && dir.x !== 0) this.facing = dir.x > 0 ? "right" : "left";
-      this.emit({ type: "log", text: `${ability.name} missed: no enemy within reach.`, tone: "info" });
-    }
-    this.applyEffects(ability, targets, primary ? { x: primary.x, y: primary.y } : { x: this.save.x + dir.x * 30, y: this.save.y + dir.y * 30 });
+  castMelee(ability: AbilityDef, dir: Vec2): void {
+    abilities.castMelee(this, ability, dir);
   }
 
-  private applyEffects(ability: AbilityDef, targets: MonsterInstance[], center: Vec2): void {
-    for (const effect of ability.effects) {
-      if (effect.kind === "damage") {
-        const { damage, crit } = this.effectDamage(effect);
-        const statuses = this.statusesFromEffects(ability.effects, effect.damageType ?? "physical");
-        if (targets.length === 0) continue;
-        for (const target of targets) this.hitMonster(target, damage, crit, effect.damageType ?? "physical", statuses);
-      } else if (effect.kind === "heal") {
-        const amount = (effect.amount ?? 0) + (effect.scaling ?? 0) * this.stats.attack;
-        this.healPlayer(amount);
-      } else if (effect.kind === "buff" && effect.stat && effect.duration) {
-        const existing = this.buffs.find((b) => b.name === (effect.name ?? ability.name));
-        if (existing) {
-          existing.remaining = Math.max(existing.remaining, effect.duration);
-          existing.percent = Math.max(existing.percent, effect.percent ?? 0);
-        } else {
-          this.buffs.push({
-            name: effect.name ?? ability.name,
-            stat: effect.stat,
-            percent: effect.percent ?? 20,
-            remaining: effect.duration,
-          });
-        }
-        this.emit({ type: "log", text: `${effect.name ?? ability.name} activated.`, tone: "good" });
-      } else if (effect.kind === "shield") {
-        this.shield += effect.amount ?? 30;
-        this.emit({ type: "log", text: `A shield absorbs incoming damage.`, tone: "good" });
-      } else if (effect.kind === "summon") {
-        this.summon(effect);
-      } else if (effect.kind === "knockback") {
-        // Pushes each target away from the centre of the hit by its distance.
-        const push = effect.amount ?? 40;
-        for (const target of targets) {
-          const away = normalize(target.x - center.x, target.y - center.y);
-          target.x += away.x * push;
-          target.y += away.y * push;
-        }
-      } else if (effect.kind === "dash") {
-        this.dash(effect.amount ?? 80);
-      } else if (effect.kind === "trap") {
-        this.placeTrap(effect, center);
-      } else if (effect.kind === "dot" || effect.kind === "slow" || effect.kind === "stun" || effect.kind === "mark") {
-        if (targets.length === 0) continue;
-        const statuses = this.statusesFromEffects([effect], effect.damageType ?? "physical");
-        for (const target of targets) {
-          for (const status of statuses) {
-            const existing = target.statuses.find((s) => s.kind === status.kind);
-            if (existing) {
-              existing.remaining = Math.max(existing.remaining, status.remaining);
-              existing.value = Math.max(existing.value, status.value);
-            } else target.statuses.push({ ...status });
-          }
-        }
-      }
-    }
+  applyEffects(ability: AbilityDef, targets: MonsterInstance[], center: Vec2): void {
+    abilities.applyEffects(this, ability, targets, center);
   }
 
-  private dash(distance: number): void {
-    const dir = this.lastAim;
-    const steps = 14;
-    const step = distance / steps;
-    for (let i = 0; i < steps; i += 1) {
-      if (this.isBlockedAt(this.save.x + dir.x * step, this.save.y + dir.y * step, PLAYER_RADIUS)) break;
-      this.save.x += dir.x * step;
-      this.save.y += dir.y * step;
-    }
+  dash(distance: number): void {
+    abilities.dash(this, distance);
   }
 
-  private summon(effect: AbilityEffect): void {
-    const count = effect.summonCount ?? 1;
-    const kind = effect.summonId === "skeleton_minion" ? "skeleton" : effect.summonId === "spirit_wolf" ? "wolf" : "familiar";
-    for (let i = 0; i < count; i += 1) {
-      const angle = (Math.PI * 2 * i) / count + this.rng.next();
-      this.pets.push({
-        uid: this.nextUid("pet"),
-        kind,
-        x: this.save.x + Math.cos(angle) * 28,
-        y: this.save.y + Math.sin(angle) * 28,
-        hp: 100,
-        ttl: effect.summonDuration ?? 15,
-        attackTimer: 0,
-        damage: Math.round((8 + this.save.level * 2 + this.stats.attack * 0.4) * 10) / 10,
-      });
-    }
-    this.emit({ type: "log", text: `${count > 1 ? count + " companions answer" : "A companion answers"} your call.`, tone: "good" });
+  summon(effect: AbilityEffect): void {
+    abilities.summon(this, effect);
   }
 
-  private placeTrap(effect: AbilityEffect, center: Vec2): void {
-    this.traps.push({
-      uid: this.nextUid("trap"),
-      x: center.x,
-      y: center.y,
-      radius: effect.radius ?? 40,
-      damage: Math.round((effect.amount ?? 20) + (effect.scaling ?? 0) * this.stats.attack),
-      armed: true,
-      rearmTimer: 0,
-    });
-    this.emit({ type: "log", text: "A trap is set.", tone: "info" });
+  placeTrap(effect: AbilityEffect, center: Vec2): void {
+    abilities.placeTrap(this, effect, center);
   }
 
   healPlayer(amount: number): void {
@@ -1280,54 +971,16 @@ export class GameSession {
     if (healed > 0) this.emit({ type: "heal", amount: healed, x: this.save.x, y: this.save.y });
   }
 
-  private recordKill(monsterId: string): void {
-    for (const state of this.save.quests) {
-      if (state.completed) continue;
-      const quest = QUESTS[state.id];
-      if (!quest) continue;
-      quest.objectives.forEach((objective, i) => {
-        if (objective.kind === "kill" && objective.monsterId === monsterId) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
-        else if (objective.kind === "boss" && objective.monsterId === monsterId) state.progress[i] = 1;
-        else if (objective.kind === "survive" && objective.zone === this.save.zone) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
-      });
-      this.refreshQuestCompletion(state);
-    }
+  recordKill(monsterId: string): void {
+    quests.recordKill(this, monsterId);
   }
 
-  private refreshQuestCompletion(state: QuestState): void {
-    const quest = QUESTS[state.id];
-    if (!quest) return;
-    const done = quest.objectives.every((objective, i) => (state.progress[i] ?? 0) >= this.objectiveCount(objective));
-    if (done && !state.completed) {
-      state.completed = true;
-      this.emit({ type: "quest", questId: quest.id, text: `${quest.name} is ready to turn in.` });
-      this.emit({ type: "log", text: `${quest.name} complete. Return to ${NPCS[quest.giverNpc]?.name ?? "the quest giver"}.`, tone: "quest" });
-    }
+  refreshQuestCompletion(state: QuestState): void {
+    quests.refreshQuestCompletion(this, state);
   }
 
-  private objectiveCount(objective: QuestObjective): number {
-    if (objective.kind === "boss") return 1;
-    if (objective.kind === "explore") return objective.zones.length;
-    if (objective.kind === "visit") return 1;
-    return objective.count;
-  }
-
-  private refreshCollectQuests(): void {
-    for (const state of this.save.quests) {
-      if (state.completed) continue;
-      const quest = QUESTS[state.id];
-      if (!quest) continue;
-      let changed = false;
-      quest.objectives.forEach((objective, i) => {
-        if (objective.kind !== "collect") return;
-        const count = Math.min(objective.count, this.countItem(objective.itemId));
-        if ((state.progress[i] ?? 0) !== count) {
-          state.progress[i] = count;
-          changed = true;
-        }
-      });
-      if (changed) this.refreshQuestCompletion(state);
-    }
+  refreshCollectQuests(): void {
+    quests.refreshCollectQuests(this);
   }
 
   addItem(itemId: string, qty: number, instance?: ItemStack["instance"]): number {
@@ -1700,77 +1353,19 @@ export class GameSession {
   }
 
   getNpcQuestStates(npcId: string): { questId: string; name: string; level: number; state: QuestState | null; available: boolean; canTurnIn: boolean; description: string; repeatable: boolean }[] {
-    const npc = NPCS[npcId];
-    if (!npc?.quests) return [];
-    return npc.quests.map((questId) => {
-      const quest = getQuest(questId);
-      const state = this.save.quests.find((q) => q.id === questId) ?? null;
-      const available = !state && this.questUnlocked(quest);
-      const canTurnIn = Boolean(state && state.completed && (quest.repeatable || state.completions === 0));
-      return { questId, name: quest.name, level: quest.requiresLevel ?? 1, state, available, canTurnIn, description: quest.description, repeatable: Boolean(quest.repeatable) };
-    });
+    return quests.getNpcQuestStates(this, npcId);
   }
 
-  // A quest unlocks when the level is high enough and every quest it requires is done.
-  private questUnlocked(quest: QuestDef): boolean {
-    if (this.save.level < (quest.requiresLevel ?? 1)) return false;
-    return (quest.requires ?? []).every((id) => this.save.quests.some((q) => q.id === id && q.completions > 0));
+  questUnlocked(quest: QuestDef): boolean {
+    return quests.questUnlocked(this, quest);
   }
 
   acceptQuest(questId: string): boolean {
-    const quest = QUESTS[questId];
-    if (!quest) return false;
-    if (!this.questUnlocked(quest)) return false;
-    const existing = this.save.quests.find((q) => q.id === questId);
-    if (existing) return false;
-    const state: QuestState = { id: questId, progress: quest.objectives.map(() => 0), completed: false, completions: 0 };
-    this.save.quests.push(state);
-    for (const [i, objective] of quest.objectives.entries()) {
-      if (objective.kind === "collect") state.progress[i] = Math.min(objective.count, this.countItem(objective.itemId));
-      if (objective.kind === "visit" && objective.zone === this.save.zone) state.progress[i] = 1;
-    }
-    this.refreshQuestCompletion(state);
-    this.emit({ type: "quest", questId, text: `Quest accepted: ${quest.name}.` });
-    this.emit({ type: "log", text: `Quest accepted: ${quest.name}.`, tone: "quest" });
-    return true;
+    return quests.acceptQuest(this, questId);
   }
 
   turnInQuest(questId: string): boolean {
-    const quest = QUESTS[questId];
-    if (!quest) return false;
-    const state = this.save.quests.find((q) => q.id === questId);
-    if (!state) return false;
-    if (!state.completed) {
-      this.refreshQuestCompletion(state);
-      if (!state.completed) return false;
-    }
-    if (quest.objectives.some((o) => o.kind === "collect")) {
-      for (const objective of quest.objectives) {
-        if (objective.kind === "collect" && !this.removeItem(objective.itemId, objective.count)) {
-          this.emit({ type: "log", text: `You still need ${objective.count}x ${getItem(objective.itemId).name}.`, tone: "bad" });
-          return false;
-        }
-      }
-    }
-    this.save.gold += quest.rewards.gold;
-    this.emit({ type: "gold", amount: quest.rewards.gold });
-    this.gainXp(quest.rewards.xp);
-    for (const reward of quest.rewards.items ?? []) {
-      const leftover = this.addItem(reward.itemId, reward.qty);
-      if (leftover > 0) {
-        this.loot.push({ uid: this.nextUid("l"), itemId: reward.itemId, qty: leftover, x: this.save.x, y: this.save.y, ttl: 120 });
-      }
-    }
-    state.completions += 1;
-    if (quest.repeatable) {
-      state.completed = false;
-      state.progress = quest.objectives.map(() => 0);
-    } else {
-      state.completed = true;
-    }
-    this.emit({ type: "quest", questId, text: `Quest turned in: ${quest.name}.` });
-    this.emit({ type: "log", text: `Turned in ${quest.name}. Earned ${quest.rewards.gold} gold and ${quest.rewards.xp} XP.`, tone: "good" });
-    return true;
+    return quests.turnInQuest(this, questId);
   }
 
   /** Hatch the saved egg companion once. Returns false if there is no unhatched egg. */
@@ -1783,33 +1378,7 @@ export class GameSession {
   }
 
   pickQuestReward(questId: string, index: number): boolean {
-    const quest = QUESTS[questId];
-    if (!quest?.choose) return false;
-    const reward = quest.choose[index];
-    if (!reward) return false;
-    const state = this.save.quests.find((q) => q.id === questId);
-    if (!state || !state.completed) return false;
-    if (state.claimedReward !== undefined) {
-      this.emit({ type: "log", text: `${quest.name}: you already claimed your reward.`, tone: "bad" });
-      return false;
-    }
-    state.claimedReward = index;
-    this.save.gold += reward.gold;
-    this.emit({ type: "gold", amount: reward.gold });
-    this.gainXp(reward.xp);
-    for (const item of reward.items ?? []) {
-      const leftover = this.addItem(item.itemId, item.qty);
-      if (leftover > 0) {
-        this.loot.push({ uid: this.nextUid("l"), itemId: item.itemId, qty: leftover, x: this.save.x, y: this.save.y, ttl: 120 });
-      }
-    }
-    this.emit({ type: "log", text: `${quest.name}: you chose your reward.`, tone: "good" });
-    if (questId === "forest_keeper_gift" && !this.save.companion) {
-      const species = this.rng.pick(PET_SPECIES);
-      this.save.companion = { kind: "egg", name: "Forest Egg", species: species.id };
-      this.emit({ type: "log", text: "A warm egg has joined you. It will hatch in time.", tone: "good" });
-    }
-    return true;
+    return quests.pickQuestReward(this, questId, index);
   }
 
   /** Pick a dialogue choice with an NPC. Changes that NPC's standing and gives a small reward. */
@@ -1870,68 +1439,15 @@ export class GameSession {
     if (!target) return null;
     if (target.kind === "portal") {
       const portal = this.zone.portals.find((p) => p.id === target.id);
-      if (portal) this.travel(portal);
+      if (portal) travel(this, portal);
     } else if (target.kind === "chest") {
-      this.openChest(target.id);
+      openChest(this, target.id);
     } else if (target.kind === "gather") {
-      this.gatherNode(target.id);
+      gatherNode(this, target.id);
     } else {
       this.emit({ type: "interact", kind: "npc", id: target.id });
     }
     return target;
-  }
-
-  private travel(portal: PortalDef): void {
-    this.save.zone = portal.targetZone;
-    this.save.x = portal.targetX;
-    this.save.y = portal.targetY;
-    this.loadZone();
-    this.emit({ type: "zone", zone: this.save.zone });
-    this.emit({ type: "log", text: `Entered ${ZONES[this.save.zone].name}.`, tone: "info" });
-    for (const state of this.save.quests) {
-      if (state.completed) continue;
-      const quest = QUESTS[state.id];
-      if (!quest) continue;
-      quest.objectives.forEach((objective, i) => {
-        if (objective.kind === "visit" && objective.zone === this.save.zone) state.progress[i] = 1;
-        if (objective.kind === "explore" && objective.zones.includes(this.save.zone)) state.progress[i] = Math.min(objective.zones.length, (state.progress[i] ?? 0) + 1);
-      });
-      this.refreshQuestCompletion(state);
-    }
-  }
-
-  private openChest(id: string): void {
-    const chest = this.zone.chests.find((c) => c.id === id);
-    if (!chest) return;
-    if (this.save.openedChests.includes(id)) return;
-    this.save.openedChests.push(id);
-    const gold = this.save.zone === "dungeon" ? this.rng.int(90, 170) : this.rng.int(45, 90);
-    this.save.gold += gold;
-    this.emit({ type: "gold", amount: gold });
-    const items: ItemStack[] = this.save.zone === "dungeon"
-      ? [{ itemId: "greater_health_potion", qty: 1 }, { itemId: "iron_ore", qty: this.rng.int(1, 3) }]
-      : [{ itemId: "health_potion", qty: 2 }, { itemId: "herb", qty: this.rng.int(1, 2) }];
-    if (this.rng.chance(0.35)) items.push({ itemId: "gemstone", qty: 1 });
-    for (const item of items) {
-      const leftover = this.addItem(item.itemId, item.qty);
-      if (leftover > 0) this.loot.push({ uid: this.nextUid("l"), itemId: item.itemId, qty: leftover, x: chest.x, y: chest.y, ttl: 120 });
-      this.emit({ type: "loot", itemId: item.itemId, qty: item.qty - leftover, x: chest.x, y: chest.y });
-    }
-    this.emit({ type: "log", text: `Opened a chest: ${gold} gold and supplies.`, tone: "good" });
-  }
-
-  private gatherNode(id: string): void {
-    const node = this.zone.gatherNodes.find((n) => n.id === id);
-    if (!node || this.gathered.has(id)) return;
-    const leftover = this.addItem(node.itemId, 1);
-    if (leftover > 0) {
-      this.emit({ type: "log", text: "Your inventory is full.", tone: "bad" });
-      return;
-    }
-    this.gathered.add(id);
-    const def = ITEMS[node.itemId];
-    this.emit({ type: "pickup", itemId: node.itemId, qty: 1 });
-    this.emit({ type: "log", text: `Gathered ${def?.name ?? "an herb"}.`, tone: "good" });
   }
 
   npcById(id: string): NpcSpawn | undefined {

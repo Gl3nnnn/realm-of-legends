@@ -24,6 +24,7 @@ export interface GamePreferences {
   touchControls: boolean;
   cameraZoom: 1.5 | 2 | 2.5;
   effectIntensity: 0.5 | 1 | 1.5;
+  brightness: 1 | 1.2 | 1.4;
   language: "en" | "tl";
   keybinds: Keybinds;
   padBinds: Record<KeybindAction, number>;
@@ -77,6 +78,7 @@ const DEFAULTS: GamePreferences = {
   touchControls: false,
   cameraZoom: 2,
   effectIntensity: 1,
+  brightness: 1,
   language: "en",
   keybinds: { ...DEFAULT_KEYBINDS },
   padBinds: { ...DEFAULT_PAD_BINDS },
@@ -131,6 +133,7 @@ export function loadPreferences(): GamePreferences {
       touchControls: Boolean(parsed.touchControls),
       cameraZoom: parsed.cameraZoom === 1.5 || parsed.cameraZoom === 2.5 ? parsed.cameraZoom : 2,
       effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
+      brightness: parsed.brightness === 1.2 || parsed.brightness === 1.4 ? parsed.brightness : 1,
       language: parsed.language === "tl" ? "tl" : "en",
       keybinds: sanitizeKeybinds(parsed.keybinds),
       padBinds: sanitizePadBinds(parsed.padBinds),
@@ -155,6 +158,7 @@ export function applyPreferences(preferences: GamePreferences): void {
   root.dataset.motion = preferences.reducedMotion ? "reduced" : "full";
   root.dataset.touch = preferences.touchControls ? "on" : "auto";
   root.style.setProperty("--ui-scale", String(preferences.uiScale));
+  root.style.setProperty("--world-brightness", String(preferences.brightness));
 }
 
 export function updatePreferences(patch: Partial<GamePreferences>): GamePreferences {

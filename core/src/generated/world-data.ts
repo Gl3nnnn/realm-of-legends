@@ -238,10 +238,10 @@ export const ZONES = {
       { id: "skeleton", x: 632, y: 136 },
     ],
     chests: [
-      { id: "dungeon_chest_1", x: 136, y: 328 },
-      { id: "dungeon_chest_2", x: 712, y: 328 },
-      { id: "dungeon_chest_3", x: 136, y: 392 },
-      { id: "dungeon_chest_4", x: 712, y: 392 },
+      { id: "dungeon_chest_1", x: 136, y: 344 },
+      { id: "dungeon_chest_2", x: 712, y: 312 },
+      { id: "dungeon_chest_3", x: 136, y: 376 },
+      { id: "dungeon_chest_4", x: 712, y: 376 },
     ],
     traps: [
       { id: "dungeon_trap_1", x: 408, y: 504, radius: 34, damage: 10, cooldown: 3 },
@@ -330,7 +330,7 @@ export const ZONES = {
       { id: "miremother", x: 488, y: 120 },
     ],
     chests: [
-      { id: "marsh_chest_1", x: 168, y: 616 },
+      { id: "marsh_chest_1", x: 152, y: 616 },
       { id: "marsh_chest_2", x: 840, y: 136 },
     ],
     traps: [

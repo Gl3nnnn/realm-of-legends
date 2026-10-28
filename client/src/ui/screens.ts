@@ -618,6 +618,13 @@ export function settingsPanelHtml(
             <option value="1.5" ${preferences.effectIntensity === 1.5 ? "selected" : ""}>Bold</option>
           </select>
         </label>
+        <label class="small">Brightness
+          <select id="brightness-select">
+            <option value="1" ${preferences.brightness === 1 ? "selected" : ""}>Normal</option>
+            <option value="1.2" ${preferences.brightness === 1.2 ? "selected" : ""}>Brighter</option>
+            <option value="1.4" ${preferences.brightness === 1.4 ? "selected" : ""}>Brightest</option>
+          </select>
+        </label>
         <label class="small">Language
           <select id="language-select">
             <option value="en" ${preferences.language === "en" ? "selected" : ""}>English</option>

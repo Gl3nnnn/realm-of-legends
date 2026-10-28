@@ -9,12 +9,17 @@ import {
   type Direction,
   type GameSession,
   type MonsterInstance,
-  type ProjectileInstance,
   type SimEvent,
 } from "@realm/core";
 import type { UIManager } from "../ui/UIManager";
 import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
-import { damageColor, projectileStyle, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
+import { damageColor, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
+import { isDown, justDown, readGamepad, syncKeybinds, type GamepadState } from "./input";
+import {
+  renderFloorEffects as renderFloorEffectsFx,
+  castMotion as castMotionFx,
+  floatText as floatTextFx,
+} from "./effects";
 import { PET_SPECIES } from "@realm/core";
 
 const DAMAGE_TEXT_COLORS: Record<string, string> = {
@@ -59,42 +64,30 @@ interface KeyMap {
   FIVE: Phaser.Input.Keyboard.Key;
 }
 
-interface GamepadState {
-  moveX: number;
-  moveY: number;
-  aimX: number;
-  aimY: number;
-  attack: boolean;
-  dodge: boolean;
-  interact: boolean;
-  quick1: boolean;
-  quick2: boolean;
-  menu: boolean;
-}
-
 export class WorldScene extends Phaser.Scene {
-  private session!: GameSession;
-  private ui!: UIManager;
-  private keys!: KeyMap;
-  private boundKeys: Partial<Record<KeybindAction, Phaser.Input.Keyboard.Key>> = {};
-  private keybindVersion = -1;
-  private padPrev: boolean[] = [];
+  session!: GameSession;
+  ui!: UIManager;
+  keys!: KeyMap;
+  boundKeys: Partial<Record<KeybindAction, Phaser.Input.Keyboard.Key>> = {};
+  keybindVersion = -1;
+  padPrev: boolean[] = [];
   private touchHandler: ((event: Event) => void) | null = null;
-  private floatPool: Phaser.GameObjects.Text[] = [];
-  private burstPool: Phaser.GameObjects.Arc[] = [];
-  private player!: Phaser.GameObjects.Sprite;
+  floatPool: Phaser.GameObjects.Text[] = [];
+  burstPool: Phaser.GameObjects.Arc[] = [];
+  player!: Phaser.GameObjects.Sprite;
   private eggFollower?: Phaser.GameObjects.Container;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private gearIcons!: Phaser.GameObjects.Sprite[];
   private npcSprites: { id: string; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Text; baseY: number; lastMark: string }[] = [];
   private buffGlow!: Phaser.GameObjects.Ellipse;
-  private floorFx!: Phaser.GameObjects.Graphics;
-  private barFx!: Phaser.GameObjects.Graphics;
-  private monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  floorFx!: Phaser.GameObjects.Graphics;
+  barFx!: Phaser.GameObjects.Graphics;
+  monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private monsterOutlines = new Map<string, Phaser.GameObjects.Sprite>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
+  private chestLabels = new Map<string, Phaser.GameObjects.Text>();
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
   private aim = { x: 0, y: 0 };
   private hitPauseLeft = 0;
@@ -118,6 +111,7 @@ export class WorldScene extends Phaser.Scene {
     this.petSprites.clear();
     this.lootSprites.clear();
     this.chestSprites.clear();
+    this.chestLabels.clear();
     this.gatherSprites.clear();
     this.pointerMoved = false;
     this.floatPool = [];
@@ -163,7 +157,7 @@ export class WorldScene extends Phaser.Scene {
     vignette.fillRect(0, vh * 0.75, vw, vh * 0.25);
 
     if (session.zone.ambience === "dungeon" || session.zone.ambience === "throne") {
-      const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2);
+      const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2 / loadPreferences().brightness);
       shade.setOrigin(0, 0).setScrollFactor(0).setDepth(9500);
       const onResize = () => shade.setSize(this.scale.width, this.scale.height);
       this.scale.on("resize", onResize);
@@ -297,10 +291,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createChests(): void {
+    const interactKey = loadPreferences().keybinds.interact;
     for (const chest of this.session.zone.chests) {
       if (this.session.save.openedChests.includes(chest.id)) continue;
       const image = this.add.image(chest.x, chest.y, "tileset", 25).setDepth(chest.y);
       this.chestSprites.set(chest.id, image);
+      const label = this.add
+        .text(chest.x, chest.y - 14, interactKey, {
+          fontFamily: "monospace",
+          fontSize: "10px",
+          color: "#ffd76a",
+          backgroundColor: "#14111b",
+          padding: { x: 3, y: 1 },
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(chest.y + 1);
+      this.chestLabels.set(chest.id, label);
     }
   }
 
@@ -516,57 +522,19 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private syncKeybinds(force = false): void {
-    if (!force && this.keybindVersion === this.ui.keybindVersion) return;
-    this.keybindVersion = this.ui.keybindVersion;
-    const prefs = loadPreferences();
-    const next: Partial<Record<KeybindAction, Phaser.Input.Keyboard.Key>> = {};
-    for (const [action, key] of Object.entries(prefs.keybinds) as [KeybindAction, string][]) {
-      next[action] = this.input.keyboard!.addKey(key, true, false);
-    }
-    this.boundKeys = next;
-    this.input.keyboard!.addCapture(Object.values(prefs.keybinds));
+    syncKeybinds(this, force);
   }
 
   private isDown(action: KeybindAction): boolean {
-    return Boolean(this.boundKeys[action]?.isDown);
+    return isDown(this, action);
   }
 
   private justDown(action: KeybindAction): boolean {
-    const key = this.boundKeys[action];
-    return Boolean(key && Phaser.Input.Keyboard.JustDown(key));
+    return justDown(this, action);
   }
 
   private readGamepad(): GamepadState {
-    const state: GamepadState = {
-      moveX: 0, moveY: 0, aimX: 0, aimY: 0,
-      attack: false, dodge: false, interact: false, quick1: false, quick2: false, menu: false,
-    };
-    const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
-    const pad = pads ? Array.from(pads).find((entry) => entry && entry.connected) : null;
-    if (!pad) {
-      this.padPrev = [];
-      return state;
-    }
-    const dead = (value: number) => Math.abs(value) < 0.25 ? 0 : value;
-    const bind = loadPreferences().padBinds;
-    state.moveX = dead(pad.axes[0] ?? 0) + (pad.buttons[bind.right]?.pressed ? 1 : 0) - (pad.buttons[bind.left]?.pressed ? 1 : 0);
-    state.moveY = dead(pad.axes[1] ?? 0) + (pad.buttons[bind.down]?.pressed ? 1 : 0) - (pad.buttons[bind.up]?.pressed ? 1 : 0);
-    const aimX = dead(pad.axes[2] ?? 0);
-    const aimY = dead(pad.axes[3] ?? 0);
-    if (Math.hypot(aimX, aimY) > 0) {
-      state.aimX = aimX;
-      state.aimY = aimY;
-    }
-    const pressed = (index: number) => Boolean(pad.buttons[index]?.pressed);
-    const edge = (index: number) => pressed(index) && !this.padPrev[index];
-    state.attack = pressed(bind.attack) || pressed(7);
-    state.dodge = edge(bind.dodge);
-    state.interact = edge(bind.interact);
-    state.quick1 = edge(bind.quick1);
-    state.quick2 = edge(bind.quick2);
-    state.menu = edge(9);
-    this.padPrev = pad.buttons.map((button) => button.pressed);
-    return state;
+    return readGamepad(this);
   }
 
   private onTouchAction(action: string): void {
@@ -794,6 +762,8 @@ export class WorldScene extends Phaser.Scene {
       sprite.destroy();
       this.chestSprites.delete(id);
     }
+    this.chestLabels.get(id)?.destroy();
+    this.chestLabels.delete(id);
   }
 
   private syncEntities(): void {
@@ -916,146 +886,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private renderFloorEffects(time: number): void {
-    const g = this.floorFx;
-    g.clear();
-    for (const portal of this.session.zone.portals) {
-      g.fillStyle(0xd9b45a, 0.05);
-      g.fillCircle(portal.x + portal.w / 2, portal.y + portal.h / 2, 20 + Math.sin(time / 350) * 3);
-    }
-    for (const trap of this.session.traps) {
-      if (!trap.armed) continue;
-      g.fillStyle(0xff7a4a, 0.08);
-      g.fillCircle(trap.x, trap.y, trap.radius);
-      g.lineStyle(1, 0xff9a6a, 0.3);
-      g.strokeCircle(trap.x, trap.y, trap.radius);
-    }
-    for (const telegraph of this.session.telegraphs) {
-      const progress = 1 - Math.max(0, telegraph.remaining) / Math.max(0.001, telegraph.total);
-      const fillColor = telegraph.kind === "boss" ? 0xd94a4a : 0xe08a3a;
-      const shape = telegraph.shape ?? "ring";
-      const angle = telegraph.angle ?? 0;
-      g.fillStyle(fillColor, 0.1 + progress * 0.2);
-      g.lineStyle(2, 0xff6a6a, 0.9);
-      if (shape === "line") {
-        const half = 14;
-        const len = telegraph.radius;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const ox = telegraph.x;
-        const oy = telegraph.y;
-        const px = -sin * half;
-        const py = cos * half;
-        const corners = [
-          new Phaser.Math.Vector2(ox + px, oy + py),
-          new Phaser.Math.Vector2(ox + cos * len + px, oy + sin * len + py),
-          new Phaser.Math.Vector2(ox + cos * len - px, oy + sin * len - py),
-          new Phaser.Math.Vector2(ox - px, oy - py),
-        ];
-        g.fillPoints(corners, true);
-        g.strokePoints(corners, true);
-      } else if (shape === "cone") {
-        const spread = Math.PI / 2;
-        g.beginPath();
-        g.moveTo(telegraph.x, telegraph.y);
-        g.arc(telegraph.x, telegraph.y, telegraph.radius, angle - spread / 2, angle + spread / 2, false);
-        g.closePath();
-        g.fillPath();
-        g.strokePath();
-      } else if (shape === "spot") {
-        g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
-        g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
-      } else {
-        g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
-        g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
-      }
-      g.lineStyle(3, 0xffd0a0, 0.5);
-      g.beginPath();
-      g.arc(telegraph.x, telegraph.y, telegraph.radius - 2, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-      g.strokePath();
-    }
-    for (const projectile of this.session.projectiles) {
-      this.drawProjectile(g, projectile);
-    }
-
-    const bars = this.barFx;
-    bars.clear();
-    for (const monster of this.session.monsters) {
-      if (monster.state === "dead") continue;
-      const def = MONSTERS[monster.defId];
-      if (!def || monster.hp >= def.maxHp) continue;
-      const boss = def.boss;
-      const width = boss ? 64 : 26;
-      const y = monster.y - (boss ? 44 : 24);
-      bars.fillStyle(0x08060c, 0.85);
-      bars.fillRect(monster.x - width / 2 - 1, y - 1, width + 2, boss ? 5 : 4);
-      bars.fillStyle(boss ? 0xd95454 : 0xc04a4a, 1);
-      bars.fillRect(monster.x - width / 2, y, width * Math.max(0, monster.hp / def.maxHp), boss ? 3 : 2);
-    }
+    renderFloorEffectsFx(this, time);
   }
 
   /** Short body motion on cast: a lunge for melee classes, a raised-arm pulse for casters. */
   private castMotion(classId: string, y: number, angle: number, preferences: GamePreferences): void {
-    if (preferences.reducedMotion || !this.player) return;
-    const sprite = this.player;
-    const casters = ["mage", "priest", "necromancer", "druid", "summoner", "spellblade"];
-    this.tweens.killTweensOf(sprite);
-    if (casters.includes(classId)) {
-      // Raised-arm pulse: a quick lift and settle, held a little longer.
-      this.tweens.add({
-        targets: sprite,
-        y: y - 6,
-        scaleX: 1.08,
-        scaleY: 1.08,
-        duration: 140,
-        yoyo: true,
-        hold: 220,
-        ease: "Sine.easeOut",
-      });
-    } else {
-      // Melee lunge: a short step toward the target and back.
-      const dx = Math.cos(angle) * 6;
-      const dy = Math.sin(angle) * 6;
-      this.tweens.add({
-        targets: sprite,
-        x: sprite.x + dx,
-        y: sprite.y + dy,
-        duration: 90,
-        yoyo: true,
-        ease: "Quad.easeOut",
-      });
-    }
+    castMotionFx(this, classId, y, angle, preferences);
   }
 
   private floatText(x: number, y: number, text: string, color: string, size: number): void {
-    const label = this.floatPool.pop() ?? this.add
-      .text(0, 0, "", {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: `${size}px`,
-        color,
-        stroke: "#000000",
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(9400);
-    this.tweens.killTweensOf(label);
-    label
-      .setText(text)
-      .setColor(color)
-      .setFontSize(size)
-      .setPosition(x, y)
-      .setAlpha(1)
-      .setVisible(true);
-    this.tweens.add({
-      targets: label,
-      y: y - 20,
-      alpha: 0,
-      duration: 720,
-      ease: "Cubic.easeOut",
-      onComplete: () => {
-        label.setVisible(false);
-        this.floatPool.push(label);
-      },
-    });
+    floatTextFx(this, x, y, text, color, size);
   }
 
   private playCastVfx(event: Extract<SimEvent, { type: "cast" }>, preferences: GamePreferences): void {
@@ -1168,60 +1008,6 @@ export class WorldScene extends Phaser.Scene {
     const sparkSkills = ["dragon_breath", "infernal_strike", "holy_nova", "elemental_burst", "meteor", "ground_slam"];
     if (ability.signature === true || sparkSkills.includes(ability.id)) {
       this.burst(event.targetX, event.targetY, color, 10, 1.6);
-    }
-  }
-
-  private drawProjectile(g: Phaser.GameObjects.Graphics, projectile: ProjectileInstance): void {
-    const style = projectileStyle(projectile.abilityId, this.session.save.classId);
-    const color = this.hexColor(projectile.color);
-    const length = Math.hypot(projectile.dirX, projectile.dirY) || 1;
-    const dx = projectile.dirX / length;
-    const dy = projectile.dirY / length;
-    const tail = 14 + projectile.radius * 1.5;
-    const tx = projectile.x - dx * tail;
-    const ty = projectile.y - dy * tail;
-    if (style === "arrow" || style === "arrowVolley") {
-      g.lineStyle(2, color, 0.35);
-      g.lineBetween(tx, ty, projectile.x, projectile.y);
-      g.lineStyle(1, 0xffffff, 0.9);
-      g.lineBetween(tx, ty, projectile.x, projectile.y);
-      g.fillStyle(color, 1);
-      g.fillTriangle(
-        projectile.x + dx * 6,
-        projectile.y + dy * 6,
-        projectile.x - dy * 3,
-        projectile.y + dx * 3,
-        projectile.x + dy * 3,
-        projectile.y - dx * 3,
-      );
-    } else if (style === "gun" || style === "gunVolley") {
-      g.lineStyle(1, color, 0.55);
-      g.lineBetween(projectile.x - dx * 24, projectile.y - dy * 24, projectile.x, projectile.y);
-      g.fillStyle(0xffffff, 1);
-      g.fillCircle(projectile.x, projectile.y, Math.max(1.5, projectile.radius * 0.5));
-    } else if (style === "thrust") {
-      g.lineStyle(3, color, 0.8);
-      g.lineBetween(tx, ty, projectile.x, projectile.y);
-      g.lineStyle(1, 0xffffff, 0.9);
-      g.lineBetween(tx, ty, projectile.x, projectile.y);
-      g.fillStyle(color, 1);
-      g.fillTriangle(
-        projectile.x + dx * 7,
-        projectile.y + dy * 7,
-        projectile.x - dy * 4,
-        projectile.y + dx * 4,
-        projectile.x + dy * 4,
-        projectile.y - dx * 4,
-      );
-    } else {
-      g.fillStyle(color, 0.16);
-      g.fillCircle(projectile.x, projectile.y, projectile.radius + 7);
-      g.lineStyle(2, color, 0.45);
-      g.lineBetween(tx, ty, projectile.x, projectile.y);
-      g.fillStyle(color, 1);
-      g.fillCircle(projectile.x, projectile.y, projectile.radius);
-      g.fillStyle(0xffffff, 0.8);
-      g.fillCircle(projectile.x - dx * 2, projectile.y - dy * 2, Math.max(1, projectile.radius * 0.4));
     }
   }
 

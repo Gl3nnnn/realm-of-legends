@@ -390,6 +390,10 @@ export class UIManager {
         const zoom = Number(input.value) === 1.5 ? 1.5 : Number(input.value) === 2.5 ? 2.5 : 2;
         this.preferences = updatePreferences({ cameraZoom: zoom });
       }
+      if (input.id === "brightness-select") {
+        const brightness = Number(input.value) === 1.2 ? 1.2 : Number(input.value) === 1.4 ? 1.4 : 1;
+        this.preferences = updatePreferences({ brightness });
+      }
       if (input.id === "effect-select") {
         const strength = Number(input.value) === 0.5 ? 0.5 : Number(input.value) === 1.5 ? 1.5 : 1;
         this.preferences = updatePreferences({ effectIntensity: strength });
@@ -1170,8 +1174,10 @@ export class UIManager {
     this.questSignature = signature;
     const storyBossId = nextStory?.bossId ?? "";
     const storyBossName = storyBossId ? (MONSTERS[storyBossId]?.name ?? storyBossId) : "";
+    const storyBossZone = storyBossId ? Object.values(ZONES).find((zone) => zone.monsterSpawns.some((spawn) => spawn.id === storyBossId)) : undefined;
+    const storyWhere = storyBossZone ? ` in ${esc(storyBossZone.name)}` : "";
     const storyLine = nextStory
-      ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat the ${esc(storyBossName)} to continue the story.</div></div>`
+      ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat the ${esc(storyBossName)}${storyWhere} to continue the story.</div></div>`
       : "";
     this.dom.questTracker.innerHTML = storyLine + active
       .map((state) => {
@@ -1233,7 +1239,7 @@ export class UIManager {
       this.dom.prompt.classList.add("hidden");
       return;
     }
-    this.dom.prompt.textContent = `E · ${target.label}`;
+    this.dom.prompt.textContent = `${this.preferences.keybinds.interact} · ${target.label}`;
     this.dom.prompt.classList.remove("hidden");
   }
 

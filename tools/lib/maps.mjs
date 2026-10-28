@@ -438,7 +438,7 @@ function dungeonMap() {
   const boss = [26, 9];
   const skeletons = [[10, 22], [21, 24], [30, 21], [43, 22], [14, 9], [39, 8]];
   const traps = [[25, 31, 34, 10, 3], [12, 22, 26, 12, 4], [40, 22, 26, 12, 4]];
-  const chests = [[8, 20, "dungeon_chest_1"], [44, 20, "dungeon_chest_2"], [8, 24, "dungeon_chest_3"], [44, 24, "dungeon_chest_4"]];
+  const chests = [[8, 21, "dungeon_chest_1"], [44, 19, "dungeon_chest_2"], [8, 23, "dungeon_chest_3"], [44, 23, "dungeon_chest_4"]];
   for (const [x, y] of [boss, ...skeletons, [25, 35], [26, 34]]) {
     m.clearTile(x, y, TILE.caveFloor);
     m.ensureFree(x, y, TILE.caveFloor);
@@ -523,7 +523,7 @@ function marshMap() {
       npcs: [],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
       chests: [
-        { id: "marsh_chest_1", x: center(10), y: center(38) },
+        { id: "marsh_chest_1", x: center(9), y: center(38) },
         { id: "marsh_chest_2", x: center(52), y: center(8) },
       ],
       traps: [

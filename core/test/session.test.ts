@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GameSession,
   INVENTORY_SIZE,
+  ZONES,
   getItem,
   getTalentTree,
   createCharacter,
@@ -267,6 +268,31 @@ describe("talents", () => {
   });
 });
 
+describe("chests", () => {
+  it("finds a chest only when the hero is in range", () => {
+    const session = new GameSession(saveIn("forest"));
+    const chest = session.zone.chests.find((c) => c.id === "forest_chest_1")!;
+    expect(chest).toBeTruthy();
+
+    session.save.x = chest.x + 20;
+    session.save.y = chest.y;
+    expect(session.findInteractable()?.id).toBe("forest_chest_1");
+
+    session.save.x = chest.x + 200;
+    session.save.y = chest.y;
+    expect(session.findInteractable()?.id).not.toBe("forest_chest_1");
+  });
+
+  it("skips a chest that is already opened", () => {
+    const session = new GameSession(saveIn("forest"));
+    const chest = session.zone.chests.find((c) => c.id === "forest_chest_1")!;
+    session.save.x = chest.x;
+    session.save.y = chest.y;
+    session.save.openedChests.push("forest_chest_1");
+    expect(session.findInteractable()?.id).not.toBe("forest_chest_1");
+  });
+});
+
 describe("zones and persistence", () => {
   it("travels through a portal and produces a valid snapshot", () => {
     const session = new GameSession(saveIn("village"));
@@ -322,4 +348,26 @@ describe("difficulty, elites and bosses", () => {
     expect(session.save.zone).toBe("village");
     expect(session.save.quests).toEqual([]);
   });
+});
+
+describe("walkable placement", () => {
+  // A point is walkable when its tile in the zone's blocked grid is free.
+  function isWalkable(zone: (typeof ZONES)[keyof typeof ZONES], x: number, y: number): boolean {
+    const col = Math.floor(x / zone.tileWidth);
+    const row = Math.floor(y / zone.tileHeight);
+    if (col < 0 || row < 0 || col >= zone.width || row >= zone.height) return false;
+    return !zone.blocked[row * zone.width + col];
+  }
+
+  for (const zone of Object.values(ZONES)) {
+    it(`${zone.id}: spawn point is on walkable ground`, () => {
+      expect(isWalkable(zone, zone.spawn.x, zone.spawn.y)).toBe(true);
+    });
+
+    it(`${zone.id}: every chest is on walkable ground`, () => {
+      for (const chest of zone.chests) {
+        expect(isWalkable(zone, chest.x, chest.y), chest.id).toBe(true);
+      }
+    });
+  }
 });
