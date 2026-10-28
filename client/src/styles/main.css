@@ -693,7 +693,7 @@ input[type="text"]:focus {
   image-rendering: pixelated;
   border: 2px solid #b89a5a;
   border-radius: 6px;
-  background: #0c0b11;
+  background: #2a2319;
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 

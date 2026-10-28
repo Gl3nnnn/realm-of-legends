@@ -1108,14 +1108,14 @@ export class UIManager {
       base.height = h;
       const bctx = base.getContext("2d");
       if (!bctx) return;
-      bctx.fillStyle = "#2b2538";
+      bctx.fillStyle = "#6e6150";
       bctx.fillRect(0, 0, w, h);
       const sx = w / zone.width;
       const sy = h / zone.height;
       for (let y = 0; y < zone.height; y += 1) {
         for (let x = 0; x < zone.width; x += 1) {
           if (!zone.blocked[y * zone.width + x]) continue;
-          bctx.fillStyle = (x + y) % 2 === 0 ? "#15121d" : "#1a1622";
+          bctx.fillStyle = (x + y) % 2 === 0 ? "#2a2319" : "#322a1f";
           bctx.fillRect(Math.floor(x * sx), Math.floor(y * sy), Math.ceil(sx), Math.ceil(sy));
         }
       }
