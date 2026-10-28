@@ -2063,6 +2063,62 @@ html[data-ui-scale="1.5"] .toasts {
   .touch-btn.attack { width: 64px; height: 64px; }
 }
 
+/* Fluid touch layout: sizes scale with the shorter screen side, so
+   phones, tablets and landscape screens all keep the controls usable. */
+@media (pointer: coarse) {
+  :root {
+    --touch-unit: clamp(38px, min(11vw, 7.5vh), 64px);
+  }
+  .touch-stick {
+    width: calc(var(--touch-unit) * 2.4);
+    height: calc(var(--touch-unit) * 2.4);
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+  .touch-knob {
+    width: calc(var(--touch-unit) * 0.95);
+    height: calc(var(--touch-unit) * 0.95);
+    margin: calc(var(--touch-unit) * -0.475) 0 0 calc(var(--touch-unit) * -0.475);
+  }
+  .touch-aim {
+    width: calc(var(--touch-unit) * 2.2);
+    height: calc(var(--touch-unit) * 2.2);
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(var(--touch-unit) * 3.4);
+  }
+  .touch-actions {
+    grid-template-columns: repeat(3, var(--touch-unit));
+    grid-auto-rows: var(--touch-unit);
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    gap: calc(var(--touch-unit) * 0.12);
+  }
+  .touch-btn {
+    width: var(--touch-unit);
+    height: var(--touch-unit);
+  }
+  .touch-btn.small {
+    width: calc(var(--touch-unit) * 0.84);
+    height: calc(var(--touch-unit) * 0.84);
+  }
+  .touch-btn.attack {
+    width: calc(var(--touch-unit) * 1.28);
+    height: calc(var(--touch-unit) * 1.28);
+  }
+}
+
+/* Small phones: shrink the touch buttons a little more, but keep them easy to tap. */
+@media (pointer: coarse) and (max-width: 380px) {
+  :root { --touch-unit: clamp(34px, min(9.5vw, 6.5vh), 52px); }
+}
+
+/* Short landscape phones: keep the HUD and game area usable. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud-top-left { width: 46vw; }
+  .ability-slot { width: 38px; height: 38px; }
+  .touch-aim { bottom: calc(var(--touch-unit) * 2.9); }
+}
+
 .preview-hero {
   display: flex;
   align-items: center;
