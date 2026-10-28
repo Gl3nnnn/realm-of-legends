@@ -112,6 +112,14 @@ describe("monster, quest, npc and shop references", () => {
           expect(objective.count).toBeGreaterThan(0);
         }
         if (objective.kind === "visit") expect(ZONE_LIST.some((z) => z.id === objective.zone)).toBe(true);
+        if (objective.kind === "explore") {
+          expect(objective.zones.length).toBeGreaterThan(0);
+          for (const zone of objective.zones) expect(ZONE_LIST.some((entry) => entry.id === zone)).toBe(true);
+        }
+        if (objective.kind === "survive") {
+          expect(ZONE_LIST.some((zone) => zone.id === objective.zone)).toBe(true);
+          expect(objective.count).toBeGreaterThan(0);
+        }
       }
       for (const reward of quest.rewards.items ?? []) expect(ITEMS[reward.itemId]).toBeTruthy();
     }

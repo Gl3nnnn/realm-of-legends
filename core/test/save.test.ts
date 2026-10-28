@@ -145,6 +145,25 @@ describe("save validation", () => {
     expect(validateSave(invalid).ok).toBe(false);
   });
 
+  it("resets incomplete legacy forest-watch progress when migrating v7 saves", () => {
+    const save = base();
+    save.quests.push({ id: "forest_watch", progress: [7], completed: false, completions: 0 });
+    const migrated = migrateSave({ ...save, version: 7 });
+
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.quests[0]?.progress).toEqual([0]);
+    expect(migrated.quests[0]?.completed).toBe(false);
+  });
+
+  it("preserves completed legacy forest-watch quests", () => {
+    const save = base();
+    save.quests.push({ id: "forest_watch", progress: [12], completed: true, completions: 0 });
+    const migrated = migrateSave({ ...save, version: 7 });
+
+    expect(migrated.quests[0]?.progress).toEqual([12]);
+    expect(migrated.quests[0]?.completed).toBe(true);
+  });
+
   it("summarizes a save for character select", () => {
     const save = base();
     expect(characterSummary(save)).toMatchObject({

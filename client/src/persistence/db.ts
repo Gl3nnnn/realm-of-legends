@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import { MAX_CHARACTERS } from "@realm/core";
+import { MAX_CHARACTERS, migrateSave } from "@realm/core";
 import type { CharacterSave } from "@realm/core";
 
 interface RealmDB extends DBSchema {
@@ -31,12 +31,13 @@ export class SaveRepository {
   async list(): Promise<CharacterSave[]> {
     const db = await this.db();
     const saves = await db.getAll("characters");
-    return saves.sort((a, b) => b.updatedAt - a.updatedAt);
+    return saves.map(migrateSave).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async get(id: string): Promise<CharacterSave | undefined> {
     const db = await this.db();
-    return db.get("characters", id);
+    const save = await db.get("characters", id);
+    return save ? migrateSave(save) : undefined;
   }
 
   async count(): Promise<number> {

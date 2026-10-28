@@ -392,7 +392,7 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
   const quest = QUESTS[questId];
   const objective = quest?.objectives[objectiveIndex];
   if (!objective) return "";
-  const count = "count" in objective ? objective.count : 1;
+  const count = "count" in objective ? objective.count : objective.kind === "explore" ? objective.zones.length : 1;
   const done = progress >= count;
   const text = questObjectiveText(
     objective,

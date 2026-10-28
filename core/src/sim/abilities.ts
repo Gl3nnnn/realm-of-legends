@@ -18,7 +18,7 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
     const speed = effect.projectile?.speed ?? 430;
     const radius = effect.projectile?.radius ?? 6;
     const damageType = effect.damageType ?? "physical";
-    const { damage, crit: rolledCrit } = s.effectDamage(effect);
+    const { damage, crit: rolledCrit } = s.effectDamage(effect, ability.id);
     const crit = damage > 0 && rolledCrit;
     const angle = (index - (count - 1) / 2) * spreadStep;
     const cos = Math.cos(angle);
@@ -89,7 +89,7 @@ export function castMelee(s: GameSession, ability: AbilityDef, dir: Vec2): void 
 export function applyEffects(s: GameSession, ability: AbilityDef, targets: MonsterInstance[], center: Vec2): void {
   for (const effect of ability.effects) {
     if (effect.kind === "damage") {
-      const { damage, crit } = s.effectDamage(effect);
+      const { damage, crit } = s.effectDamage(effect, ability.id);
       const statuses = s.statusesFromEffects(ability.effects, effect.damageType ?? "physical");
       if (targets.length === 0) continue;
       for (const target of targets) s.hitMonster(target, damage, crit, effect.damageType ?? "physical", statuses);

@@ -163,10 +163,12 @@ export function itemDetailHtml(stack: ItemStack | null, compareTo: ItemStack | n
   </div>`;
 }
 
-export function questObjectiveText(objective: { kind: string; monsterId?: string; itemId?: string; zone?: string; count?: number }, progress: number, monsterName?: (id: string) => string, itemName?: (id: string) => string): string {
+export function questObjectiveText(objective: { kind: string; monsterId?: string; itemId?: string; zone?: string; zones?: string[]; count?: number }, progress: number, monsterName?: (id: string) => string, itemName?: (id: string) => string): string {
   if (objective.kind === "kill") return `${monsterName?.(objective.monsterId ?? "") ?? objective.monsterId}: ${progress}/${objective.count ?? 1}`;
   if (objective.kind === "boss") return `Defeat ${monsterName?.(objective.monsterId ?? "") ?? objective.monsterId} (${progress}/1)`;
   if (objective.kind === "collect") return `Collect ${itemName?.(objective.itemId ?? "") ?? objective.itemId}: ${progress}/${objective.count ?? 1}`;
   if (objective.kind === "visit") return `Visit ${objective.zone} (${progress}/1)`;
+  if (objective.kind === "explore") return `Explore new zones: ${progress}/${objective.zones?.length ?? 0}`;
+  if (objective.kind === "survive") return `Survive in ${objective.zone}: ${progress}/${objective.count ?? 0} seconds`;
   return "";
 }

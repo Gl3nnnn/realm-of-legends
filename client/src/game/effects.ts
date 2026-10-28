@@ -30,12 +30,12 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
   }
   for (const telegraph of scene.session.telegraphs) {
     const progress = 1 - Math.max(0, telegraph.remaining) / Math.max(0.001, telegraph.total);
-    const fillColor = telegraph.kind === "boss" ? 0xd94a4a : 0xe08a3a;
+    const fillColor = telegraph.kind === "boss" ? 0xd94a4a : telegraph.kind === "enemy" ? 0x8c74db : 0xe08a3a;
     const shape = telegraph.shape ?? "ring";
     const angle = telegraph.angle ?? 0;
     g.fillStyle(fillColor, 0.1 + progress * 0.2);
     const highContrast = preferences.highContrast;
-    g.lineStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xff6a6a, 0.95);
+    g.lineStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : telegraph.kind === "enemy" ? 0xb9a6ff : 0xff6a6a, 0.95);
     if (shape === "line") {
       const half = 14;
       const len = telegraph.radius;

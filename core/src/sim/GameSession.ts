@@ -6,6 +6,7 @@ import {
   DODGE_SPEED,
   INTERACT_RANGE,
   PICKUP_RANGE,
+  PERFECT_DODGE_WINDOW,
   PLAYER_RADIUS,
   POTION_COOLDOWN,
   RESOURCE_LABELS,
@@ -27,6 +28,7 @@ import { CLASS_INTROS, NG_PLUS_OPENINGS } from "../data/story";
 import {
   getTalentChoice,
   talentBonuses,
+  talentAbilityModifiers as computeTalentAbilityModifiers,
   talentModifiers as computeTalentModifiers,
   talentTierChosen,
   type TalentModifiers,
@@ -102,6 +104,7 @@ export class GameSession {
   dodgeCooldown = 0;
   dodgeTimer = 0;
   invulnerable = 0;
+  perfectDodgeTimer = 0;
   potionCooldown = 0;
   dead = false;
   respawnTimer = 0;
@@ -116,6 +119,7 @@ export class GameSession {
   readonly classDef: ClassDef;
   lastCombat = -999;
   gathered = new Set<string>();
+  questSurvivalElapsed = new Map<string, number>();
   lastAim: Vec2 = { x: 0, y: 1 };
   dodgeDir: Vec2 = { x: 0, y: 1 };
   lastImmuneEvent = -999;
@@ -149,6 +153,10 @@ export class GameSession {
 
   get modifiers(): TalentModifiers {
     return computeTalentModifiers(this.save.classId, this.save.talents);
+  }
+
+  get abilityTalentModifiers(): ReturnType<typeof computeTalentAbilityModifiers> {
+    return computeTalentAbilityModifiers(this.save.classId, this.save.talents);
   }
 
   get difficultyScale(): { hp: number; attack: number; xp: number; gold: number } {
@@ -437,11 +445,13 @@ export class GameSession {
       this.clampSave();
       return this.drainEvents();
     }
+    quests.advanceSurvival(this, clamped);
     this.updatePets(clamped);
     this.updateHatchling(clamped);
     this.updateProjectiles(clamped);
     this.updateTraps(clamped);
     this.updateTelegraphs(clamped);
+    this.perfectDodgeTimer = Math.max(0, this.perfectDodgeTimer - clamped);
     this.updateLoot(clamped);
     this.clampSave();
     return this.drainEvents();
@@ -533,7 +543,14 @@ export class GameSession {
 
       if (monster.state === "chase") {
         if (playerDist <= def.attackRange + PLAYER_RADIUS) {
-          monster.state = "attack";
+          if (def.role && playerDist < def.attackRange * 0.55) {
+            const away = normalize(monster.x - player.x, monster.y - player.y);
+            const sep = this.separationFrom(monster, def.radius);
+            this.moveEntity(monster, (away.x + sep.x) * speed * dt, (away.y + sep.y) * speed * dt, def.radius);
+            monster.facing = away.x >= 0 ? 1 : -1;
+          } else {
+            monster.state = "attack";
+          }
         } else {
           const dir = this.routeAround(monster, player, def.radius);
           const sep = this.separationFrom(monster, def.radius);
@@ -544,14 +561,29 @@ export class GameSession {
       }
 
       if (monster.state === "attack") {
-        if (playerDist > def.attackRange + PLAYER_RADIUS + 12) {
+        if (playerDist > def.attackRange + PLAYER_RADIUS + 12 || (def.role && playerDist < def.attackRange * 0.45)) {
           monster.state = "chase";
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
           const raw = def.attack * this.difficultyScale.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
-          this.damagePlayer(raw, def.name);
-          if (this.dead) return;
-          if (monster.elite === "venomous") {
+          if (def.role === "support") {
+            const ally = this.monsters
+              .filter((candidate) => candidate !== monster && candidate.state !== "dead" && length(candidate.x - monster.x, candidate.y - monster.y) <= 120)
+              .sort((a, b) => a.hp / (a.maxHp ?? getMonster(a.defId).maxHp) - b.hp / (b.maxHp ?? getMonster(b.defId).maxHp))[0];
+            if (ally) {
+              const maxHp = ally.maxHp ?? getMonster(ally.defId).maxHp;
+              ally.hp = Math.min(maxHp, ally.hp + Math.max(1, Math.round(maxHp * 0.12)));
+              this.emit({ type: "log", text: `${def.name} mends a nearby ally.`, tone: "bad" });
+            } else {
+              this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy");
+            }
+          } else if (def.role === "ranged") {
+            this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy");
+          } else {
+            this.damagePlayer(raw, def.name);
+            if (this.dead) return;
+          }
+          if (monster.elite === "venomous" && !def.role) {
             const existing = this.statuses.find((s) => s.kind === "poison");
             if (existing) existing.remaining = Math.max(existing.remaining, 3);
             else this.statuses.push({ kind: "poison", remaining: 3, value: def.attack * 0.12 });
@@ -571,7 +603,8 @@ export class GameSession {
       }
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
-        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25, this.bossShape(def.id, 0), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
+        const phase = monster.phase ?? 0;
+        this.spawnTelegraph(player.x, player.y, 62 + phase * 8, def.attack * this.difficultyScale.attack * (1.8 + phase * 0.2), 1.25 - phase * 0.15, this.bossShape(def.id, phase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
       }
 
       if (def.boss) {
@@ -581,7 +614,7 @@ export class GameSession {
           monster.phase = nextPhase;
           monster.attackTimer = Math.max(monster.attackTimer, 0.8);
           this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
-          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5, this.bossShape(def.id, 1), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
+          this.spawnTelegraph(player.x, player.y, 74 + nextPhase * 12, def.attack * this.difficultyScale.attack * (2.2 + nextPhase * 0.25), Math.max(0.8, 1.5 - nextPhase * 0.2), this.bossShape(def.id, nextPhase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
           if (def.id === "hollow_king") {
             for (let i = 0; i < nextPhase; i += 1) {
               const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
@@ -599,15 +632,15 @@ export class GameSession {
     }
   }
 
-  private bossShape(bossId: string, strike: number): "ring" | "line" | "cone" | "spot" {
+  private bossShape(bossId: string, phase: number): "ring" | "line" | "cone" | "spot" {
     const shapes: Record<string, ("ring" | "line" | "cone" | "spot")[]> = {
-      bone_warden: ["cone", "cone"],
-      miremother: ["spot", "spot"],
-      ice_revenant: ["ring", "ring"],
-      hollow_king: ["line", "ring"],
+      bone_warden: ["cone", "line", "ring"],
+      miremother: ["spot", "cone", "ring"],
+      ice_revenant: ["ring", "line", "cone"],
+      hollow_king: ["line", "ring", "spot"],
     };
     const list = shapes[bossId] ?? ["ring", "cone"];
-    return list[strike % list.length];
+    return list[Math.min(phase, list.length - 1)]!;
   }
 
   private spawnTelegraph(
@@ -619,6 +652,7 @@ export class GameSession {
     shape: "ring" | "line" | "cone" | "spot" = "ring",
     angle = 0,
     source = "Bone Warden",
+    kind: TelegraphInstance["kind"] = "boss",
   ): void {
     const telegraph: TelegraphInstance = {
       uid: this.nextUid("t"),
@@ -628,7 +662,7 @@ export class GameSession {
       remaining: delay,
       total: delay,
       damage,
-      kind: "boss",
+      kind,
       shape,
       angle,
       source,
@@ -866,7 +900,8 @@ export class GameSession {
       else this.facing = dir.y > 0 ? "down" : "up";
     }
     this.save.resource -= ability.cost;
-    this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100);
+    const abilityCooldown = this.abilityTalentModifiers[id]?.cooldownPercent ?? 0;
+    this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100) * (1 - abilityCooldown / 100);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
     const castRadius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 0);
@@ -922,11 +957,12 @@ export class GameSession {
   }
 
   /** Rolls damage and the critical hit once. The same result drives the damage and the crit indicator. */
-  effectDamage(effect: AbilityEffect): { damage: number; crit: boolean } {
+  effectDamage(effect: AbilityEffect, abilityId?: string): { damage: number; crit: boolean } {
     const stats = this.stats;
     const raw = (effect.amount ?? 0) + (effect.scaling ?? 0) * stats.attack;
     const crit = this.rng.chance(stats.crit);
-    const damage = Math.round(raw * (crit ? 1.8 + this.modifiers.critDamage / 100 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
+    const abilityDamage = abilityId ? this.abilityTalentModifiers[abilityId]?.damagePercent ?? 0 : 0;
+    const damage = Math.round(raw * (1 + abilityDamage / 100) * (crit ? 1.8 + this.modifiers.critDamage / 100 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
     return { damage, crit };
   }
 
@@ -1051,6 +1087,7 @@ export class GameSession {
     this.dodgeDir = dir;
     this.dodgeTimer = DODGE_DURATION;
     this.invulnerable = DODGE_INVULN;
+    this.perfectDodgeTimer = PERFECT_DODGE_WINDOW;
     this.dodgeCooldown = DODGE_COOLDOWN;
     const shieldOnDodge = this.modifiers.shieldOnDodge;
     if (shieldOnDodge > 0) this.shield += shieldOnDodge;
@@ -1058,6 +1095,14 @@ export class GameSession {
     else this.facing = dir.y > 0 ? "down" : "up";
     this.emit({ type: "dodge", x: this.save.x, y: this.save.y });
     return true;
+  }
+
+  rewardPerfectDodge(): void {
+    this.save.resource = Math.min(this.stats.maxResource, this.save.resource + 12);
+    for (const id of Object.keys(this.cooldowns)) {
+      this.cooldowns[id] = Math.max(0, this.cooldowns[id] - 0.6);
+    }
+    this.emit({ type: "log", text: "Perfect dodge! Restore 12 resource and reduce skill cooldowns.", tone: "good" });
   }
 
   learnTalent(talentId: string): boolean {

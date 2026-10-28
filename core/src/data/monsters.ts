@@ -226,6 +226,7 @@ const expansionMonsters: MonsterDef[] = [
     respawn: 26,
     radius: 10,
     sprite: "familiar",
+    role: "ranged",
   },
   {
     id: "venom_spider",
@@ -287,7 +288,7 @@ const expansionMonsters: MonsterDef[] = [
     speed: 48,
     aggroRadius: 175,
     leashRadius: 380,
-    attackRange: 34,
+    attackRange: 130,
     attackCooldown: 1.2,
     xp: 700,
     goldMin: 55,
@@ -300,6 +301,7 @@ const expansionMonsters: MonsterDef[] = [
     respawn: 30,
     radius: 12,
     sprite: "skeleton",
+    role: "ranged",
   },
   {
     id: "ice_revenant",
@@ -362,8 +364,8 @@ const expansionMonsters: MonsterDef[] = [
     speed: 52,
     aggroRadius: 200,
     leashRadius: 430,
-    attackRange: 32,
-    attackCooldown: 1.1,
+    attackRange: 130,
+    attackCooldown: 3.2,
     xp: 1200,
     goldMin: 80,
     goldMax: 130,
@@ -375,6 +377,7 @@ const expansionMonsters: MonsterDef[] = [
     respawn: 32,
     radius: 12,
     sprite: "skeleton",
+    role: "support",
   },
   {
     id: "hollow_king",

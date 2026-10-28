@@ -207,7 +207,7 @@ const expansionQuests: QuestDef[] = [
     id: "forest_watch",
     name: "Forest Watch",
     giverNpc: "guard",
-    description: "Something has been stirring in the forest after dark. Hold your ground there and defeat 12 foes without leaving the trees.",
+    description: "Something has been stirring in the forest after dark. Hold your ground in the trees for 12 seconds without retreating.",
     objectives: [{ kind: "survive", zone: "forest", count: 12 }],
     rewards: { xp: 500, gold: 100 },
     requiresLevel: 2,

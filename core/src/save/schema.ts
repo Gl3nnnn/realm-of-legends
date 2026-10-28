@@ -243,6 +243,17 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.relationships = {};
     migrated.version = 7;
   }
+  if (migrated.version === 7) {
+    if (Array.isArray(migrated.quests)) {
+      migrated.quests = migrated.quests.map((state) => {
+        if (!state || typeof state !== "object") return state;
+        const questState = state as Record<string, unknown>;
+        if (questState.id !== "forest_watch" || questState.completed === true || !Array.isArray(questState.progress)) return state;
+        return { ...questState, progress: [0, ...questState.progress.slice(1)] };
+      });
+    }
+    migrated.version = 8;
+  }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);
   return result.save;

@@ -1,3 +1,4 @@
+import { getClass } from "./classes";
 import type { ClassId, StatBonus } from "../types";
 
 export type TalentSpecial =
@@ -19,6 +20,13 @@ export interface TalentChoice {
   stats?: StatBonus;
   special?: TalentSpecial;
   value?: number;
+  abilityModifier?: AbilityTalentModifier;
+}
+
+export interface AbilityTalentModifier {
+  abilityId: string;
+  damagePercent?: number;
+  cooldownPercent?: number;
 }
 
 export interface TalentPassive {
@@ -179,7 +187,13 @@ const STAT_LABELS: Record<keyof StatBonus, string> = {
   moveSpeed: "Move Speed",
 };
 
-function describe(stats: StatBonus | undefined, special?: TalentSpecial, value?: number): string {
+function describe(
+  stats: StatBonus | undefined,
+  special?: TalentSpecial,
+  value?: number,
+  abilityName?: string,
+  abilityModifier?: AbilityTalentModifier,
+): string {
   const parts = Object.entries(stats ?? {}).map(([key, amount]) => {
     const shown = key === "crit" ? `${Math.round(Number(amount) * 100)}%` : String(Math.round(Number(amount)));
     return `+${shown} ${STAT_LABELS[key as keyof StatBonus]}`;
@@ -191,6 +205,8 @@ function describe(stats: StatBonus | undefined, special?: TalentSpecial, value?:
   if (special === "critDamage") parts.push(`Critical hits deal +${value}% damage`);
   if (special === "shieldOnDodge") parts.push(`Gain a ${value}-point shield when you dodge`);
   if (special === "cooldown") parts.push(`Ability cooldowns reduced by ${value}%`);
+  if (abilityName && abilityModifier?.damagePercent) parts.push(`${abilityName} deals ${abilityModifier.damagePercent}% more damage`);
+  if (abilityName && abilityModifier?.cooldownPercent) parts.push(`${abilityName} cooldown reduced by ${abilityModifier.cooldownPercent}%`);
   return parts.join(". ");
 }
 
@@ -199,17 +215,24 @@ function buildTree(classId: ClassId): TalentTree {
   const passive = PASSIVES[classId];
   const tiers: TalentTier[] = TIER_LEVELS.map((level, tierIndex) => ({
     level,
-    choices: TEMPLATES[tierIndex].map((template, optionIndex) => ({
-      id: `${classId}:${tierIndex}:${optionIndex}`,
-      classId,
-      tier: tierIndex,
-      level,
-      name: NAMES[archetype][tierIndex][optionIndex],
-      description: describe(template.stats, template.special, template.value),
-      stats: template.stats,
-      special: template.special,
-      value: template.value,
-    })),
+    choices: TEMPLATES[tierIndex].map((template, optionIndex) => {
+      const ability = getClass(classId).abilities[(tierIndex + optionIndex) % getClass(classId).abilities.length]!;
+      const abilityModifier: AbilityTalentModifier = optionIndex === 0
+        ? { abilityId: ability.id, damagePercent: 15 }
+        : { abilityId: ability.id, cooldownPercent: 15 };
+      return {
+        id: `${classId}:${tierIndex}:${optionIndex}`,
+        classId,
+        tier: tierIndex,
+        level,
+        name: NAMES[archetype][tierIndex][optionIndex],
+        description: describe(template.stats, template.special, template.value, ability.name, abilityModifier),
+        stats: template.stats,
+        special: template.special,
+        value: template.value,
+        abilityModifier,
+      };
+    }),
   }));
   return { passive, tiers };
 }
@@ -264,6 +287,19 @@ export function talentModifiers(classId: ClassId, talentIds: string[]): TalentMo
   for (const id of talentIds) {
     const choice = getTalentChoice(classId, id);
     apply(choice?.special, choice?.value);
+  }
+  return modifiers;
+}
+
+export function talentAbilityModifiers(classId: ClassId, talentIds: string[]): Record<string, Required<Omit<AbilityTalentModifier, "abilityId">>> {
+  const modifiers: Record<string, Required<Omit<AbilityTalentModifier, "abilityId">>> = {};
+  for (const id of talentIds) {
+    const modifier = getTalentChoice(classId, id)?.abilityModifier;
+    if (!modifier) continue;
+    const current = modifiers[modifier.abilityId] ?? { damagePercent: 0, cooldownPercent: 0 };
+    current.damagePercent += modifier.damagePercent ?? 0;
+    current.cooldownPercent += modifier.cooldownPercent ?? 0;
+    modifiers[modifier.abilityId] = current;
   }
   return modifiers;
 }

@@ -16,9 +16,44 @@ export function recordKill(session: GameSession, monsterId: string): void {
     quest.objectives.forEach((objective, i) => {
       if (objective.kind === "kill" && objective.monsterId === monsterId) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
       else if (objective.kind === "boss" && objective.monsterId === monsterId) state.progress[i] = 1;
-      else if (objective.kind === "survive" && objective.zone === session.save.zone) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
     });
     refreshQuestCompletion(session, state);
+  }
+}
+
+export function advanceSurvival(session: GameSession, dt: number): void {
+  const activeObjectives = new Set<string>();
+  for (const state of session.save.quests) {
+    if (state.completed) continue;
+    const quest = QUESTS[state.id];
+    if (!quest) continue;
+    let changed = false;
+    quest.objectives.forEach((objective, i) => {
+      if (objective.kind !== "survive") return;
+      const key = `${state.id}:${i}`;
+      if (objective.zone !== session.save.zone) {
+        if ((state.progress[i] ?? 0) !== 0) {
+          state.progress[i] = 0;
+          changed = true;
+        }
+        session.questSurvivalElapsed.delete(key);
+        return;
+      }
+      activeObjectives.add(key);
+      const elapsed = (session.questSurvivalElapsed.get(key) ?? 0) + dt;
+      const wholeSeconds = Math.floor(elapsed + 1e-8);
+      if (wholeSeconds > 0) {
+        state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + wholeSeconds);
+        session.questSurvivalElapsed.set(key, elapsed - wholeSeconds);
+        changed = true;
+      } else {
+        session.questSurvivalElapsed.set(key, elapsed);
+      }
+    });
+    if (changed) refreshQuestCompletion(session, state);
+  }
+  for (const key of session.questSurvivalElapsed.keys()) {
+    if (!activeObjectives.has(key)) session.questSurvivalElapsed.delete(key);
   }
 }
 

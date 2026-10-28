@@ -9,6 +9,10 @@ import type { GameSession } from "./GameSession";
 export function damagePlayer(s: GameSession, raw: number, source: string): void {
   if (s.dead) return;
   if (s.invulnerable > 0) {
+    if (s.perfectDodgeTimer > 0) {
+      s.perfectDodgeTimer = 0;
+      s.rewardPerfectDodge();
+    }
     if (s.elapsed - s.lastImmuneEvent > 0.35) {
       s.lastImmuneEvent = s.elapsed;
       s.emit({ type: "immune", x: s.save.x, y: s.save.y });

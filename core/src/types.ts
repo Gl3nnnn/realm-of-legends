@@ -233,6 +233,7 @@ export interface MonsterDef {
   radius: number;
   sprite: string;
   boss?: boolean;
+  role?: "ranged" | "support";
 }
 
 export interface StatusInstance {
@@ -301,7 +302,7 @@ export interface TelegraphInstance {
   remaining: number;
   total: number;
   damage: number;
-  kind: "boss" | "trap";
+  kind: "boss" | "enemy" | "trap";
   shape?: "ring" | "line" | "cone" | "spot";
   angle?: number;
   /** Name of the boss that cast this telegraph, so the damage message names the right boss. */

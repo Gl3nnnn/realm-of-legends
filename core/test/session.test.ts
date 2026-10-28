@@ -108,6 +108,53 @@ describe("combat", () => {
     expect(session.save.zone).toBe("village");
     expect(session.save.hp).toBeGreaterThan(0);
   });
+
+  it("gives ranged monsters a dodgeable, directional attack", () => {
+    const session = new GameSession(saveIn("marsh"));
+    const wisp = session.monsters.find((monster) => monster.defId === "mire_wisp")!;
+    expect(wisp).toBeTruthy();
+    wisp.x = session.save.x + 95;
+    wisp.y = session.save.y;
+    wisp.spawnX = wisp.x;
+    wisp.spawnY = wisp.y;
+    wisp.state = "idle";
+    wisp.attackTimer = 0;
+    const hp = session.save.hp;
+
+    session.step(0.05, IDLE);
+
+    expect(session.telegraphs.some((telegraph) => telegraph.kind === "enemy" && telegraph.shape === "line")).toBe(true);
+    expect(session.save.hp).toBe(hp);
+  });
+
+  it("lets support monsters heal nearby injured allies", () => {
+    const session = new GameSession(saveIn("throne"));
+    const acolytes = session.monsters.filter((monster) => monster.defId === "hollow_acolyte");
+    const support = acolytes[0]!;
+    const ally = acolytes[1]!;
+    for (const monster of session.monsters) {
+      if (monster !== support && monster !== ally) {
+        monster.state = "dead";
+        monster.respawnTimer = 60;
+      }
+    }
+    support.x = 300;
+    support.y = 300;
+    support.spawnX = support.x;
+    support.spawnY = support.y;
+    support.state = "idle";
+    support.attackTimer = 0;
+    ally.x = 330;
+    ally.y = 300;
+    ally.hp = (ally.maxHp ?? 1) / 2;
+    session.save.x = 400;
+    session.save.y = 300;
+    const before = ally.hp;
+
+    session.step(0.05, IDLE);
+
+    expect(ally.hp).toBeGreaterThan(before);
+  });
 });
 
 describe("inventory, equipment and economy", () => {
@@ -207,6 +254,29 @@ describe("quests", () => {
     expect(states.find((entry) => entry.questId === "bone_breaker")?.available).toBe(false);
     expect(states.find((entry) => entry.questId === "wardens_end")).toBeUndefined();
   });
+
+  it("tracks survival time and resets progress after leaving the zone", () => {
+    const session = forestSession();
+    session.save.level = 2;
+    for (const monster of session.monsters) {
+      monster.state = "dead";
+      monster.respawnTimer = 60;
+    }
+    expect(session.acceptQuest("forest_watch")).toBe(true);
+    for (let i = 0; i < 49; i += 1) session.step(0.1, IDLE);
+    const state = session.save.quests.find((quest) => quest.id === "forest_watch");
+    expect(state?.progress[0]).toBe(4);
+    expect(state?.completed).toBe(false);
+    session.recordKill("slime");
+    expect(state?.progress[0]).toBe(4);
+    session.save.zone = "village";
+    session.step(0.1, IDLE);
+    expect(state?.progress[0]).toBe(0);
+    session.save.zone = "forest";
+    for (let i = 0; i < 120; i += 1) session.step(0.1, IDLE);
+    expect(state?.progress[0]).toBe(12);
+    expect(state?.completed).toBe(true);
+  });
 });
 
 describe("item instances, affixes and crafting", () => {
@@ -265,6 +335,51 @@ describe("talents", () => {
     expect(session.save.talents).toEqual([]);
     expect(session.save.gold).toBe(500 - cost);
     expect(session.respecTalents()).toBe(false);
+  });
+
+  it("alters a selected ability's damage or cooldown", () => {
+    const baseSave = saveIn("village");
+    baseSave.level = 5;
+    const damageSave = { ...baseSave, talents: [getTalentTree("warrior").tiers[0].choices[0]!.id] };
+    const cooldownSave = { ...baseSave, talents: [getTalentTree("warrior").tiers[0].choices[1]!.id] };
+    const base = new GameSession(baseSave);
+    const empowered = new GameSession(damageSave);
+    const focused = new GameSession(cooldownSave);
+
+    const strike = { kind: "damage" as const, amount: 100, damageType: "physical" as const };
+    expect(empowered.effectDamage(strike, "shield_bash").damage).toBeGreaterThan(base.effectDamage(strike, "shield_bash").damage);
+    expect(focused.castAbility("whirlwind", { x: focused.save.x, y: focused.save.y })).toBe(true);
+    const unmodified = new GameSession({ ...baseSave });
+    expect(unmodified.castAbility("whirlwind", { x: unmodified.save.x, y: unmodified.save.y })).toBe(true);
+    expect(focused.abilityCooldown("whirlwind")).toBeLessThan(unmodified.abilityCooldown("whirlwind"));
+    expect(getTalentTree("warrior").tiers[0].choices[0]?.description).toContain("Shield Bash deals 15% more damage");
+  });
+});
+
+describe("perfect dodges", () => {
+  it("restores resource and shortens skill cooldown after precisely timed evasion", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.resource = 0;
+    session.cooldowns.basic = 2;
+    const hp = session.save.hp;
+    expect(session.dodge(1, 0)).toBe(true);
+    session.damagePlayer(50, "test attack");
+    expect(session.save.hp).toBe(hp);
+    expect(session.save.resource).toBe(12);
+    expect(session.abilityCooldown("basic")).toBeCloseTo(1.4);
+    expect(session.drainEvents().some((event) => event.type === "log" && event.text.startsWith("Perfect dodge!"))).toBe(true);
+  });
+
+  it("does not grant a perfect-dodge reward after its timing window", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.resource = 0;
+    session.cooldowns.basic = 2;
+    expect(session.dodge(1, 0)).toBe(true);
+    session.step(0.1, IDLE);
+    session.step(0.1, IDLE);
+    session.damagePlayer(50, "late attack");
+    expect(session.save.resource).toBe(0);
+    expect(session.abilityCooldown("basic")).toBeCloseTo(1.8);
   });
 });
 
@@ -335,6 +450,11 @@ describe("difficulty, elites and bosses", () => {
     const events = session.step(0.05, IDLE);
     expect(king.phase).toBe(1);
     expect(events.some((event) => event.type === "log" && event.text.includes("phase 2"))).toBe(true);
+    expect(session.telegraphs.some((telegraph) => telegraph.kind === "boss" && telegraph.shape === "ring")).toBe(true);
+    king.hp = king.maxHp! * 0.3;
+    session.step(0.05, IDLE);
+    expect(king.phase).toBe(2);
+    expect(session.telegraphs.some((telegraph) => telegraph.kind === "boss" && telegraph.shape === "spot")).toBe(true);
   });
 
   it("starts New Game+ only after the final boss", () => {
