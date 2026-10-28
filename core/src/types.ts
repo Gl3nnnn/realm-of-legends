@@ -327,6 +327,7 @@ export interface TelegraphInstance {
   source?: string;
   sourceUid?: string;
   statusEffect?: StatusInstance;
+  damageType?: DamageType;
 }
 
 export interface PetInstance {

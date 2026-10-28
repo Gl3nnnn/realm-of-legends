@@ -85,6 +85,8 @@ export class WorldScene extends Phaser.Scene {
   barFx!: Phaser.GameObjects.Graphics;
   monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private monsterOutlines = new Map<string, Phaser.GameObjects.Sprite>();
+  private monsterShadows = new Map<string, Phaser.GameObjects.Ellipse>();
+  private monsterGlows = new Map<string, Phaser.GameObjects.Ellipse>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -111,6 +113,11 @@ export class WorldScene extends Phaser.Scene {
     this.zoneId = data.session.zone.id;
     this.monsterSprites.clear();
     this.monsterOutlines.clear();
+    this.monsterShadows.clear();
+    this.monsterGlows.clear();
+    this.npcSprites = [];
+    this.statusMarkers.clear();
+    this.eggFollower = undefined;
     this.petSprites.clear();
     this.lootSprites.clear();
     this.chestSprites.clear();
@@ -496,6 +503,7 @@ export class WorldScene extends Phaser.Scene {
       const glow = this.add
         .ellipse(monster.x, monster.y, def.boss ? 60 : 40, def.boss ? 44 : 30, glowColor, def.boss ? 0.35 : 0.25)
         .setDepth(monster.y - 2);
+      this.monsterGlows.set(monster.uid, glow);
       this.tweens.add({
         targets: glow,
         alpha: { from: def.boss ? 0.35 : 0.25, to: def.boss ? 0.12 : 0.08 },
@@ -505,9 +513,12 @@ export class WorldScene extends Phaser.Scene {
         ease: "Sine.easeInOut",
       });
     }
-    this.add
-      .ellipse(monster.x, monster.y + 10, 18, 6, 0x000000, 0.3)
-      .setDepth(monster.y - 1);
+    this.monsterShadows.set(
+      monster.uid,
+      this.add
+        .ellipse(monster.x, monster.y + 10, 18, 6, 0x000000, 0.3)
+        .setDepth(monster.y - 1),
+    );
     // Dark outline behind the sprite so monsters stand out from the ground.
     const outline = this.add
       .sprite(monster.x, monster.y, "monsters", monsterFrame(def.sprite, 0))
@@ -633,13 +644,13 @@ export class WorldScene extends Phaser.Scene {
     this.tweens.timeScale = loadPreferences().reducedMotion ? 0 : 1;
     this.syncGatherSprites();
     this.syncKeybinds();
-    if (this.ui.modalOpen) {
-      this.ui.update(0);
-      return;
-    }
     const pad = this.readGamepad();
     if (pad.menu) {
-      this.ui.openPanel("settings");
+      this.ui.openMenu();
+      return;
+    }
+    if (this.ui.modalOpen) {
+      this.ui.update(0);
       return;
     }
     if (!this.pointerMoved) {
@@ -832,10 +843,17 @@ export class WorldScene extends Phaser.Scene {
       const def = MONSTERS[monster.defId];
       const dead = monster.state === "dead";
       sprite.setVisible(!dead);
-      if (dead) continue;
+      this.monsterShadows.get(monster.uid)?.setVisible(!dead);
+      this.monsterGlows.get(monster.uid)?.setVisible(!dead);
+      if (dead) {
+        this.updateStatusMarkers(monster.uid, monster.x, monster.y, []);
+        continue;
+      }
       activeMonsters.add(monster.uid);
       sprite.setPosition(monster.x, monster.y);
       sprite.setDepth(monster.y);
+      this.monsterShadows.get(monster.uid)?.setPosition(monster.x, monster.y + 10).setDepth(monster.y - 1);
+      this.monsterGlows.get(monster.uid)?.setPosition(monster.x, monster.y).setDepth(monster.y - 2);
       this.monsterOutlines.get(monster.uid)?.setPosition(monster.x, monster.y).setDepth(monster.y - 0.5).setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1))).setFlipX(monster.facing < 0);
       sprite.setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1)));
       sprite.setFlipX(monster.facing < 0);
@@ -852,9 +870,15 @@ export class WorldScene extends Phaser.Scene {
       this.updateStatusMarkers(monster.uid, monster.x, monster.y, [...monster.statuses.map((status) => status.kind), ...(monster.elite ? ["elite"] : [])]);
     }
     for (const [uid, sprite] of this.monsterSprites) {
-      const dead = !activeMonsters.has(uid) && session.monsters.find((m) => m.uid === uid)?.state === "dead";
-      if (dead) sprite.setVisible(false);
+      const monster = session.monsters.find((m) => m.uid === uid);
+      const dead = !activeMonsters.has(uid) && (!monster || monster.state === "dead");
+      if (dead) {
+        sprite.setVisible(false);
+        this.updateStatusMarkers(uid, 0, 0, []);
+      }
       this.monsterOutlines.get(uid)?.setVisible(!dead);
+      this.monsterShadows.get(uid)?.setVisible(!dead);
+      this.monsterGlows.get(uid)?.setVisible(!dead);
     }
 
     const activePets = new Set<string>();
@@ -1427,8 +1451,9 @@ export class WorldScene extends Phaser.Scene {
   private flashMonster(x: number, y: number): void {
     let best: Phaser.GameObjects.Sprite | null = null;
     let bestDistance = 22;
+    const byUid = new Map(this.session.monsters.map((monster) => [monster.uid, monster]));
     for (const [uid, sprite] of this.monsterSprites) {
-      const monster = this.session.monsters.find((entry) => entry.uid === uid);
+      const monster = byUid.get(uid);
       if (!monster) continue;
       const distance = Math.hypot(monster.x - x, monster.y - y);
       if (distance < bestDistance) {

@@ -179,14 +179,13 @@ export function abilityBarHtml(session: GameSession): string {
   return basicSlot + slots;
 }
 
-export function quickbarHtml(session: GameSession): string {
-  const keys = ["Z", "X"];
+export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z", "X"]): string {
   const cooldownPct = Math.min(100, session.potionCooldown * 100);
   return session.save.quickSlots
     .map((itemId, index) => {
       const def = itemId ? getItem(itemId) : null;
       const qty = itemId ? session.countItem(itemId) : 0;
-      const label = def ? `${def.name} · Z/X to use` : "Empty quick slot · bind a potion in your inventory";
+      const label = def ? `${def.name} · ${keys[index]} to use` : "Empty quick slot · bind a potion in your inventory";
       return `<button class="quick-slot ${def ? "filled" : "empty"}" data-quickslot="${index}" title="${esc(label)}" aria-label="${esc(label)}">
         <span class="quick-key">${keys[index]}</span>
         ${def ? `<span class="quick-icon">${itemIconHtml(def.icon, 26)}</span>` : `<span class="quick-empty">+</span>`}
@@ -525,7 +524,8 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
       else if (entry.canTurnIn) action = `<button class="btn small" data-action="turnin-quest" data-quest="${entry.questId}">${t("btnTurnIn")}</button>`;
       else if (state && state.completed && state.completions > 0 && !quest.repeatable) action = `<span class="small muted">Completed</span>`;
       else if (state) action = `<span class="small muted">In progress</span>`;
-      else action = `<span class="small muted">Requires level ${entry.level}</span>`;
+      else if (session.save.level < entry.level) action = `<span class="small muted">Requires level ${entry.level}</span>`;
+      else if (entry.requires.length > 0) action = `<span class="small muted">Requires ${entry.requires.map((id) => QUESTS[id]?.name ?? id).join(", ")}</span>`;
       return `<div class="quest-row ${entry.canTurnIn ? "ready" : ""}">
         <div class="qtitle">${esc(quest.name)} <span class="muted" style="font-size:8px">Lv ${entry.level}</span></div>
         <div class="qdesc">${esc(quest.description)}</div>

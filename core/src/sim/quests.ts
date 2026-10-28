@@ -93,7 +93,7 @@ export function refreshCollectQuests(session: GameSession): void {
   }
 }
 
-export function getNpcQuestStates(session: GameSession, npcId: string): { questId: string; name: string; level: number; state: QuestState | null; available: boolean; canTurnIn: boolean; description: string; repeatable: boolean }[] {
+export function getNpcQuestStates(session: GameSession, npcId: string): { questId: string; name: string; level: number; state: QuestState | null; available: boolean; canTurnIn: boolean; description: string; repeatable: boolean; requires: string[] }[] {
   const npc = NPCS[npcId];
   if (!npc?.quests) return [];
   return npc.quests.map((questId) => {
@@ -101,7 +101,8 @@ export function getNpcQuestStates(session: GameSession, npcId: string): { questI
     const state = session.save.quests.find((q) => q.id === questId) ?? null;
     const available = !state && questUnlocked(session, quest);
     const canTurnIn = Boolean(state && state.completed && (quest.repeatable || state.completions === 0));
-    return { questId, name: quest.name, level: quest.requiresLevel ?? 1, state, available, canTurnIn, description: quest.description, repeatable: Boolean(quest.repeatable) };
+    const requires = (quest.requires ?? []).filter((id) => !session.save.quests.some((q) => q.id === id && q.completions > 0));
+    return { questId, name: quest.name, level: quest.requiresLevel ?? 1, state, available, canTurnIn, description: quest.description, repeatable: Boolean(quest.repeatable), requires };
   });
 }
 
@@ -149,13 +150,17 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
     refreshQuestCompletion(session, state);
     if (!state.completed) return false;
   }
-  if (quest.objectives.some((o) => o.kind === "collect")) {
-    for (const objective of quest.objectives) {
-      if (objective.kind === "collect" && !session.removeItem(objective.itemId, objective.count)) {
-        session.emit({ type: "log", text: `You still need ${objective.count}x ${getItem(objective.itemId).name}.`, tone: "bad" });
-        return false;
-      }
+  const collectObjectives = quest.objectives.filter((objective) => objective.kind === "collect");
+  for (const objective of collectObjectives) {
+    if (objective.kind !== "collect") continue;
+    if (session.countItem(objective.itemId) < objective.count) {
+      session.emit({ type: "log", text: `You still need ${objective.count}x ${getItem(objective.itemId).name}.`, tone: "bad" });
+      return false;
     }
+  }
+  for (const objective of collectObjectives) {
+    if (objective.kind !== "collect") continue;
+    session.removeItem(objective.itemId, objective.count);
   }
   const gold = session.gainGold(quest.rewards.gold);
   session.gainXp(quest.rewards.xp);

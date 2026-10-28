@@ -68,6 +68,7 @@ export const saveSchema = z.object({
   ngPlus: z.number().int().min(0).max(99),
   defeatedBosses: z.array(z.enum(BOSS_IDS)).max(32),
   storyChapter: z.number().int().min(0).max(99),
+  introShown: z.boolean().optional(),
   relationships: z.record(z.string().min(1).max(40), z.number().int().min(-10).max(10)).default({}),
   npcKindRewards: z.array(z.string().min(1)).max(Object.keys(NPCS).length).default([]),
   playtime: z.number().finite().min(0),

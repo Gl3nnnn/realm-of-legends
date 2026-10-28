@@ -6,7 +6,7 @@ import type { DamageType, ItemStack, MonsterInstance, StatusInstance } from "../
 import type { GameSession } from "./GameSession";
 
 // Take damage that already has the hero's own reduction applied; kills the hero when hp reaches 0.
-export function damagePlayer(s: GameSession, raw: number, source: string): void {
+export function damagePlayer(s: GameSession, raw: number, source: string, damageType: DamageType = "physical"): void {
   if (s.dead) return;
   if (s.invulnerable > 0) {
     if (s.perfectDodgeTimer > 0) {
@@ -31,7 +31,7 @@ export function damagePlayer(s: GameSession, raw: number, source: string): void 
   }
   s.save.hp = Math.max(0, s.save.hp - damage);
   s.lastCombat = s.elapsed;
-  if (damage > 0) s.emit({ type: "damage", target: "player", amount: Math.round(damage), crit: false, x: s.save.x, y: s.save.y, damageType: "physical" });
+  if (damage > 0) s.emit({ type: "damage", target: "player", amount: Math.round(damage), crit: false, x: s.save.x, y: s.save.y, damageType });
   if (s.save.hp <= 0) s.killPlayer(source);
 }
 

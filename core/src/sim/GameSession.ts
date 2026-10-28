@@ -182,15 +182,28 @@ export class GameSession {
     if (this.dead) return false;
     if (!["story", "normal", "nightmare"].includes(difficulty)) return false;
     this.save.difficulty = difficulty;
+    const seen = new Set<string>();
     for (const monster of this.monsters) {
-      const def = getMonster(monster.defId);
-      const previousMaxHp = monster.maxHp ?? def.maxHp;
-      const nextMaxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (monster.elite ? 1.6 : 1)));
-      monster.hp = monster.state === "dead" ? 0 : Math.max(1, Math.round(monster.hp / previousMaxHp * nextMaxHp));
-      monster.maxHp = nextMaxHp;
+      seen.add(monster.uid);
+      this.rescaleMonster(monster);
+    }
+    for (const state of this.zoneStates.values()) {
+      for (const monster of state.monsters) {
+        if (seen.has(monster.uid)) continue;
+        seen.add(monster.uid);
+        this.rescaleMonster(monster);
+      }
     }
     this.emit({ type: "log", text: `Difficulty set to ${difficulty}.`, tone: "info" });
     return true;
+  }
+
+  private rescaleMonster(monster: MonsterInstance): void {
+    const def = getMonster(monster.defId);
+    const previousMaxHp = monster.maxHp ?? def.maxHp;
+    const nextMaxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (monster.elite ? 1.6 : 1)));
+    monster.hp = monster.state === "dead" ? 0 : Math.max(1, Math.round(monster.hp / previousMaxHp * nextMaxHp));
+    monster.maxHp = nextMaxHp;
   }
 
   canNewGamePlus(): boolean {
@@ -603,6 +616,7 @@ export class GameSession {
     const player = this.save;
     for (const monster of this.monsters) {
       if (monster.state === "dead") {
+        // Respawn timers only advance for the loaded zone; cached zones resume when re-entered.
         if (monster.respawnTimer > 0) {
           monster.respawnTimer -= dt;
           if (monster.respawnTimer <= 0) this.respawnMonster(monster);
@@ -692,7 +706,7 @@ export class GameSession {
             const poison = monster.elite === "venomous"
               ? { kind: "poison" as const, remaining: 3, value: def.attack * 0.12 }
               : undefined;
-            this.spawnTelegraph(player.x, player.y, 26, raw, 0.4, "spot", 0, def.name, "enemy", monster.uid, poison);
+            this.spawnTelegraph(player.x, player.y, 26, raw, 0.4, "spot", 0, def.name, "enemy", monster.uid, poison, poison ? "poison" : "physical");
           }
         }
       } else if (monster.state === "idle") {
@@ -710,7 +724,7 @@ export class GameSession {
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
         const phase = monster.phase ?? 0;
-        this.spawnTelegraph(player.x, player.y, 62 + phase * 8, def.attack * this.difficultyScale.attack * (1.8 + phase * 0.2), 1.25 - phase * 0.15, this.bossShape(def.id, phase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid);
+        this.spawnTelegraph(player.x, player.y, 62 + phase * 8, def.attack * this.difficultyScale.attack * (1.8 + phase * 0.2), 1.25 - phase * 0.15, this.bossShape(def.id, phase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid, undefined, this.bossDamageType(def.id));
       }
 
       if (def.boss) {
@@ -720,7 +734,7 @@ export class GameSession {
           monster.phase = nextPhase;
           monster.attackTimer = Math.max(monster.attackTimer, 0.8);
           this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
-          this.spawnTelegraph(player.x, player.y, 74 + nextPhase * 12, def.attack * this.difficultyScale.attack * (2.2 + nextPhase * 0.25), Math.max(0.8, 1.5 - nextPhase * 0.2), this.bossShape(def.id, nextPhase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid);
+          this.spawnTelegraph(player.x, player.y, 74 + nextPhase * 12, def.attack * this.difficultyScale.attack * (2.2 + nextPhase * 0.25), Math.max(0.8, 1.5 - nextPhase * 0.2), this.bossShape(def.id, nextPhase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid, undefined, this.bossDamageType(def.id));
           if (def.id === "hollow_king") {
             for (let i = 0; i < nextPhase; i += 1) {
               const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
@@ -749,6 +763,13 @@ export class GameSession {
     return list[Math.min(phase, list.length - 1)]!;
   }
 
+  private bossDamageType(defId: string): DamageType {
+    if (defId === "miremother") return "poison";
+    if (defId === "frost_revenant") return "ice";
+    if (defId === "hollow_king") return "shadow";
+    return "physical";
+  }
+
   private spawnTelegraph(
     x: number,
     y: number,
@@ -761,6 +782,7 @@ export class GameSession {
     kind: TelegraphInstance["kind"] = "boss",
     sourceUid?: string,
     statusEffect?: TelegraphInstance["statusEffect"],
+    damageType: DamageType = "physical",
   ): void {
     const telegraph: TelegraphInstance = {
       uid: this.nextUid("t"),
@@ -776,6 +798,7 @@ export class GameSession {
       source,
       sourceUid,
       statusEffect,
+      damageType,
     };
     this.telegraphs.push(telegraph);
     this.emit({ type: "telegraph", x, y, radius, remaining: delay, shape, angle });
@@ -789,7 +812,7 @@ export class GameSession {
         if (source?.state === "dead") continue;
         if (this.telegraphHits(telegraph)) {
           const wasInvulnerable = this.invulnerable > 0;
-          this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden");
+          this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden", telegraph.damageType ?? "physical");
           if (!wasInvulnerable && !this.dead && telegraph.statusEffect) {
             const existing = this.statuses.find((status) => status.kind === telegraph.statusEffect?.kind);
             if (existing) {
@@ -861,8 +884,8 @@ export class GameSession {
     this.traps = this.traps.filter((trap) => trap.kind !== "snare" || trap.armed);
   }
 
-  damagePlayer(raw: number, source: string): void {
-    combat.damagePlayer(this, raw, source);
+  damagePlayer(raw: number, source: string, damageType: DamageType = "physical"): void {
+    combat.damagePlayer(this, raw, source, damageType);
   }
 
   killPlayer(source: string): void {
@@ -1628,7 +1651,7 @@ export class GameSession {
     return true;
   }
 
-  getNpcQuestStates(npcId: string): { questId: string; name: string; level: number; state: QuestState | null; available: boolean; canTurnIn: boolean; description: string; repeatable: boolean }[] {
+  getNpcQuestStates(npcId: string): { questId: string; name: string; level: number; state: QuestState | null; available: boolean; canTurnIn: boolean; description: string; repeatable: boolean; requires: string[] }[] {
     return quests.getNpcQuestStates(this, npcId);
   }
 

@@ -323,6 +323,21 @@ describe("combat", () => {
     expect(slime.hp / slime.maxHp!).toBeCloseTo(healthRatio);
   });
 
+  it("rescales monsters in cached zones when difficulty changes", () => {
+    const session = forestSession();
+    const forestMonster = session.monsters.find((monster) => monster.defId === "slime")!;
+    const forestMaxHp = forestMonster.maxHp!;
+
+    session.save.zone = "village";
+    session.loadZone();
+    expect(session.setDifficulty("nightmare")).toBe(true);
+
+    session.save.zone = "forest";
+    session.loadZone();
+    const reloaded = session.monsters.find((monster) => monster.uid === forestMonster.uid)!;
+    expect(reloaded.maxHp).toBeGreaterThan(forestMaxHp);
+  });
+
   it("applies partial loot pickups only once", () => {
     const session = forestSession();
     session.save.inventory = session.save.inventory.map(() => ({ itemId: "herb", qty: 50 }));

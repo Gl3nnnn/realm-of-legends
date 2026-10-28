@@ -45,6 +45,11 @@ export class SaveRepository {
     return db.count("characters");
   }
 
+  async ids(): Promise<string[]> {
+    const db = await this.db();
+    return (await db.getAllKeys("characters")) as string[];
+  }
+
   async put(save: CharacterSave): Promise<void> {
     const db = await this.db();
     const existing = await db.get("characters", save.id);

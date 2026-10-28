@@ -115,6 +115,8 @@ export class UIManager {
   private persistTimer: number | null = null;
   private panelOpener: HTMLElement | null = null;
   private minimapCollapsed = false;
+  private storyBox: HTMLElement | null = null;
+  private storyTimer: number | null = null;
 
   private readonly dom = {
     boot: must("boot-screen"),
@@ -175,7 +177,7 @@ export class UIManager {
   }
 
   get modalOpen(): boolean {
-    return this.panel !== null;
+    return this.panel !== null || !this.dom.tutorial.classList.contains("hidden");
   }
 
   get touchVector(): { x: number; y: number } {
@@ -211,6 +213,7 @@ export class UIManager {
   async showCharacterSelect(): Promise<void> {
     this.session = null;
     this.sfx.stopMusic();
+    this.clearStoryBox();
     this.closePanel(false);
     this.dom.hud.classList.add("hidden");
     this.dom.boot.classList.add("hidden");
@@ -290,6 +293,12 @@ export class UIManager {
     }
   }
 
+  /** Opens Settings from the gamepad menu button, dismissing the tutorial first if needed. */
+  openMenu(): void {
+    this.dismissTutorial();
+    this.openPanel("settings");
+  }
+
   private bindEvents(): void {
     must("tutorial-close").addEventListener("click", () => this.dismissTutorial());
     this.dom.quickbar.addEventListener("click", (event) => {
@@ -330,13 +339,7 @@ export class UIManager {
     });
 
     must("btn-import-save").addEventListener("click", () => this.dom.importFile.click());
-    must("minimap-toggle").addEventListener("click", (event) => {
-      this.minimapCollapsed = !this.minimapCollapsed;
-      this.dom.hud.classList.toggle("map-collapsed", this.minimapCollapsed);
-      const button = event.currentTarget as HTMLButtonElement;
-      button.setAttribute("aria-expanded", String(!this.minimapCollapsed));
-      this.updateMinimapLabel();
-    });
+    must("minimap-toggle").addEventListener("click", () => this.toggleMinimap());
 
     this.dom.createPanel.addEventListener("input", (event) => {
       const target = event.target as HTMLInputElement;
@@ -618,10 +621,12 @@ export class UIManager {
     if (!this.session) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      if (this.panel) this.closePanel();
+      if (!this.dom.tutorial.classList.contains("hidden")) this.dismissTutorial();
+      else if (this.panel) this.closePanel();
       else if (!this.session.dead) this.openPanel("settings");
       return;
     }
+    if (!this.dom.tutorial.classList.contains("hidden")) return;
     if (this.panel) return;
     if (event.key === "i" || event.key === "I") {
       event.preventDefault();
@@ -632,6 +637,9 @@ export class UIManager {
     } else if (event.key === "t" || event.key === "T") {
       event.preventDefault();
       this.openPanel("talents");
+    } else if (event.key === "m" || event.key === "M") {
+      event.preventDefault();
+      this.toggleMinimap();
     } else if (keyNameFromEvent(event) === this.preferences.keybinds.quick1 || keyNameFromEvent(event) === this.preferences.keybinds.quick2) {
       event.preventDefault();
       this.session.useQuickSlot(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
@@ -711,6 +719,13 @@ export class UIManager {
     });
   }
 
+  private toggleMinimap(): void {
+    this.minimapCollapsed = !this.minimapCollapsed;
+    this.dom.hud.classList.toggle("map-collapsed", this.minimapCollapsed);
+    must<HTMLButtonElement>("minimap-toggle").setAttribute("aria-expanded", String(!this.minimapCollapsed));
+    this.updateMinimapLabel();
+  }
+
   private updateMinimapLabel(): void {
     const button = must<HTMLButtonElement>("minimap-toggle");
     button.setAttribute("aria-label", t(this.minimapCollapsed ? "minimapShow" : "minimapHide"));
@@ -759,12 +774,15 @@ export class UIManager {
           : [data];
       let imported = 0;
       let failed = 0;
-      const existing = await this.repo.count();
+      const existingIds = new Set(await this.repo.ids());
       for (const entry of raw.slice(0, MAX_CHARACTERS)) {
-        if (existing + imported >= MAX_CHARACTERS) break;
+        if (existingIds.size >= MAX_CHARACTERS) break;
         try {
           const save = migrateSave(entry);
+          const isNew = !existingIds.has(save.id);
+          if (isNew && existingIds.size >= MAX_CHARACTERS) break;
           await this.repo.put(save);
+          existingIds.add(save.id);
           imported += 1;
         } catch {
           failed += 1;
@@ -1091,10 +1109,10 @@ export class UIManager {
   private rebuildQuickbar(): void {
     if (!this.session) return;
     const [a, b] = this.session.save.quickSlots;
-    const signature = `${a ?? ""}:${a ? this.session.countItem(a) : 0}:${b ?? ""}:${b ? this.session.countItem(b) : 0}:${Math.ceil(this.session.potionCooldown * 10)}`;
+    const signature = `${a ?? ""}:${a ? this.session.countItem(a) : 0}:${b ?? ""}:${b ? this.session.countItem(b) : 0}:${Math.ceil(this.session.potionCooldown * 10)}:${this.preferences.keybinds.quick1}:${this.preferences.keybinds.quick2}`;
     if (signature === this.quickbarSignature) return;
     this.quickbarSignature = signature;
-    this.dom.quickbar.innerHTML = quickbarHtml(this.session);
+    this.dom.quickbar.innerHTML = quickbarHtml(this.session, [this.preferences.keybinds.quick1, this.preferences.keybinds.quick2]);
   }
 
   private updateCompass(): void {
@@ -1250,7 +1268,7 @@ export class UIManager {
     }
     if (now - this.lastMinimap > 170) {
       this.lastMinimap = now;
-      this.drawMinimap();
+      if (!this.minimapCollapsed) this.drawMinimap();
     }
     if (dt !== undefined && this.session.dead) {
       this.dom.deathTimer.textContent = String(Math.max(0, Math.ceil(this.session.respawnTimer)));
@@ -1474,13 +1492,24 @@ export class UIManager {
     ctx.fillText(zoneName, 13, 13.5);
   }
 
+  private clearStoryBox(): void {
+    if (this.storyTimer !== null) {
+      window.clearInterval(this.storyTimer);
+      this.storyTimer = null;
+    }
+    this.storyBox?.remove();
+    this.storyBox = null;
+  }
+
   showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {
+    this.clearStoryBox();
     const box = document.createElement("div");
+    this.storyBox = box;
     box.className = "story-box";
     box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">${esc(t("btnContinue"))}</button></div>`;
     const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
     if (bossIndex >= 0 && bossIndex < 4) {
-      portrait.style.backgroundImage = "url(assets/boss-portraits.png)";
+      portrait.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/boss-portraits.png)`;
       portrait.style.backgroundPosition = `${-bossIndex * 100}% 0`;
       portrait.style.backgroundSize = "400% 100%";
     }
@@ -1494,19 +1523,24 @@ export class UIManager {
     const finish = () => {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
+      this.storyTimer = null;
       body.textContent = text;
       closingLine.textContent = closing;
       button.textContent = t("btnContinue");
     };
     button.addEventListener("click", () => {
       if (timer !== null) finish();
-      else box.remove();
+      else {
+        box.remove();
+        this.storyBox = null;
+      }
     });
     timer = window.setInterval(() => {
       index += 1;
       body.textContent = text.slice(0, index);
       if (index >= text.length) finish();
     }, 28);
+    this.storyTimer = timer;
     document.body.appendChild(box);
   }
 

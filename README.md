@@ -1,12 +1,12 @@
 # Realm of Legends
 
-An offline-first, pixel-art action RPG set in Eldoria. Choose from 15 classes, fight through six handcrafted zones, complete quests, and keep every hero in your browser.
+An offline-first, pixel-art action RPG set in Eldoria. Choose from 25 classes, fight through six handcrafted zones, complete quests, and keep every hero in your browser.
 
 No account, backend, or network connection is required after the first load.
 
 ## Features
 
-- 15 playable classes with distinct resources, basic attacks, passives, and five unlockable abilities each
+- 25 playable classes with distinct resources, basic attacks, passives, and five unlockable abilities each
 - Talent trees with five tiers and two choices per tier, plus respec at the trainer
 - Real-time combat with projectiles, telegraphs, traps, status effects, dodge i-frames, and four bosses
 - Elite monsters with Swift, Armored, Venomous, and Volatile affixes

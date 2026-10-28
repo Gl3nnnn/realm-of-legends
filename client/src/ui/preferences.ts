@@ -67,7 +67,7 @@ export const KEYBIND_LABELS: Record<KeybindAction, string> = {
 };
 
 export function isReservedKeybind(key: string): boolean {
-  return key === "ESC" || key === "TAB" || ["I", "Q", "T", "1", "2", "3", "4", "5"].includes(key);
+  return key === "ESC" || key === "TAB" || ["I", "Q", "T", "M", "1", "2", "3", "4", "5"].includes(key);
 }
 
 const STORAGE_KEY = "realm.preferences.v1";
@@ -131,13 +131,16 @@ export function keyNameFromEvent(event: KeyboardEvent): string {
   return VALID_KEY.test(letter) ? letter : "";
 }
 
+let cachedPreferences: GamePreferences | null = null;
+
 export function loadPreferences(): GamePreferences {
+  if (cachedPreferences) return cachedPreferences;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } };
+    if (!raw) return (cachedPreferences = { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } });
     const parsed = JSON.parse(raw) as Partial<GamePreferences>;
     const scale = parsed.uiScale === 1.25 || parsed.uiScale === 1.5 ? parsed.uiScale : 1;
-    return {
+    return (cachedPreferences = {
       uiScale: scale,
       highContrast: Boolean(parsed.highContrast),
       reducedMotion: Boolean(parsed.reducedMotion),
@@ -150,13 +153,14 @@ export function loadPreferences(): GamePreferences {
       language: parsed.language === "tl" ? "tl" : "en",
       keybinds: sanitizeKeybinds(parsed.keybinds),
       padBinds: sanitizePadBinds(parsed.padBinds),
-    };
+    });
   } catch {
-    return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } };
+    return (cachedPreferences = { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } });
   }
 }
 
 export function savePreferences(preferences: GamePreferences): void {
+  cachedPreferences = preferences;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
   } catch {

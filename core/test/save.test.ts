@@ -54,6 +54,17 @@ describe("save validation", () => {
     expect(cloneSave(save)).not.toBe(save);
   });
 
+  it("keeps introShown across a save round-trip", () => {
+    const save = base();
+    save.introShown = true;
+    const copy = JSON.parse(JSON.stringify(save)) as unknown;
+
+    const result = validateSave(copy);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.save.introShown).toBe(true);
+    expect(migrateSave(copy).introShown).toBe(true);
+  });
+
   it("normalizes legacy gold and New Game+ values to supported limits", () => {
     const save = base();
     const migrated = migrateSave({ ...save, gold: MAX_GOLD + 50, ngPlus: 120 });
