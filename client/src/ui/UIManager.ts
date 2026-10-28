@@ -17,6 +17,7 @@ import {
 } from "@realm/core";
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
+import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
 import { classColor, esc, formatNumber, questObjectiveText } from "./helpers";
 import { STORY_CHAPTERS } from "../../../core/src/data/story";
 import {
@@ -188,10 +189,13 @@ export class UIManager {
   private async renderSelect(): Promise<void> {
     try {
       this.saves = await this.repo.list();
-    } catch {
-      this.dom.saveList.innerHTML = `<div class="empty-state">Could not open browser storage. Private browsing may block IndexedDB. Try a normal window.</div>`;
+    } catch (err) {
+      const advice = STORAGE_ADVICE[classifyStorageError(err)];
+      this.dom.saveList.innerHTML = `<div class="empty-state storage-advice"><strong>${esc(advice.title)}</strong><ul>${advice.steps.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>`;
+      this.setSaveStatus("Heroes could not be loaded.", "bad");
       return;
     }
+    this.setSaveStatus("Heroes loaded.", "good");
     this.dom.saveList.innerHTML = characterSelectHtml(this.saves);
     this.dom.saveCount.textContent = `${this.saves.length}/${MAX_CHARACTERS} heroes`;
   }
@@ -652,7 +656,7 @@ export class UIManager {
 
   private async importFile(file: File): Promise<void> {
     if (file.size > IMPORTS_MAX_BYTES) {
-      this.toast("That save file is too large.", "bad");
+      this.toast(`${STORAGE_ADVICE.importFailed.title} The file is larger than 2 MB.`, "bad");
       return;
     }
     try {
@@ -676,13 +680,17 @@ export class UIManager {
         }
       }
       await this.renderSelect();
-      this.toast(
-        imported > 0 ? `Imported ${imported} save${imported === 1 ? "" : "s"}${failed ? `, ${failed} invalid` : ""}.` : "No valid saves found in that file.",
-        imported > 0 ? "good" : "bad",
-      );
+      if (imported > 0) {
+        this.toast(`Imported ${imported} save${imported === 1 ? "" : "s"}${failed ? `, ${failed} invalid` : ""}.`, "good");
+      } else {
+        const advice = STORAGE_ADVICE.importFailed;
+        this.toast(`${advice.title} ${advice.steps[0]}`, "bad");
+      }
       if (this.panel?.kind === "settings") this.renderPanel();
     } catch (err) {
-      this.toast(err instanceof Error ? err.message : "Could not import that file.", "bad");
+      const problem = classifyStorageError(err);
+      const advice = STORAGE_ADVICE[problem === "unknown" ? "importFailed" : problem];
+      this.toast(`${advice.title} ${advice.steps[0]}`, "bad");
     }
   }
 
@@ -1467,10 +1475,22 @@ export class UIManager {
 
   async persist(): Promise<void> {
     if (!this.session || this.session.dead) return;
+    this.setSaveStatus("Saving...", "info");
     try {
       await this.repo.put(this.session.snapshot());
+      this.setSaveStatus(`Saved at ${new Date().toLocaleTimeString()}`, "good");
     } catch (err) {
-      this.toast(err instanceof Error ? err.message : "Autosave failed.", "bad");
+      const problem = classifyStorageError(err);
+      this.setSaveStatus("Not saved. Your last save is still on this device.", "bad");
+      this.toast(storageSummary(problem), "bad");
     }
+  }
+
+  // Shows the current save state in the footer. Screen readers hear it too.
+  private setSaveStatus(text: string, tone: "info" | "good" | "bad"): void {
+    const node = document.getElementById("save-status");
+    if (!node) return;
+    node.textContent = text;
+    node.className = `save-status ${tone}`;
   }
 }
