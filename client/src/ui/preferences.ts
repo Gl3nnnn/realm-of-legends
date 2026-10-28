@@ -24,6 +24,7 @@ export interface GamePreferences {
   touchControls: boolean;
   cameraZoom: 1.5 | 2 | 2.5;
   effectIntensity: 0.5 | 1 | 1.5;
+  language: "en" | "tl";
   keybinds: Keybinds;
   padBinds: Record<KeybindAction, number>;
 }
@@ -76,6 +77,7 @@ const DEFAULTS: GamePreferences = {
   touchControls: false,
   cameraZoom: 2,
   effectIntensity: 1,
+  language: "en",
   keybinds: { ...DEFAULT_KEYBINDS },
   padBinds: { ...DEFAULT_PAD_BINDS },
 };
@@ -129,6 +131,7 @@ export function loadPreferences(): GamePreferences {
       touchControls: Boolean(parsed.touchControls),
       cameraZoom: parsed.cameraZoom === 1.5 || parsed.cameraZoom === 2.5 ? parsed.cameraZoom : 2,
       effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
+      language: parsed.language === "tl" ? "tl" : "en",
       keybinds: sanitizeKeybinds(parsed.keybinds),
       padBinds: sanitizePadBinds(parsed.padBinds),
     };

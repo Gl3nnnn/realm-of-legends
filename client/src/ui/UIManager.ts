@@ -19,6 +19,7 @@ import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
 import { classColor, esc, formatNumber, questObjectiveText } from "./helpers";
+import { t } from "./text";
 import { STORY_CHAPTERS } from "../../../core/src/data/story";
 import {
   abilityBarHtml,
@@ -34,6 +35,7 @@ import {
   type InventoryFilter,
   type InventorySort,
 } from "./screens";
+import { setLanguage } from "./text";
 import {
   DEFAULT_KEYBINDS,
   DEFAULT_PAD_BINDS,
@@ -159,6 +161,7 @@ export class UIManager {
     this.onPlay = options.onPlay;
     this.onExitToMenu = options.onExitToMenu;
     applyPreferences(this.preferences);
+    setLanguage(this.preferences.language);
     this.bindEvents();
 
     window.setInterval(() => {
@@ -392,6 +395,12 @@ export class UIManager {
         const strength = Number(input.value) === 0.5 ? 0.5 : Number(input.value) === 1.5 ? 1.5 : 1;
         this.preferences = updatePreferences({ effectIntensity: strength });
       }
+      if (input.id === "language-select") {
+        const language = input.value === "tl" ? "tl" : "en";
+        this.preferences = updatePreferences({ language });
+        setLanguage(language);
+        this.renderPanel();
+      }
       if (input.id === "difficulty-select" && this.session) {
         this.session.setDifficulty(input.value as "story" | "normal" | "nightmare");
         void this.persist();
@@ -532,21 +541,21 @@ export class UIManager {
       }
       const key = keyNameFromEvent(event);
       if (!key) {
-        this.toast("Use a letter, number, arrow, Space, Shift, or Tab.", "bad");
+        this.toast(t("keyInvalid"), "bad");
         return;
       }
       const action = this.rebinding;
       const keybinds = { ...this.preferences.keybinds, [action]: key };
       const duplicate = (Object.entries(keybinds) as [KeybindAction, string][]).find(([other, value]) => other !== action && value === key);
       if (duplicate) {
-        this.toast(`${key} is already bound to ${KEYBIND_LABELS[duplicate[0]]}. That key was not changed - unbind it there first, or pick another key.`, "bad");
+        this.toast(t("keyTaken", { key, action: KEYBIND_LABELS[duplicate[0]] }), "bad");
         return;
       }
       this.preferences = updatePreferences({ keybinds });
       this.keybindVersion += 1;
       this.rebinding = null;
       this.renderPanel();
-      this.toast(`${KEYBIND_LABELS[action]} bound to ${key}.`, "good");
+      this.toast(t("keyBound", { action: KEYBIND_LABELS[action], key }), "good");
       return;
     }
     const tag = (event.target as HTMLElement | null)?.tagName;
@@ -603,7 +612,7 @@ export class UIManager {
     if (!id) return;
     const save = this.saves.find((s) => s.id === id) ?? (await this.repo.get(id));
     if (!save) {
-      this.toast("That hero could not be found.", "bad");
+      this.toast(t("heroNotFound"), "bad");
       return;
     }
     if (action === "play") {
@@ -613,15 +622,15 @@ export class UIManager {
         await this.onPlay(save);
       } catch {
         this.dom.charSelect.classList.remove("hidden");
-        this.toast("Could not start that hero.", "bad");
+        this.toast(t("heroStartFailed"), "bad");
       }
     } else if (action === "export-save") {
       downloadJson(`realm-${save.name.replace(/[^a-z0-9_-]+/gi, "-")}.json`, save);
-      this.toast("Save exported.", "good");
+      this.toast(t("heroExported"), "good");
     } else if (action === "delete-save") {
       if (!window.confirm(`Delete ${save.name}? This cannot be undone.`)) return;
       await this.repo.delete(save.id);
-      this.toast(`${save.name} was deleted.`, "info");
+      this.toast(t("saveDeleted", { name: save.name }), "info");
       await this.renderSelect();
     }
   }
@@ -681,7 +690,7 @@ export class UIManager {
       }
       await this.renderSelect();
       if (imported > 0) {
-        this.toast(`Imported ${imported} save${imported === 1 ? "" : "s"}${failed ? `, ${failed} invalid` : ""}.`, "good");
+        this.toast(`${t("importedSaves", { imported, saveWord: imported === 1 ? "save" : "saves" })}${failed ? t("importedInvalid", { failed }) : ""}.`, "good");
       } else {
         const advice = STORAGE_ADVICE.importFailed;
         this.toast(`${advice.title} ${advice.steps[0]}`, "bad");
@@ -764,7 +773,7 @@ export class UIManager {
       if (performance.now() - started > 8000) {
         this.padListening = null;
         this.renderPanel();
-        this.toast("No gamepad button pressed. Try again.", "bad");
+        this.toast(t("gamepadNoButton"), "bad");
         return;
       }
       const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
@@ -775,12 +784,12 @@ export class UIManager {
         this.padListening = null;
         if (holder) {
           this.renderPanel();
-          this.toast(`Button ${index} is already used by ${KEYBIND_LABELS[holder[0]]}. Pick another.`, "bad");
+          this.toast(t("gamepadTaken", { index, action: KEYBIND_LABELS[holder[0]] }), "bad");
           return;
         }
         this.preferences = updatePreferences({ padBinds: { ...this.preferences.padBinds, [action]: index } });
         this.renderPanel();
-        this.toast(`${KEYBIND_LABELS[action]} set to gamepad button ${index}.`, "good");
+        this.toast(t("gamepadBound", { action: KEYBIND_LABELS[action], index }), "good");
         return;
       }
       window.requestAnimationFrame(poll);
@@ -807,14 +816,14 @@ export class UIManager {
     if (action === "reset-pad") {
       this.preferences = updatePreferences({ padBinds: { ...DEFAULT_PAD_BINDS } });
       this.renderPanel();
-      this.toast("Gamepad buttons restored to defaults.", "good");
+      this.toast(t("gamepadReset"), "good");
       return;
     }
     if (action === "reset-keys") {
       this.preferences = updatePreferences({ keybinds: { ...DEFAULT_KEYBINDS } });
       this.keybindVersion += 1;
       this.renderPanel();
-      this.toast("Keybinds restored to defaults.", "good");
+      this.toast(t("keybindsReset"), "good");
       return;
     }
     if (action === "reset-tutorial") {
@@ -841,14 +850,14 @@ export class UIManager {
       if (this.session) {
         const save = this.session.snapshot();
         downloadJson(`realm-${save.name.replace(/[^a-z0-9_-]+/gi, "-")}.json`, save);
-        this.toast("Hero exported.", "good");
+        this.toast(t("heroExported"), "good");
       }
       return;
     }
     if (action === "export-all") {
       const saves = await this.repo.list();
       downloadJson("realm-of-legends-saves.json", { version: 1, saves });
-      this.toast(`Exported ${saves.length} save${saves.length === 1 ? "" : "s"}.`, "good");
+      this.toast(t("savesExported", { count: saves.length, saveWord: saves.length === 1 ? "save" : "saves" }), "good");
       return;
     }
     if (action === "import-file") {
@@ -870,7 +879,7 @@ export class UIManager {
       await this.repo.delete(this.session.save.id);
       this.closePanel(false);
       this.onExitToMenu();
-      this.toast(`${name} was deleted.`, "info");
+      this.toast(t("saveDeleted", { name }), "info");
       await this.showCharacterSelect();
       return;
     }
@@ -880,7 +889,7 @@ export class UIManager {
       if (this.session.startNewGamePlus()) {
         await this.persist();
         this.closePanel();
-        this.toast(`New Game+ ${this.session.save.ngPlus} begins.`, "good");
+        this.toast(t("ngPlusBegins", { cycle: this.session.save.ngPlus }), "good");
       }
       return;
     }
@@ -1301,7 +1310,7 @@ export class UIManager {
   showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {
     const box = document.createElement("div");
     box.className = "story-box";
-    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">Continue</button></div>`;
+    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">${esc(t("btnContinue"))}</button></div>`;
     const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
     if (bossIndex >= 0 && bossIndex < 4) {
       portrait.style.backgroundImage = "url(assets/boss-portraits.png)";
@@ -1320,7 +1329,7 @@ export class UIManager {
       timer = null;
       body.textContent = text;
       closingLine.textContent = closing;
-      button.textContent = "Continue";
+      button.textContent = t("btnContinue");
     };
     button.addEventListener("click", () => {
       if (timer !== null) finish();
@@ -1364,7 +1373,7 @@ export class UIManager {
         case "death":
           if (event.who === "player") {
             this.sfx.death();
-            this.toast("You have fallen. Returning to Eldoria Village...", "bad");
+            this.toast(t("fallen"), "bad");
           } else if (event.defId && MONSTERS[event.defId]?.boss) {
             this.pushLog(`${MONSTERS[event.defId].name} has been defeated!`, "quest");
             this.sfx.level();
@@ -1373,7 +1382,7 @@ export class UIManager {
           break;
         case "levelup":
           this.pushLog(`Level up! You are now level ${event.level}.`, "good");
-          this.toast(`Level ${event.level}!`, "good");
+          this.toast(t("levelUp", { level: event.level }), "good");
           this.sfx.level();
           this.abilitySignature = "";
           shouldPersist = true;
@@ -1385,7 +1394,7 @@ export class UIManager {
           shouldPersist = true;
           break;
         case "zone":
-          this.toast(`Entered ${session.zone.name}.`, "info");
+          this.toast(t("enteredZone", { zone: session.zone.name }), "info");
           this.sfx.portal();
           this.minimapZone = null;
           shouldPersist = true;
@@ -1416,7 +1425,7 @@ export class UIManager {
           this.sfx.cast();
           break;
         case "respawn":
-          this.toast("Elara's light restores you.", "good");
+          this.toast(t("elaraRestores"), "good");
           this.sfx.heal();
           shouldPersist = true;
           break;

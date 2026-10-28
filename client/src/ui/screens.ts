@@ -28,6 +28,7 @@ import {
   type ItemStack,
 } from "@realm/core";
 import { KEYBIND_LABELS, type GamePreferences, type KeybindAction } from "./preferences";
+import { t } from "./text";
 import {
   abilityIconHtml,
   charIconHtml,
@@ -59,9 +60,9 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
             <span class="gold">${formatNumber(save.gold)} gold</span>
           </div>
           <div class="card-actions">
-            <button class="btn small" data-action="play" data-id="${esc(save.id)}">Play</button>
-            <button class="btn ghost small" data-action="export-save" data-id="${esc(save.id)}">Export</button>
-            <button class="btn ghost small" data-action="delete-save" data-id="${esc(save.id)}">Delete</button>
+            <button class="btn small" data-action="play" data-id="${esc(save.id)}">${t("btnPlay")}</button>
+            <button class="btn ghost small" data-action="export-save" data-id="${esc(save.id)}">${t("btnExport")}</button>
+            <button class="btn ghost small" data-action="delete-save" data-id="${esc(save.id)}">${t("btnDelete")}</button>
           </div>
         </div>
       </article>`;
@@ -81,7 +82,7 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
 export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "all"): string {
   const roles = Array.from(new Set(CLASS_LIST.map((def) => def.role)));
   const filterButtons = ["all", ...roles]
-    .map((role) => `<button class="chip-btn ${roleFilter === role ? "active" : ""}" data-action="class-role-filter" data-value="${esc(role)}">${role === "all" ? "All" : esc(role)}</button>`)
+    .map((role) => `<button class="chip-btn ${roleFilter === role ? "active" : ""}" data-action="class-role-filter" data-value="${esc(role)}">${role === "all" ? t("labelAll") : esc(role)}</button>`)
     .join("");
   const visibleClasses = CLASS_LIST.filter((def) => roleFilter === "all" || def.role === roleFilter);
   const cards = visibleClasses.map((def) => {
@@ -115,8 +116,8 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
       <div id="create-error" class="small" style="color:#ff9fa0;min-height:16px"></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" data-action="create-character">Enter Eldoria</button>
-      <button class="btn ghost" data-action="cancel-create">Back</button>
+      <button class="btn" data-action="create-character">${t("btnEnterEldoria")}</button>
+      <button class="btn ghost" data-action="cancel-create">${t("btnBack")}</button>
     </div>
   </div>
   <div>
@@ -469,7 +470,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
         .map((_, i) => objectiveRow(entry.questId, state?.progress[i] ?? 0, i))
         .join("");
       let action = "";
-      if (entry.available) action = `<button class="btn small" data-action="accept-quest" data-quest="${entry.questId}">Accept quest</button>`;
+      if (entry.available) action = `<button class="btn small" data-action="accept-quest" data-quest="${entry.questId}">${t("btnAcceptQuest")}</button>`;
       else if (state && state.claimedReward !== undefined && quest.choose) {
         const claimed = quest.choose[state.claimedReward];
         const label = claimed ? `${claimed.icon ?? "🎁"} Reward claimed` : "Reward claimed";
@@ -485,7 +486,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
           })
           .join("")}</div>`;
       }
-      else if (entry.canTurnIn) action = `<button class="btn small" data-action="turnin-quest" data-quest="${entry.questId}">Turn in</button>`;
+      else if (entry.canTurnIn) action = `<button class="btn small" data-action="turnin-quest" data-quest="${entry.questId}">${t("btnTurnIn")}</button>`;
       else if (state && state.completed && state.completions > 0 && !quest.repeatable) action = `<span class="small muted">Completed</span>`;
       else if (state) action = `<span class="small muted">In progress</span>`;
       else action = `<span class="small muted">Requires level ${entry.level}</span>`;
@@ -528,8 +529,8 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
-    ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>Heal for ${session.healCost()} gold</button>` : ""}
-    <button class="btn ghost" data-action="close-panel">Leave</button>
+    ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>` : ""}
+    <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
   </div>`;
 }
 
@@ -617,14 +618,20 @@ export function settingsPanelHtml(
             <option value="1.5" ${preferences.effectIntensity === 1.5 ? "selected" : ""}>Bold</option>
           </select>
         </label>
-        <button class="btn ghost small" data-action="reset-tutorial">Show tutorial again</button>
+        <label class="small">Language
+          <select id="language-select">
+            <option value="en" ${preferences.language === "en" ? "selected" : ""}>English</option>
+            <option value="tl" ${preferences.language === "tl" ? "selected" : ""}>Tagalog</option>
+          </select>
+        </label>
+        <button class="btn ghost small" data-action="reset-tutorial">${t("btnShowTutorial")}</button>
       </div>
     </div>
     <div class="setting-row">
       <div><strong>Keybinds</strong><div class="small muted">Click a binding, then press a key. Arrow keys always move.</div></div>
       <div class="keybind-grid">
         ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${rebinding === action ? "listening" : ""}" data-action="rebind-key" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${rebinding === action ? "Press a key" : preferences.keybinds[action]}</b></button>`).join("")}
-        <button class="btn ghost small" data-action="reset-keys">Reset keybinds</button>
+        <button class="btn ghost small" data-action="reset-keys">${t("btnResetKeybinds")}</button>
       </div>
       <div class="small muted">If two actions share a key, the new key is refused and the message says which action already has it.</div>
     </div>
@@ -632,7 +639,7 @@ export function settingsPanelHtml(
       <div><strong>Gamepad buttons</strong><div class="small muted">Click a button, then press the gamepad button you want. Sticks always move and aim.</div></div>
       <div class="keybind-grid">
         ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${padListening === action ? "listening" : ""}" data-action="rebind-pad" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${padListening === action ? "Press a button" : `Button ${preferences.padBinds[action]}`}</b></button>`).join("")}
-        <button class="btn ghost small" data-action="reset-pad">Reset gamepad</button>
+        <button class="btn ghost small" data-action="reset-pad">${t("btnResetGamepad")}</button>
       </div>
     </div>
     ${session ? `<div class="setting-row">
@@ -650,11 +657,11 @@ export function settingsPanelHtml(
     <div class="setting-row">
       <div><strong>${esc(session.save.name)}</strong><div class="small muted">${classInfo?.name} · Level ${session.save.level} · ${esc(session.zone.name)}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn ghost small" data-action="export-current">Export hero</button>
-        <button class="btn ghost small" data-action="export-all">Export all</button>
-        <button class="btn ghost small" data-action="import-file">Import saves</button>
-        <button class="btn ghost small" data-action="return-menu">Character select</button>
-        <button class="btn danger small" data-action="delete-current">Delete hero</button>
+        <button class="btn ghost small" data-action="export-current">${t("btnExportHero")}</button>
+        <button class="btn ghost small" data-action="export-all">${t("btnExportAll")}</button>
+        <button class="btn ghost small" data-action="import-file">${t("btnImportSaves")}</button>
+        <button class="btn ghost small" data-action="return-menu">${t("btnCharacterSelect")}</button>
+        <button class="btn danger small" data-action="delete-current">${t("btnDeleteHero")}</button>
       </div>
     </div>` : ""}
     <div>
