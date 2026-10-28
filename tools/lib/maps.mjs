@@ -377,7 +377,7 @@ function dungeonMap() {
   for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.35) m.setGround(x, y, TILE.caveFloor2);
   for (let y = 0; y < m.h; y += 1) for (let x = 0; x < m.w; x += 1) if (r() < 0.1) m.setGround(x, y, TILE.dirt);
   m.rectGround(20, 18, 13, 11, TILE.caveFloor);
-  m.roomWalls(17, 3, 19, 14);
+  m.roomWalls(15, 2, 23, 16);
   m.roomWalls(4, 17, 12, 11);
   m.roomWalls(37, 17, 12, 11);
   m.roomWalls(20, 18, 13, 11);
@@ -394,6 +394,9 @@ function dungeonMap() {
   }
   for (const [x, y] of [[17, 5], [35, 5], [17, 14], [35, 14], [5, 20], [14, 20], [38, 20], [47, 20], [21, 19], [31, 19], [21, 27], [31, 27]]) m.setDecor(x, y, TILE.torch, false);
   m.setDecor(26, 4, TILE.rug, false);
+  m.setDecor(25, 6, TILE.torch, false);
+  m.setDecor(27, 6, TILE.torch, false);
+  m.setDecor(26, 12, TILE.rug, false);
   m.setDecor(25, 35, TILE.stairs, false);
   m.setDecor(26, 35, TILE.stairs, false);
   m.setDecor(27, 35, TILE.stairs, false);
@@ -406,6 +409,10 @@ function dungeonMap() {
   m.setDecor(44, 24, TILE.chest, true);
   m.setDecor(16, 9, TILE.crate, true);
   m.setDecor(36, 25, TILE.barrel, true);
+  m.setDecor(18, 4, TILE.rock, true);
+  m.setDecor(34, 4, TILE.rock, true);
+  m.setDecor(18, 14, TILE.rock, true);
+  m.setDecor(34, 14, TILE.rock, true);
   m.setDecor(26, 6, TILE.sign, true);
   const boss = [26, 9];
   const skeletons = [[10, 22], [21, 24], [30, 21], [43, 22], [14, 9], [39, 8]];

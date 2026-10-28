@@ -66,6 +66,54 @@ export const NPCS: Record<string, NpcDef> = {
     quests: ["wardens_end", "miremother_fall", "frost_revenant_end", "kings_end"],
     trainer: true,
   },
+  tobin: {
+    id: "tobin",
+    name: "Tobin",
+    role: "Lost Hunter",
+    sprite: "guard",
+    color: "#6b8f4e",
+    dialogue: [
+      "My brother Wade went into the trees chasing a stag. He never came back.",
+      "You look like you can handle yourself. If you see Wade, tell him the stew is getting cold.",
+      "Wade is out there somewhere. Thank you for not giving up on him.",
+    ],
+  },
+  wenna: {
+    id: "wenna",
+    name: "Old Wenna",
+    role: "Bog Witch",
+    sprite: "healer",
+    color: "#5e7a4a",
+    dialogue: [
+      "The marsh remembers everything it swallows. Mind where you step.",
+      "The Miremother was a mother once. Her grief rotted into something hungry.",
+      "You have seen the bog's true face and walked on anyway. The marsh will hear of it.",
+    ],
+  },
+  ysolde: {
+    id: "ysolde",
+    name: "Ysolde",
+    role: "Frostfell Scout",
+    sprite: "trainer",
+    color: "#7fb3d5",
+    dialogue: [
+      "Keep moving or the cold will settle in your bones and stay there.",
+      "The Frost Revenant came out of the ice the night the watchtower fell. I still hear its call.",
+      "You stood against the ice when no one else would. I will tell the others the wastes can be crossed.",
+    ],
+  },
+  aldric: {
+    id: "aldric",
+    name: "Sir Aldric",
+    role: "Restless Knight",
+    sprite: "guard",
+    color: "#9a9ab0",
+    dialogue: [
+      "I guarded this throne for my king. Now I guard only the silence.",
+      "The Hollow King spoke to me in his own voice. I wish I had not listened.",
+      "Mercy at last. Go, and tell the living that the throne is empty.",
+    ],
+  },
 };
 
 export const NPCS_LIST = Object.values(NPCS);

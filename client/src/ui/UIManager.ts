@@ -1108,14 +1108,14 @@ export class UIManager {
       base.height = h;
       const bctx = base.getContext("2d");
       if (!bctx) return;
-      bctx.fillStyle = "#6e6150";
+      bctx.fillStyle = "#8c7b5e";
       bctx.fillRect(0, 0, w, h);
       const sx = w / zone.width;
       const sy = h / zone.height;
       for (let y = 0; y < zone.height; y += 1) {
         for (let x = 0; x < zone.width; x += 1) {
           if (!zone.blocked[y * zone.width + x]) continue;
-          bctx.fillStyle = (x + y) % 2 === 0 ? "#2a2319" : "#322a1f";
+          bctx.fillStyle = (x + y) % 2 === 0 ? "#1f1a13" : "#27211a";
           bctx.fillRect(Math.floor(x * sx), Math.floor(y * sy), Math.ceil(sx), Math.ceil(sy));
         }
       }
@@ -1152,14 +1152,29 @@ export class UIManager {
     }
     const youX = px(session.save.x);
     const youY = py(session.save.y);
+    ctx.strokeStyle = "rgba(255, 244, 207, 0.9)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(youX, youY, 8, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.fillStyle = "#fff4cf";
-    ctx.fillRect(youX - 4, youY - 4, 8, 8);
+    ctx.beginPath();
+    ctx.arc(youX, youY, 4.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
-    ctx.strokeRect(youX - 4, youY - 4, 8, 8);
-    ctx.strokeStyle = "#fff4cf";
+    ctx.stroke();
+    const zoneName = zone.name;
+    ctx.font = "bold 9px Georgia, serif";
+    const labelWidth = ctx.measureText(zoneName).width + 14;
+    ctx.fillStyle = "rgba(20, 15, 10, 0.78)";
+    ctx.fillRect(6, 6, labelWidth, 15);
+    ctx.strokeStyle = "#b89a5a";
     ctx.lineWidth = 1;
-    ctx.strokeRect(youX - 7.5, youY - 7.5, 15, 15);
+    ctx.strokeRect(6.5, 6.5, labelWidth - 1, 14);
+    ctx.fillStyle = "#f3e3b0";
+    ctx.textBaseline = "middle";
+    ctx.fillText(zoneName, 13, 13.5);
   }
 
   showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {

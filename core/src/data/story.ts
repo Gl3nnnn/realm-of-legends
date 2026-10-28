@@ -44,7 +44,7 @@ export const STORY_CHAPTERS: StoryChapter[] = [
   {
     id: 3,
     act: 2,
-    bossId: "ice_revenant",
+    bossId: "frost_revenant",
     title: "The Frozen Wastes",
     text: "A hunter lost to the Hollow King's call still stands watch in the snow. Ending his watch may be the only mercy left to him.",
     closing: "The hunter's watch is over. The snow falls softly now."

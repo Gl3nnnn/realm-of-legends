@@ -691,10 +691,10 @@ input[type="text"]:focus {
   width: 264px;
   height: 198px;
   image-rendering: pixelated;
-  border: 2px solid #b89a5a;
-  border-radius: 6px;
-  background: #2a2319;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.6);
+  border: 2px solid #c9a95f;
+  border-radius: 8px;
+  background: #8c7b5e;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 230, 170, 0.18);
 }
 
 .minimap-key {
