@@ -83,6 +83,7 @@ const classes: ClassDef[] = [
       skill("shield_bash", "Shield Bash", "shield", "Slam your shield into a nearby foe, stunning it briefly.", 12, 6, 62, 1, "melee", [
         dmg(14, 0.9, "physical"),
         { kind: "stun", duration: 0.6 },
+        { kind: "knockback" },
       ]),
       skill("whirlwind", "Whirlwind", "whirlwind", "Spin with your weapon, striking every enemy around you.", 20, 9, 0, 3, "self", [
         dmg(18, 1.1, "physical", 74),

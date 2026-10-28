@@ -93,7 +93,8 @@ export type EffectKind =
   | "summon"
   | "trap"
   | "shield"
-  | "mark";
+  | "mark"
+  | "knockback";
 
 export interface AbilityEffect {
   kind: EffectKind;
@@ -277,6 +278,9 @@ export interface ProjectileInstance {
   color: string;
   statuses: StatusInstance[];
   owner: "player" | "pet";
+  hit?: boolean;
+  missLogged?: boolean;
+  abilityName?: string;
 }
 
 export interface GroundLoot {

@@ -9,3 +9,6 @@ coverage/
 Thumbs.db
 playwright-report/
 test-results/
+
+# HORMACHUELOS: the AI's notes about this project stay on this PC
+.hormachuelos/memory.md

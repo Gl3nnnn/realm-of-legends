@@ -331,6 +331,57 @@ export class GameSession {
     return false;
   }
 
+  // Pushes a monster gently away from any other living monster standing too close,
+  // so a crowd spreads out instead of stacking on one spot.
+  private separationFrom(self: MonsterInstance, radius: number): { x: number; y: number } {
+    let px = 0;
+    let py = 0;
+    const gap = radius * 2.2;
+    for (const other of this.monsters) {
+      if (other === self || other.state === "dead") continue;
+      const dx = self.x - other.x;
+      const dy = self.y - other.y;
+      const d = length(dx, dy);
+      if (d <= 0 || d >= gap) continue;
+      const weight = (gap - d) / gap;
+      px += (dx / d) * weight;
+      py += (dy / d) * weight;
+    }
+    const m = length(px, py);
+    if (m === 0) return { x: 0, y: 0 };
+    const strength = Math.min(1, m) * 0.6;
+    return { x: (px / m) * strength, y: (py / m) * strength };
+  }
+
+  // When the straight line to the target is blocked by a wall, pick the nearby
+  // direction that gets closest to the target without being blocked, so monsters
+  // walk round obstacles instead of sliding into them.
+  private routeAround(
+    entity: { x: number; y: number },
+    target: { x: number; y: number },
+    radius: number,
+  ): { x: number; y: number } {
+    const dir = normalize(target.x - entity.x, target.y - entity.y);
+    const step = radius * 1.5;
+    if (!this.isBlockedAt(entity.x + dir.x * step, entity.y + dir.y * step, radius)) return dir;
+    let best = { x: 0, y: 0 };
+    let bestDist = dist2(entity.x, entity.y, target.x, target.y);
+    for (let i = 0; i < 16; i += 1) {
+      const angle = (i / 16) * Math.PI * 2;
+      const cx = Math.cos(angle);
+      const cy = Math.sin(angle);
+      const nx = entity.x + cx * step;
+      const ny = entity.y + cy * step;
+      if (this.isBlockedAt(nx, ny, radius)) continue;
+      const d = dist2(nx, ny, target.x, target.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { x: cx, y: cy };
+      }
+    }
+    return best;
+  }
+
   private moveEntity(entity: { x: number; y: number }, dx: number, dy: number, radius: number): boolean {
     let moved = false;
     if (dx !== 0 && !this.isBlockedAt(entity.x + dx, entity.y, radius)) {
@@ -497,8 +548,9 @@ export class GameSession {
         if (playerDist <= def.attackRange + PLAYER_RADIUS) {
           monster.state = "attack";
         } else {
-          const dir = normalize(player.x - monster.x, player.y - monster.y);
-          this.moveEntity(monster, dir.x * speed * dt, dir.y * speed * dt, def.radius);
+          const dir = this.routeAround(monster, player, def.radius);
+          const sep = this.separationFrom(monster, def.radius);
+          this.moveEntity(monster, (dir.x + sep.x) * speed * dt, (dir.y + sep.y) * speed * dt, def.radius);
           monster.facing = dir.x >= 0 ? 1 : -1;
           if (leashDist > def.leashRadius * 1.4) monster.state = "return";
         }
@@ -684,7 +736,7 @@ export class GameSession {
     this.pets = [];
     this.projectiles = [];
     this.emit({ type: "death", who: "player", x: this.save.x, y: this.save.y });
-    this.emit({ type: "log", text: "You have fallen. Returning to the village...", tone: "bad" });
+    this.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
   }
 
   private respawn(): void {
@@ -827,6 +879,7 @@ export class GameSession {
       projectile.y += projectile.dirY * projectile.speed * dt;
       if (this.isBlockedAt(projectile.x, projectile.y, projectile.radius)) {
         projectile.ttl = 0;
+        this.logArrowMiss(projectile);
         continue;
       }
       for (const monster of this.monsters) {
@@ -834,12 +887,23 @@ export class GameSession {
         const def = getMonster(monster.defId);
         if (dist2(projectile.x, projectile.y, monster.x, monster.y) <= (projectile.radius + def.radius) ** 2) {
           this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses);
+          projectile.hit = true;
           projectile.ttl = 0;
           break;
         }
       }
+      if (projectile.ttl <= 0 && !projectile.hit && !projectile.missLogged) {
+        this.logArrowMiss(projectile);
+      }
     }
     this.projectiles = this.projectiles.filter((p) => p.ttl > 0);
+  }
+
+  private logArrowMiss(projectile: ProjectileInstance): void {
+    if (projectile.hit || projectile.missLogged) return;
+    projectile.missLogged = true;
+    const name = projectile.abilityName ?? "Your arrow";
+    this.emit({ type: "log", text: `${name} missed: no enemy was hit.`, tone: "info" });
   }
 
   private updateLoot(dt: number): void {
@@ -960,6 +1024,11 @@ export class GameSession {
     }
     const dir = normalize(aim.x - this.save.x, aim.y - this.save.y);
     this.lastAim = dir;
+    // Face the aim for every skill, so ranged casts turn the character the same way melee does.
+    if (dir.x !== 0 || dir.y !== 0) {
+      if (Math.abs(dir.x) > Math.abs(dir.y)) this.facing = dir.x > 0 ? "right" : "left";
+      else this.facing = dir.y > 0 ? "down" : "up";
+    }
     this.save.resource -= ability.cost;
     this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
@@ -1048,6 +1117,7 @@ export class GameSession {
       this.projectiles.push({
         uid: this.nextUid("p"),
         abilityId: ability.id,
+        abilityName: ability.name,
         x: this.save.x + aimX * 14,
         y: this.save.y + aimY * 14,
         dirX: aimX,
@@ -1068,6 +1138,9 @@ export class GameSession {
   private castPoint(ability: AbilityDef, point: Vec2): void {
     const radius = ability.effects.find((e) => e.radius)?.radius ?? 40;
     const targets = this.monsters.filter((m) => m.state !== "dead" && dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2);
+    if (targets.length === 0) {
+      this.emit({ type: "log", text: `${ability.name} missed: nothing was in the area.`, tone: "info" });
+    }
     this.applyEffects(ability, targets, point);
   }
 
@@ -1093,6 +1166,7 @@ export class GameSession {
       : [];
     if (targets.length === 0) {
       if (ability.targeting === "melee" && dir.x !== 0) this.facing = dir.x > 0 ? "right" : "left";
+      this.emit({ type: "log", text: `${ability.name} missed: no enemy within reach.`, tone: "info" });
     }
     this.applyEffects(ability, targets, primary ? { x: primary.x, y: primary.y } : { x: this.save.x + dir.x * 30, y: this.save.y + dir.y * 30 });
   }
@@ -1126,6 +1200,14 @@ export class GameSession {
         this.emit({ type: "log", text: `A shield absorbs incoming damage.`, tone: "good" });
       } else if (effect.kind === "summon") {
         this.summon(effect);
+      } else if (effect.kind === "knockback") {
+        // Pushes each target away from the centre of the hit by its distance.
+        const push = effect.amount ?? 40;
+        for (const target of targets) {
+          const away = normalize(target.x - center.x, target.y - center.y);
+          target.x += away.x * push;
+          target.y += away.y * push;
+        }
       } else if (effect.kind === "dash") {
         this.dash(effect.amount ?? 80);
       } else if (effect.kind === "trap") {
