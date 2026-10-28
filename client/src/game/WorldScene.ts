@@ -273,24 +273,26 @@ export class WorldScene extends Phaser.Scene {
 
   private createPortals(): void {
     const highContrast = loadPreferences().highContrast;
-    for (const portal of this.session.zone.portals) {
-      const cx = portal.x + portal.w / 2;
-      const cy = portal.y + portal.h / 2;
-      const pad = this.add.rectangle(cx, cy, portal.w, portal.h, 0x7a5ac0, 0.2).setDepth(2);
-      pad.setStrokeStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xe8c05a, 0.9);
-      this.tweens.add({ targets: pad, alpha: { from: 0.35, to: 0.9 }, duration: 1200, yoyo: true, repeat: -1 });
-      this.add
-        .text(cx, portal.y - 6, portal.label, {
-          fontFamily: '"Press Start 2P", monospace',
-          fontSize: "6px",
-          color: highContrast ? "#ffffff" : "#e8c05a",
-          stroke: "#000000",
-          strokeThickness: 3,
-          align: "center",
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(9200);
-    }
+    for (const portal of this.session.zone.portals) this.createPortal(portal, highContrast);
+  }
+
+  private createPortal(portal: (typeof this.session.zone.portals)[number], highContrast = loadPreferences().highContrast): void {
+    const cx = portal.x + portal.w / 2;
+    const cy = portal.y + portal.h / 2;
+    const pad = this.add.rectangle(cx, cy, portal.w, portal.h, 0x7a5ac0, 0.2).setDepth(2);
+    pad.setStrokeStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xe8c05a, 0.9);
+    this.tweens.add({ targets: pad, alpha: { from: 0.35, to: 0.9 }, duration: 1200, yoyo: true, repeat: -1 });
+    this.add
+      .text(cx, portal.y - 6, portal.label, {
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "6px",
+        color: highContrast ? "#ffffff" : "#e8c05a",
+        stroke: "#000000",
+        strokeThickness: 3,
+        align: "center",
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(9200);
   }
 
   private createChests(): void {
@@ -782,6 +784,10 @@ export class WorldScene extends Phaser.Scene {
                 this.tallTileSprites.delete(`${x},${y}`);
               }
             }
+            if (event.portal && !this.session.zone.portals.some((portal) => portal.id === event.portal!.id)) {
+              this.session.zone.portals.push(event.portal);
+            }
+            if (event.portal) this.createPortal(event.portal);
           }
           break;
         default:

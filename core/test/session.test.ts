@@ -1409,12 +1409,15 @@ describe("Sunken Barrow boss passage", () => {
 
     expect(session.zone.blocked[gateIndex]).toBe(true);
     expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(false);
+    expect(session.zone.portals.some((portal) => portal.targetZone === "marsh")).toBe(false);
 
     session.hitMonster(boss, 1_000_000, false, "holy", []);
 
     expect(session.zone.blocked[gateIndex]).toBe(false);
     expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(true);
-    expect(session.drainEvents().some((event) => event.type === "passage" && event.zone === "dungeon")).toBe(true);
+    const events = session.drainEvents();
+    expect(events.some((event) =>
+      event.type === "passage" && event.zone === "dungeon" && event.portal?.targetZone === "marsh")).toBe(true);
 
     session.save.zone = "forest";
     session.loadZone();
@@ -1423,5 +1426,12 @@ describe("Sunken Barrow boss passage", () => {
 
     expect(session.zone.blocked[gateIndex]).toBe(false);
     expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(true);
+    const marshPortal = session.zone.portals.find((portal) => portal.id === "to_marsh_after_warden");
+    expect(marshPortal?.label).toBe("Ashen Marsh");
+
+    session.save.x = marshPortal!.x + marshPortal!.w / 2;
+    session.save.y = marshPortal!.y + marshPortal!.h / 2;
+    expect(session.interact()?.id).toBe("to_marsh_after_warden");
+    expect(session.save.zone).toBe("marsh");
   });
 });

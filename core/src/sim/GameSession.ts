@@ -319,9 +319,21 @@ export class GameSession {
     for (let row = y; row < y + height; row += 1) {
       this.zone.blocked[row * this.zone.width + x] = false;
     }
+    const portal = this.zone.portals.find((entry) => entry.id === "to_marsh_after_warden") ?? {
+      id: "to_marsh_after_warden",
+      x: 45 * this.zone.tileWidth,
+      y: 21 * this.zone.tileHeight,
+      w: 2 * this.zone.tileWidth,
+      h: 2 * this.zone.tileHeight,
+      targetZone: "marsh" as const,
+      targetX: 72,
+      targetY: 360,
+      label: "Ashen Marsh",
+    };
+    if (!this.zone.portals.some((entry) => entry.id === portal.id)) this.zone.portals.push(portal);
     if (emitEvent) {
-      this.emit({ type: "passage", zone: "dungeon", x, y, width, height });
-      this.emit({ type: "log", text: "The Bone Warden's defeat opens the eastern crypt passage.", tone: "quest" });
+      this.emit({ type: "passage", zone: "dungeon", x, y, width, height, portal });
+      this.emit({ type: "log", text: "The Bone Warden's defeat opens the eastern crypt passage to Ashen Marsh.", tone: "quest" });
     }
   }
 
