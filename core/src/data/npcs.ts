@@ -116,6 +116,19 @@ export const NPCS: Record<string, NpcDef> = {
   },
 };
 
+/** One extra line per NPC for New Game+ players. Shown instead of the usual lines once a cycle has begun. */
+export const NG_PLUS_DIALOGUE: Record<string, string> = {
+  guard: "Another cycle, and the same gate. I am not sure I am the same guard who swore to hold it.",
+  merchant: "Prices are up again. Not because of greed. The roads are colder every cycle, and so is the coin.",
+  blacksmith: "I have forged this same blade three times now. It keeps coming back dull. Strange, that.",
+  healer: "I remember patching you up before. You do not look like the one I remember.",
+  trainer: "You feel stronger than last cycle. Good. You will need it. Something is watching us go round again.",
+  tobin: "The forest remembers you now. It did not, the first time through.",
+  wenna: "I saw the Miremother in my dreams again, and she was waiting for you. Do not let her finish the sentence.",
+  ysolde: "The frost remembers what you did to the Revenant. It is trying to make it right.",
+  aldric: "Each cycle the throne asks for a new king. Each cycle I say no. Do not make me say it again.",
+};
+
 export const NPCS_LIST = Object.values(NPCS);
 
 export const SHOPS: Record<string, ShopDef> = {

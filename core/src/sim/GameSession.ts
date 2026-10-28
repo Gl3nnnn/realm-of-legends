@@ -26,7 +26,7 @@ import {
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { getQuest, QUESTS } from "../data/quests";
-import { CLASS_INTROS, STORY_CHAPTERS } from "../data/story";
+import { CLASS_INTROS, NG_PLUS_HOLLOW_ENDING, NG_PLUS_OPENINGS, STORY_CHAPTERS } from "../data/story";
 import {
   getTalentChoice,
   talentBonuses,
@@ -208,6 +208,8 @@ export class GameSession {
     this.save.resource = this.classDef.resource === "rage" ? 0 : stats.maxResource;
     this.emit({ type: "zone", zone: "village" });
     this.emit({ type: "log", text: `New Game+ ${this.save.ngPlus} begins. The realm grows harsher.`, tone: "good" });
+    const opening = NG_PLUS_OPENINGS[Math.min(this.save.ngPlus - 1, NG_PLUS_OPENINGS.length - 1)];
+    this.emit({ type: "log", text: opening, tone: "info" });
     return true;
   }
 
@@ -715,7 +717,12 @@ export class GameSession {
       if (!nextChapter || !nextChapter.bossId || !this.save.defeatedBosses.includes(nextChapter.bossId)) break;
       this.save.storyChapter += 1;
       const next = STORY_CHAPTERS[this.save.storyChapter];
-            this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+      this.emit({ type: "story", title: next.title, text: next.text, closing: next.closing, bossIndex: this.save.storyChapter - 1 });
+    }
+    // The final boss's ending changes on later cycles, so a replay has a new story to see.
+    const finalChapter = STORY_CHAPTERS[STORY_CHAPTERS.length - 1];
+    if (this.save.ngPlus > 0 && this.save.defeatedBosses.includes("hollow_king") && this.save.storyChapter === STORY_CHAPTERS.length - 1) {
+      this.emit({ type: "story", title: finalChapter.title, text: finalChapter.text, closing: NG_PLUS_HOLLOW_ENDING, bossIndex: STORY_CHAPTERS.length - 1 });
     }
   }
 

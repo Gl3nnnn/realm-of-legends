@@ -6,6 +6,7 @@ import {
   MAX_CHARACTERS,
   MAX_UPGRADE,
   MONSTERS,
+  NG_PLUS_DIALOGUE,
   NPCS,
   QUESTS,
   RECIPES,
@@ -441,6 +442,8 @@ function npcDialogueFor(session: GameSession, npcId: string): string {
   const npc = NPCS[npcId];
   if (!npc || npc.dialogue.length === 0) return "";
   const save = session.save;
+  // Once a New Game+ cycle has begun, each NPC remembers the earlier runs.
+  if (save.ngPlus > 0 && NG_PLUS_DIALOGUE[npcId]) return NG_PLUS_DIALOGUE[npcId];
   const hasBoss = save.defeatedBosses.length > 0;
   const hasQuest = save.quests.some((q) => !q.completed);
   const lines = npc.dialogue;

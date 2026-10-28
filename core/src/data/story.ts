@@ -17,6 +17,17 @@ export const CLASS_INTROS: Partial<Record<string, string>> = {
   archer: "Your aim is steady and your eyes are sharp, and Master Kael sends you because no one reads the wild better."
 };
 
+// Each new cycle opens with a line that changes the story, so replaying feels different from the first run.
+// The last line repeats for every cycle after the list ends.
+export const NG_PLUS_OPENINGS: string[] = [
+  "The Hollow King is gone, yet the cold winds have returned. Master Kael wonders if something older has woken beneath the north.",
+  "Villagers speak of a stranger who looks just like you, walking the north road. Master Kael asks you to learn who it is.",
+  "Every road feels familiar now, as though the land remembers you. Master Kael warns that the realm is listening."
+];
+
+// On later cycles the Hollow King's ending changes: the throne is not empty, and his rule is not finished.
+export const NG_PLUS_HOLLOW_ENDING = "The ice melts, but a cold voice whispers from the throne. The Hollow King's crown has a second owner now.";
+
 export const STORY_CHAPTERS: StoryChapter[] = [
   {
     id: 0,
