@@ -63,6 +63,7 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   const firstBossKill = def.boss && !s.save.defeatedBosses.includes(def.id);
   if (firstBossKill) {
     s.save.defeatedBosses.push(def.id);
+    if (def.id === "bone_warden") s.openDungeonWing();
   }
   if (def.boss) advanceStoryFromBoss(s);
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {

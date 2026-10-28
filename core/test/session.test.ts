@@ -1212,6 +1212,7 @@ describe("audited gameplay fixes", () => {
         attackTimer: 100,
       });
     });
+
   }
 
   it.each([
@@ -1370,5 +1371,57 @@ describe("audited gameplay fixes", () => {
     expect(session.gainGold(100)).toBe(1);
     expect(session.save.gold).toBe(MAX_GOLD);
     expect(validateSave(session.save).ok).toBe(true);
+  });
+});
+
+describe("Sunken Barrow boss passage", () => {
+  function canReachTile(session: GameSession, targetX: number, targetY: number): boolean {
+    const { width, height, blocked } = session.zone;
+    const startX = Math.floor(session.save.x / session.zone.tileWidth);
+    const startY = Math.floor(session.save.y / session.zone.tileHeight);
+    const queue: [number, number][] = [[startX, startY]];
+    const visited = new Set([startY * width + startX]);
+    for (let index = 0; index < queue.length; index += 1) {
+      const [x, y] = queue[index]!;
+      if (x === targetX && y === targetY) return true;
+      for (const [nextX, nextY] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+        const key = nextY * width + nextX;
+        if (
+          nextX < 0 || nextY < 0 || nextX >= width || nextY >= height
+          || blocked[key]
+          || visited.has(key)
+        ) continue;
+        visited.add(key);
+        queue.push([nextX, nextY]);
+      }
+    }
+    return false;
+  }
+
+  it("opens and preserves the eastern crypt passage after defeating the Bone Warden", () => {
+    const save = saveIn("dungeon");
+    save.x = ZONES.dungeon.spawn.x;
+    save.y = ZONES.dungeon.spawn.y;
+    const session = new GameSession(save);
+    const gateIndex = 22 * session.zone.width + 37;
+    const eastCryptTile = { x: 43, y: 22 };
+    const boss = session.monsters.find((monster) => monster.defId === "bone_warden")!;
+
+    expect(session.zone.blocked[gateIndex]).toBe(true);
+    expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(false);
+
+    session.hitMonster(boss, 1_000_000, false, "holy", []);
+
+    expect(session.zone.blocked[gateIndex]).toBe(false);
+    expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(true);
+    expect(session.drainEvents().some((event) => event.type === "passage" && event.zone === "dungeon")).toBe(true);
+
+    session.save.zone = "forest";
+    session.loadZone();
+    session.save.zone = "dungeon";
+    session.loadZone();
+
+    expect(session.zone.blocked[gateIndex]).toBe(false);
+    expect(canReachTile(session, eastCryptTile.x, eastCryptTile.y)).toBe(true);
   });
 });

@@ -506,6 +506,7 @@ export type SimEvent =
   | { type: "pickup"; itemId: string; qty: number }
   | { type: "quest"; questId: string; text: string }
   | { type: "zone"; zone: ZoneId }
+  | { type: "passage"; zone: ZoneId; x: number; y: number; width: number; height: number }
   | { type: "log"; text: string; tone?: "info" | "good" | "bad" | "quest" }
   | { type: "story"; title: string; text: string; closing: string; bossIndex: number }
   | { type: "save" }

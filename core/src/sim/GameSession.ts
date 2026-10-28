@@ -271,8 +271,12 @@ export class GameSession {
 
   loadZone(): void {
     if (this.zoneLoaded) this.zoneStates.set(this.zone.id, { monsters: this.monsters, loot: this.loot });
-    const zone = getZone(this.save.zone);
+    const baseZone = getZone(this.save.zone);
+    const zone = { ...baseZone, blocked: [...baseZone.blocked] };
     this.zone = zone;
+    if (zone.id === "dungeon" && this.save.defeatedBosses.includes("bone_warden")) {
+      this.openDungeonWing(false);
+    }
     const savedState = this.zoneStates.get(zone.id);
     this.monsters = savedState?.monsters ?? zone.monsterSpawns
       .filter((spawn) => !(getMonster(spawn.id).boss && this.save.defeatedBosses.includes(spawn.id)))
@@ -304,6 +308,21 @@ export class GameSession {
     this.save.x = Math.max(8, Math.min(this.save.x, zone.width * zone.tileWidth - 8));
     this.save.y = Math.max(8, Math.min(this.save.y, zone.height * zone.tileHeight - 8));
     this.zoneLoaded = true;
+  }
+
+  openDungeonWing(emitEvent = true): void {
+    if (this.zone.id !== "dungeon") return;
+    const x = 37;
+    const y = 21;
+    const width = 1;
+    const height = 3;
+    for (let row = y; row < y + height; row += 1) {
+      this.zone.blocked[row * this.zone.width + x] = false;
+    }
+    if (emitEvent) {
+      this.emit({ type: "passage", zone: "dungeon", x, y, width, height });
+      this.emit({ type: "log", text: "The Bone Warden's defeat opens the eastern crypt passage.", tone: "quest" });
+    }
   }
 
   private makeMonster(spawn: { id: string; x: number; y: number }, uid?: string): MonsterInstance {

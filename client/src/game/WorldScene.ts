@@ -90,6 +90,8 @@ export class WorldScene extends Phaser.Scene {
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
   private chestLabels = new Map<string, Phaser.GameObjects.Text>();
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
+  private decorLayer?: Phaser.Tilemaps.TilemapLayer;
+  private tallTileSprites = new Map<string, Phaser.GameObjects.Image>();
   private aim = { x: 0, y: 0 };
   private hitPauseLeft = 0;
   private pointerMoved = false;
@@ -206,6 +208,7 @@ export class WorldScene extends Phaser.Scene {
 
   private buildMap(): void {
     const zone = this.session.zone;
+    this.tallTileSprites.clear();
     const map = this.make.tilemap({ key: `map-${zone.id}` });
     const palette = zone.id === "village" ? "eldoria" : zone.id;
     const tilesetKey = zone.id === "village" ? "tileset" : `tileset-${zone.id}`;
@@ -214,6 +217,7 @@ export class WorldScene extends Phaser.Scene {
     const ground = map.createLayer("ground", tileset, 0, 0);
     const decor = map.createLayer("decor", tileset, 0, 0);
     if (!ground || !decor) throw new Error("Map layers are missing.");
+    this.decorLayer = decor;
     ground.setDepth(-10);
     decor.setDepth(-5);
 
@@ -221,6 +225,9 @@ export class WorldScene extends Phaser.Scene {
       const tx = Math.floor(chest.x / zone.tileWidth);
       const ty = Math.floor(chest.y / zone.tileHeight);
       decor.removeTileAt(tx, ty);
+    }
+    if (zone.id === "dungeon" && this.session.save.defeatedBosses.includes("bone_warden")) {
+      for (let y = 21; y < 24; y += 1) decor.removeTileAt(37, y);
     }
 
     // Automatic tall-tile split: a decor tile with another decor tile directly
@@ -237,10 +244,11 @@ export class WorldScene extends Phaser.Scene {
       if (!tile) continue;
       const frame = tile.index;
       decor.removeTileAt(t.x, t.y);
-      this.add
+      const sprite = this.add
         .image((t.x + 0.5) * zone.tileWidth, (t.y + 1) * zone.tileHeight, tilesetKey, frame)
         .setOrigin(0.5, 1)
         .setDepth((t.y + 1) * zone.tileHeight);
+      this.tallTileSprites.set(`${t.x},${t.y}`, sprite);
     }
 
     // Torch glows: a soft warm light on every torch tile, drawn above the ground
@@ -764,6 +772,17 @@ export class WorldScene extends Phaser.Scene {
           break;
         case "zone":
           this.cameras.main.fadeOut(160, 10, 8, 14);
+          break;
+        case "passage":
+          if (event.zone === this.session.zone.id && this.decorLayer) {
+            for (let y = event.y; y < event.y + event.height; y += 1) {
+              for (let x = event.x; x < event.x + event.width; x += 1) {
+                this.decorLayer.removeTileAt(x, y);
+                this.tallTileSprites.get(`${x},${y}`)?.destroy();
+                this.tallTileSprites.delete(`${x},${y}`);
+              }
+            }
+          }
           break;
         default:
           break;
