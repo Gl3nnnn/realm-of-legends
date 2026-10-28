@@ -158,6 +158,7 @@ export interface ItemDef {
   heal?: number;
   restore?: number;
   set?: GearSetId;
+  requiresLevel?: number;
 }
 
 export interface ItemStack {
@@ -178,7 +179,9 @@ export type QuestObjective =
   | { kind: "kill"; monsterId: string; count: number }
   | { kind: "collect"; itemId: string; count: number }
   | { kind: "visit"; zone: ZoneId }
-  | { kind: "boss"; monsterId: string };
+  | { kind: "boss"; monsterId: string }
+  | { kind: "explore"; zones: ZoneId[] }
+  | { kind: "survive"; zone: ZoneId; count: number };
 
 export interface QuestDef {
   id: string;
@@ -198,6 +201,8 @@ export interface QuestState {
   progress: number[];
   completed: boolean;
   completions: number;
+  /** Index of the reward picked from a choice quest; set once and never changed. */
+  claimedReward?: number;
 }
 
 export interface LootEntry {

@@ -39,6 +39,7 @@ const questSchema = z.object({
   progress: z.array(z.number().int().min(0)),
   completed: z.boolean(),
   completions: z.number().int().min(0),
+  claimedReward: z.number().int().min(0).max(9).optional(),
 });
 
 export const saveSchema = z.object({

@@ -59,6 +59,7 @@ import type {
   PortalDef,
   ProjectileInstance,
   QuestDef,
+  QuestObjective,
   QuestState,
   SimEvent,
   StatusInstance,
@@ -1197,6 +1198,7 @@ export class GameSession {
       quest.objectives.forEach((objective, i) => {
         if (objective.kind === "kill" && objective.monsterId === monsterId) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
         else if (objective.kind === "boss" && objective.monsterId === monsterId) state.progress[i] = 1;
+        else if (objective.kind === "survive" && objective.zone === this.save.zone) state.progress[i] = Math.min(objective.count, (state.progress[i] ?? 0) + 1);
       });
       this.refreshQuestCompletion(state);
     }
@@ -1213,8 +1215,11 @@ export class GameSession {
     }
   }
 
-  private objectiveCount(objective: { kind: string; count?: number }): number {
-    return objective.kind === "boss" ? 1 : objective.count ?? 1;
+  private objectiveCount(objective: QuestObjective): number {
+    if (objective.kind === "boss") return 1;
+    if (objective.kind === "explore") return objective.zones.length;
+    if (objective.kind === "visit") return 1;
+    return objective.count;
   }
 
   private refreshCollectQuests(): void {
@@ -1499,6 +1504,10 @@ export class GameSession {
     const amount = Math.max(1, Math.min(qty, def.stack));
     const cost = (def.buy ?? 0) * amount;
     if (!def.buy) return false;
+    if (def.requiresLevel && this.save.level < def.requiresLevel) {
+      this.emit({ type: "log", text: `${def.name} needs level ${def.requiresLevel}.`, tone: "bad" });
+      return false;
+    }
     if (this.save.gold < cost) {
       this.emit({ type: "log", text: "Not enough gold.", tone: "bad" });
       return false;
@@ -1690,6 +1699,11 @@ export class GameSession {
     if (!reward) return false;
     const state = this.save.quests.find((q) => q.id === questId);
     if (!state || !state.completed) return false;
+    if (state.claimedReward !== undefined) {
+      this.emit({ type: "log", text: `${quest.name}: you already claimed your reward.`, tone: "bad" });
+      return false;
+    }
+    state.claimedReward = index;
     this.save.gold += reward.gold;
     this.emit({ type: "gold", amount: reward.gold });
     this.gainXp(reward.xp);
@@ -1790,6 +1804,7 @@ export class GameSession {
       if (!quest) continue;
       quest.objectives.forEach((objective, i) => {
         if (objective.kind === "visit" && objective.zone === this.save.zone) state.progress[i] = 1;
+        if (objective.kind === "explore" && objective.zones.includes(this.save.zone)) state.progress[i] = Math.min(objective.zones.length, (state.progress[i] ?? 0) + 1);
       });
       this.refreshQuestCompletion(state);
     }

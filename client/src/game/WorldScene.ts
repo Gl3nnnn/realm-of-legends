@@ -28,6 +28,20 @@ const DAMAGE_TEXT_COLORS: Record<string, string> = {
   poison: "#a6e87a",
 };
 
+// Monsters that share one sprite row get their own tint, so look-alikes read apart on the map.
+const MONSTER_TINTS: Record<string, number> = {
+  skeleton_minion: 0xd8c8a8,
+  spirit_wolf: 0x9fd8ff,
+  bog_lurker: 0x7fb07a,
+  mire_wisp: 0xb0ffd0,
+  venom_spider: 0xa0e050,
+  frost_wraith: 0xc8f0ff,
+  ice_revenant: 0x9ad0ff,
+  frost_revenant: 0xb8e8ff,
+  hollow_acolyte: 0xc0a0d8,
+  hollow_king: 0x8a70b0,
+};
+
 interface WorldData {
   session: GameSession;
   ui: UIManager;
@@ -811,6 +825,7 @@ export class WorldScene extends Phaser.Scene {
       else if (monster.elite === "armored") sprite.setTint(0x9ecbff);
       else if (monster.elite === "venomous") sprite.setTint(0x9fe8a0);
       else if (monster.elite === "volatile") sprite.setTint(0xff9a6a);
+      else if (def?.id && MONSTER_TINTS[def.id] !== undefined) sprite.setTint(MONSTER_TINTS[def.id]);
       else sprite.clearTint();
       this.updateStatusMarkers(monster.uid, monster.x, monster.y, monster.statuses.map((status) => status.kind));
     }

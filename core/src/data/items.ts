@@ -372,6 +372,7 @@ const defs: ItemDef[] = [
     buy: 540,
     stats: { defense: 9, maxHp: 45 },
     set: "ironclad",
+    requiresLevel: 10,
   }),
   item({
     id: "leather_cap",
@@ -652,24 +653,24 @@ export const GEAR_SETS: Record<GearSetId, GearSetDef> = {
     id: "wanderer",
     name: "Wanderer's Path",
     bonuses: [
-      { pieces: 2, stats: { defense: 2, moveSpeed: 3 }, text: "+2 Defense, +3 Move Speed" },
-      { pieces: 4, stats: { maxHp: 20, crit: 0.02 }, text: "+20 Health, +2% Crit" },
+      { pieces: 2, stats: { defense: 2, moveSpeed: 3 }, text: "Light Step: +2 Defense, +3 Move Speed" },
+      { pieces: 4, stats: { maxHp: 20, crit: 0.02 }, text: "Trailblazer: +20 Health, +2% Crit" },
     ],
   },
   ironclad: {
     id: "ironclad",
     name: "Ironclad Bulwark",
     bonuses: [
-      { pieces: 2, stats: { defense: 4 }, text: "+4 Defense" },
-      { pieces: 3, stats: { maxHp: 40, defense: 4 }, text: "+40 Health, +4 Defense" },
+      { pieces: 2, stats: { defense: 4 }, text: "Bulwark: +4 Defense" },
+      { pieces: 3, stats: { maxHp: 40, defense: 4 }, text: "Unbreakable: +40 Health, +4 Defense" },
     ],
   },
   ember: {
     id: "ember",
     name: "Emberweave",
     bonuses: [
-      { pieces: 2, stats: { maxResource: 15 }, text: "+15 Resource" },
-      { pieces: 3, stats: { attack: 5, crit: 0.02 }, text: "+5 Attack, +2% Crit" },
+      { pieces: 2, stats: { maxResource: 15 }, text: "Kindled: +15 Resource" },
+      { pieces: 3, stats: { attack: 5, crit: 0.02 }, text: "Inferno: +5 Attack, +2% Crit" },
     ],
   },
 };
@@ -699,15 +700,18 @@ export interface CraftRecipe {
   resultItemId: string;
   materials: { itemId: string; qty: number }[];
   gold: number;
+  // The zone where the key material is found. Shown on the craft window so
+  // players know where to gather before they come back to the forge.
+  zone: string;
 }
 
 export const RECIPES: CraftRecipe[] = [
-  { id: "craft_iron_sword", name: "Iron Sword", resultItemId: "iron_sword", materials: [{ itemId: "iron_ore", qty: 3 }], gold: 20 },
-  { id: "craft_steel_sword", name: "Steel Sword", resultItemId: "steel_sword", materials: [{ itemId: "iron_ore", qty: 6 }, { itemId: "gemstone", qty: 1 }], gold: 120 },
-  { id: "craft_chainmail", name: "Chainmail", resultItemId: "chainmail", materials: [{ itemId: "iron_ore", qty: 5 }, { itemId: "wolf_pelt", qty: 2 }], gold: 100 },
-  { id: "craft_plate_armor", name: "Plate Armor", resultItemId: "plate_armor", materials: [{ itemId: "iron_ore", qty: 10 }, { itemId: "gemstone", qty: 2 }], gold: 300 },
-  { id: "craft_ember_staff", name: "Ember Staff", resultItemId: "ember_staff", materials: [{ itemId: "iron_ore", qty: 4 }, { itemId: "gemstone", qty: 2 }], gold: 150 },
-  { id: "craft_greater_health_potion", name: "Greater Health Potion", resultItemId: "greater_health_potion", materials: [{ itemId: "herb", qty: 3 }, { itemId: "slime_gel", qty: 1 }], gold: 15 },
+  { id: "craft_iron_sword", name: "Iron Sword", resultItemId: "iron_sword", materials: [{ itemId: "iron_ore", qty: 3 }], gold: 20, zone: "Whispering Forest" },
+  { id: "craft_steel_sword", name: "Steel Sword", resultItemId: "steel_sword", materials: [{ itemId: "iron_ore", qty: 6 }, { itemId: "gemstone", qty: 1 }], gold: 120, zone: "Sunken Barrow" },
+  { id: "craft_chainmail", name: "Chainmail", resultItemId: "chainmail", materials: [{ itemId: "iron_ore", qty: 5 }, { itemId: "wolf_pelt", qty: 2 }], gold: 100, zone: "Whispering Forest" },
+  { id: "craft_plate_armor", name: "Plate Armor", resultItemId: "plate_armor", materials: [{ itemId: "iron_ore", qty: 10 }, { itemId: "gemstone", qty: 2 }], gold: 300, zone: "Frostfell Ruins" },
+  { id: "craft_ember_staff", name: "Ember Staff", resultItemId: "ember_staff", materials: [{ itemId: "iron_ore", qty: 4 }, { itemId: "gemstone", qty: 2 }], gold: 150, zone: "Ashen Marsh" },
+  { id: "craft_greater_health_potion", name: "Greater Health Potion", resultItemId: "greater_health_potion", materials: [{ itemId: "herb", qty: 3 }, { itemId: "slime_gel", qty: 1 }], gold: 15, zone: "Eldoria Village" },
 ];
 
 export function getRecipe(id: string): CraftRecipe | undefined {

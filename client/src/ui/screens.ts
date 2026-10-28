@@ -330,6 +330,7 @@ function forgeSectionHtml(session: GameSession): string {
       <div>
         <div class="name">${esc(recipe.name)}</div>
         <div class="sub">${materials} · ${recipe.gold}g</div>
+        <div class="sub muted">Gather in ${esc(recipe.zone)}</div>
       </div>
       <button class="btn small" data-action="craft" data-recipe="${recipe.id}" ${canCraft ? "" : "disabled"}>Craft</button>
     </div>`;
@@ -469,6 +470,11 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
         .join("");
       let action = "";
       if (entry.available) action = `<button class="btn small" data-action="accept-quest" data-quest="${entry.questId}">Accept quest</button>`;
+      else if (state && state.claimedReward !== undefined && quest.choose) {
+        const claimed = quest.choose[state.claimedReward];
+        const label = claimed ? `${claimed.icon ?? "🎁"} Reward claimed` : "Reward claimed";
+        action = `<span class="small muted">${esc(label)} - final</span>`;
+      }
       else if (entry.canTurnIn && quest.choose) {
         action = `<div class="gift-list">${quest.choose
           .map((option, i) => {

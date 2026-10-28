@@ -194,6 +194,24 @@ const expansionQuests: QuestDef[] = [
     rewards: { xp: 15000, gold: 2500, items: [{ itemId: "gemstone", qty: 5 }] },
     requiresLevel: 26,
   },
+  {
+    id: "wider_world",
+    name: "The Wider World",
+    giverNpc: "guard",
+    description: "The roads run far beyond the village. Walk each of the three wild lands so you know the way before you need it.",
+    objectives: [{ kind: "explore", zones: ["forest", "marsh", "frost"] }],
+    rewards: { xp: 600, gold: 120 },
+    requiresLevel: 3,
+  },
+  {
+    id: "forest_watch",
+    name: "Forest Watch",
+    giverNpc: "guard",
+    description: "Something has been stirring in the forest after dark. Hold your ground there and defeat 12 foes without leaving the trees.",
+    objectives: [{ kind: "survive", zone: "forest", count: 12 }],
+    rewards: { xp: 500, gold: 100 },
+    requiresLevel: 2,
+  },
 ];
 
 for (const quest of expansionQuests) {
