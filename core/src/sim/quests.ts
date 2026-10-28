@@ -117,7 +117,13 @@ export function acceptQuest(session: GameSession, questId: string): boolean {
   if (!questUnlocked(session, quest)) return false;
   const existing = session.save.quests.find((q) => q.id === questId);
   if (existing) return false;
-  const state: QuestState = { id: questId, progress: quest.objectives.map(() => 0), completed: false, completions: 0 };
+  const state: QuestState = {
+    id: questId,
+    progress: quest.objectives.map(() => 0),
+    completed: false,
+    completions: 0,
+    exploredZones: quest.objectives.some((objective) => objective.kind === "explore") ? [] : undefined,
+  };
   session.save.quests.push(state);
   for (const [i, objective] of quest.objectives.entries()) {
     if (objective.kind === "collect") state.progress[i] = Math.min(objective.count, session.countItem(objective.itemId));
@@ -159,6 +165,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
   if (quest.repeatable) {
     state.completed = false;
     state.progress = quest.objectives.map(() => 0);
+    state.exploredZones = quest.objectives.some((objective) => objective.kind === "explore") ? [] : undefined;
   } else {
     state.completed = true;
   }

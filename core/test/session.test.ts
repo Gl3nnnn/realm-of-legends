@@ -9,6 +9,7 @@ import {
   validateSave,
   type CharacterSave,
   type InputState,
+  type ProjectileInstance,
 } from "../src/index";
 
 const IDLE: InputState = { moveX: 0, moveY: 0, aimX: 0, aimY: 0 };
@@ -49,6 +50,133 @@ describe("movement and collision", () => {
 });
 
 describe("combat", () => {
+  it("only hits melee targets inside the aim arc", () => {
+    const session = forestSession();
+    const slimes = session.monsters.filter((monster) => monster.defId === "slime").slice(0, 2);
+    const [front, behind] = slimes;
+    front!.x = session.save.x + 22;
+    front!.y = session.save.y;
+    behind!.x = session.save.x - 22;
+    behind!.y = session.save.y;
+    const frontHp = front!.hp;
+    const behindHp = behind!.hp;
+
+    expect(session.castAbility("basic", { x: session.save.x + 100, y: session.save.y })).toBe(true);
+
+    expect(front!.hp).toBeLessThan(frontHp);
+    expect(behind!.hp).toBe(behindHp);
+  });
+
+  it("blocks line of sight through solid map tiles", () => {
+    const session = forestSession();
+    const tileX = 8;
+    const tileY = 22;
+    session.zone.blocked[tileY * session.zone.width + tileX] = true;
+
+    expect(session.hasLineOfSight(100, 360, 200, 360)).toBe(false);
+    expect(session.hasLineOfSight(100, 340, 140, 340)).toBe(true);
+  });
+
+  it("prevents self-area attacks from damaging enemies behind walls", () => {
+    const save = saveIn("forest");
+    save.level = 3;
+    const session = new GameSession(save);
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    session.save.x = 100;
+    session.save.y = 360;
+    target.x = 160;
+    target.y = 360;
+    target.state = "idle";
+    session.zone.blocked[22 * session.zone.width + 8] = true;
+    const hp = target.hp;
+
+    expect(session.castAbility("whirlwind", { x: session.save.x, y: session.save.y })).toBe(true);
+
+    expect(target.hp).toBe(hp);
+  });
+
+  it("detects fast projectiles crossing a monster between frames", () => {
+    const session = forestSession("archer");
+    session.zone.blocked.fill(false);
+    session.save.x = 100;
+    session.save.y = 360;
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    target.x = 240;
+    target.y = 360;
+    target.state = "idle";
+    const projectile: ProjectileInstance = {
+      uid: "test-fast-projectile",
+      abilityId: "test",
+      x: 120,
+      y: 360,
+      dirX: 1,
+      dirY: 0,
+      speed: 1500,
+      ttl: 1,
+      radius: 3,
+      damage: 1000,
+      crit: 0,
+      damageType: "physical",
+      color: "#ffffff",
+      statuses: [],
+      owner: "player",
+    };
+    session.projectiles.push(projectile);
+
+    session.step(0.1, IDLE);
+
+    expect(target.state).toBe("dead");
+    expect(projectile.hit).toBe(true);
+  });
+
+  it("stops knockback at walls without leaving monsters embedded in terrain", () => {
+    const session = forestSession();
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    target.x = 165;
+    target.y = 360;
+    const wallX = Math.floor(180 / session.zone.tileWidth);
+    const wallY = Math.floor(360 / session.zone.tileHeight);
+    session.zone.blocked[wallY * session.zone.width + wallX] = true;
+
+    session.pushMonster(target, 50, 0);
+
+    expect(target.x).toBeLessThan(180);
+    expect(session.isBlockedAt(target.x, target.y, 10)).toBe(false);
+  });
+
+  it("refreshes damage-over-time effects instead of stacking their damage", () => {
+    const session = forestSession();
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    const burn = { kind: "burn" as const, remaining: 3, value: 4 };
+    session.hitMonster(target, 1, false, "fire", [burn]);
+    session.hitMonster(target, 1, false, "fire", [{ ...burn, remaining: 5, value: 6 }]);
+
+    expect(target.statuses.filter((status) => status.kind === "burn")).toHaveLength(1);
+    expect(target.statuses.find((status) => status.kind === "burn")).toMatchObject({ remaining: 5, value: 6 });
+  });
+
+  it("ticks monster status durations once per simulation step", () => {
+    const session = forestSession();
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    target.statuses.push({ kind: "slow", remaining: 0.15, value: 50 });
+
+    session.step(0.1, IDLE);
+    expect(target.statuses[0]?.remaining).toBeCloseTo(0.05);
+    session.step(0.1, IDLE);
+    expect(target.statuses.some((status) => status.kind === "slow")).toBe(false);
+  });
+
+  it("caps active summoned companions and replaces the oldest on recast", () => {
+    const session = forestSession("summoner");
+    const summon = { kind: "summon" as const, summonId: "spirit_wolf", summonCount: 3 };
+    session.summon(summon);
+    const oldest = session.pets[0]?.uid;
+    session.summon(summon);
+
+    expect(session.pets).toHaveLength(4);
+    expect(session.pets.some((pet) => pet.uid === oldest)).toBe(false);
+  });
+
   it("damages nearby monsters with a melee strike", () => {
     const session = forestSession();
     const slime = session.monsters.find((m) => m.defId === "slime");
@@ -155,6 +283,154 @@ describe("combat", () => {
 
     expect(ally.hp).toBeGreaterThan(before);
   });
+
+  it("does not apply venom when the player dodges a melee windup", () => {
+    const session = forestSession();
+    session.zone.blocked.fill(false);
+    const wolf = session.monsters.find((monster) => monster.defId === "wolf")!;
+    for (const monster of session.monsters) {
+      if (monster !== wolf) monster.state = "dead";
+    }
+    wolf.x = session.save.x + 18;
+    wolf.y = session.save.y;
+    wolf.spawnX = wolf.x;
+    wolf.spawnY = wolf.y;
+    wolf.elite = "venomous";
+    wolf.state = "attack";
+    wolf.attackTimer = 0;
+    const hp = session.save.hp;
+
+    session.step(0.05, IDLE);
+    expect(session.save.hp).toBe(hp);
+    expect(session.telegraphs.some((telegraph) => telegraph.sourceUid === wolf.uid && telegraph.kind === "enemy")).toBe(true);
+
+    session.dodge(1, 0);
+    for (let i = 0; i < 5; i += 1) session.step(0.1, IDLE);
+    expect(session.save.hp).toBe(hp);
+    expect(session.statuses.some((status) => status.kind === "poison")).toBe(false);
+  });
+
+  it("applies a venomous elite's poison after a melee strike lands", () => {
+    const session = forestSession();
+    const wolf = session.monsters.find((monster) => monster.defId === "wolf")!;
+    for (const monster of session.monsters) {
+      if (monster !== wolf) monster.state = "dead";
+    }
+    wolf.x = session.save.x + 18;
+    wolf.y = session.save.y;
+    wolf.spawnX = wolf.x;
+    wolf.spawnY = wolf.y;
+    wolf.elite = "venomous";
+    wolf.state = "attack";
+    wolf.attackTimer = 0;
+
+    for (let i = 0; i < 5; i += 1) session.step(0.1, IDLE);
+
+    expect(session.statuses.some((status) => status.kind === "poison")).toBe(true);
+  });
+
+  it("lands a telegraphed melee strike when the player stays in its warning", () => {
+    const session = forestSession();
+    const wolf = session.monsters.find((monster) => monster.defId === "wolf")!;
+    for (const monster of session.monsters) {
+      if (monster !== wolf) monster.state = "dead";
+    }
+    wolf.x = session.save.x + 18;
+    wolf.y = session.save.y;
+    wolf.spawnX = wolf.x;
+    wolf.spawnY = wolf.y;
+    wolf.state = "attack";
+    wolf.attackTimer = 0;
+    const hp = session.save.hp;
+
+    for (let i = 0; i < 5; i += 1) session.step(0.1, IDLE);
+
+    expect(session.save.hp).toBeLessThan(hp);
+  });
+
+  it("includes the player's radius when resolving telegraph hitboxes", () => {
+    const session = new GameSession(saveIn("village"));
+    const hp = session.save.hp;
+    session.telegraphs.push({
+      uid: "edge-telegraph",
+      x: session.save.x + 18,
+      y: session.save.y,
+      radius: 10,
+      remaining: 0.05,
+      total: 0.05,
+      damage: 20,
+      kind: "enemy",
+      shape: "spot",
+    });
+
+    session.step(0.1, IDLE);
+
+    expect(session.save.hp).toBeLessThan(hp);
+  });
+
+  it("cancels a monster's pending strike if the attacker dies", () => {
+    const session = forestSession();
+    const wolf = session.monsters.find((monster) => monster.defId === "wolf")!;
+    for (const monster of session.monsters) {
+      if (monster !== wolf) monster.state = "dead";
+    }
+    wolf.x = session.save.x + 18;
+    wolf.y = session.save.y;
+    wolf.spawnX = wolf.x;
+    wolf.spawnY = wolf.y;
+    wolf.state = "attack";
+    wolf.attackTimer = 0;
+    const hp = session.save.hp;
+    session.step(0.05, IDLE);
+    wolf.state = "dead";
+
+    for (let i = 0; i < 5; i += 1) session.step(0.1, IDLE);
+
+    expect(session.save.hp).toBe(hp);
+    expect(session.telegraphs.some((telegraph) => telegraph.sourceUid === wolf.uid)).toBe(false);
+  });
+
+  it("does not let ranged enemies telegraph attacks through walls", () => {
+    const session = new GameSession(saveIn("marsh"));
+    const wisp = session.monsters.find((monster) => monster.defId === "mire_wisp")!;
+    wisp.x = session.save.x + 95;
+    wisp.y = session.save.y;
+    wisp.spawnX = wisp.x;
+    wisp.spawnY = wisp.y;
+    wisp.state = "attack";
+    wisp.attackTimer = 0;
+    const tileX = Math.floor((session.save.x + 48) / session.zone.tileWidth);
+    const tileY = Math.floor(session.save.y / session.zone.tileHeight);
+    session.zone.blocked[tileY * session.zone.width + tileX] = true;
+
+    session.step(0.05, IDLE);
+
+    expect(session.telegraphs.some((telegraph) => telegraph.sourceUid === wisp.uid)).toBe(false);
+  });
+
+  it("makes support enemies attack when all nearby allies are already healthy", () => {
+    const session = new GameSession(saveIn("throne"));
+    const support = session.monsters.find((monster) => monster.defId === "hollow_acolyte")!;
+    const ally = session.monsters.find((monster) => monster !== support && monster.defId === "hollow_acolyte")!;
+    for (const monster of session.monsters) {
+      if (monster !== support && monster !== ally) monster.state = "dead";
+    }
+    support.x = 300;
+    support.y = 300;
+    support.spawnX = support.x;
+    support.spawnY = support.y;
+    support.state = "attack";
+    support.attackTimer = 0;
+    ally.x = 330;
+    ally.y = 300;
+    ally.hp = ally.maxHp ?? 1;
+    session.save.x = 400;
+    session.save.y = 300;
+
+    session.step(0.05, IDLE);
+
+    expect(session.telegraphs.some((telegraph) => telegraph.sourceUid === support.uid)).toBe(true);
+  });
 });
 
 describe("inventory, equipment and economy", () => {
@@ -201,6 +477,25 @@ describe("inventory, equipment and economy", () => {
     expect(session.save.hp).toBe(session.stats.maxHp);
     expect(session.save.gold).toBe(485 - healCost);
     expect(session.healAtNpc()).toBe(false);
+  });
+
+  it("persists gathered-node cooldowns across zone reloads and replenishes them", () => {
+    const session = new GameSession(saveIn("forest"));
+    const node = session.zone.gatherNodes[0]!;
+    session.save.x = node.x;
+    session.save.y = node.y;
+    const before = session.countItem(node.itemId);
+
+    expect(session.interact()?.kind).toBe("gather");
+    expect(session.countItem(node.itemId)).toBe(before + 1);
+    expect(session.gathered.has(node.id)).toBe(true);
+    const reloaded = new GameSession(session.snapshot());
+    expect(reloaded.gathered.has(node.id)).toBe(true);
+
+    const readyAt = reloaded.save.gatherCooldowns[`forest:${node.id}`]!;
+    reloaded.save.playtime = readyAt;
+    reloaded.step(0.1, IDLE);
+    expect(reloaded.gathered.has(node.id)).toBe(false);
   });
 
   it("reports overflow when the backpack is full", () => {
@@ -276,6 +571,31 @@ describe("quests", () => {
     for (let i = 0; i < 120; i += 1) session.step(0.1, IDLE);
     expect(state?.progress[0]).toBe(12);
     expect(state?.completed).toBe(true);
+  });
+
+  it("counts unique explored zones rather than repeat visits", () => {
+    const session = forestSession();
+    session.save.level = 3;
+    expect(session.acceptQuest("wider_world")).toBe(true);
+    const state = session.save.quests.find((quest) => quest.id === "wider_world")!;
+    const toMarsh = session.zone.portals.find((portal) => portal.targetZone === "marsh")!;
+    session.save.x = toMarsh.x + toMarsh.w / 2;
+    session.save.y = toMarsh.y + toMarsh.h / 2;
+    session.interact();
+    expect(state.progress[0]).toBe(1);
+    const backToForest = session.zone.portals.find((portal) => portal.targetZone === "forest")!;
+    session.save.x = backToForest.x + backToForest.w / 2;
+    session.save.y = backToForest.y + backToForest.h / 2;
+    session.interact();
+    const toMarshAgain = session.zone.portals.find((portal) => portal.targetZone === "marsh")!;
+    session.save.x = toMarshAgain.x + toMarshAgain.w / 2;
+    session.save.y = toMarshAgain.y + toMarshAgain.h / 2;
+    session.interact();
+
+    expect(state.progress[0]).toBe(2);
+    expect(state.exploredZones).toEqual(["marsh", "forest"]);
+    expect(state.completed).toBe(false);
+    expect(validateSave(session.snapshot()).ok).toBe(true);
   });
 });
 
@@ -439,6 +759,21 @@ describe("difficulty, elites and bosses", () => {
     expect(hardSession.difficultyScale.attack).toBeGreaterThan(1);
     expect(hardSession.setDifficulty("story")).toBe(true);
     expect(hardSession.save.difficulty).toBe("story");
+  });
+
+  it("rewards elite defeats with bonus experience", () => {
+    const ordinary = forestSession();
+    const elite = forestSession();
+    const ordinarySlime = ordinary.monsters.find((monster) => monster.defId === "slime")!;
+    const eliteSlime = elite.monsters.find((monster) => monster.defId === "slime")!;
+    ordinarySlime.hp = 1;
+    eliteSlime.hp = 1;
+    eliteSlime.elite = "swift";
+
+    ordinary.hitMonster(ordinarySlime, 1000, false, "physical", []);
+    elite.hitMonster(eliteSlime, 1000, false, "physical", []);
+
+    expect(elite.save.xp).toBeGreaterThan(ordinary.save.xp);
   });
 
   it("advances bosses through phases", () => {

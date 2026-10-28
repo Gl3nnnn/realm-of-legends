@@ -36,7 +36,7 @@ import {
 import { getZone, ZONES } from "../generated/world-data";
 import { deriveStats, isAbilityUnlocked, rageDecayPerSecond, resourceRegen, unlockedAbilities, xpToNext, type DerivedStats } from "../progression";
 import { Rng } from "../rng";
-import { dist2, length, normalize } from "./geometry";
+import { dist2, length, normalize, segmentDistanceSquared } from "./geometry";
 import { travel, openChest, gatherNode } from "./world";
 import { killPlayer, respawn, respawnMonster } from "./death";
 import * as combat from "./combat";
@@ -191,10 +191,12 @@ export class GameSession {
       this.emit({ type: "log", text: "Defeat the Hollow King before beginning a new cycle.", tone: "info" });
       return false;
     }
+
     this.save.ngPlus += 1;
     this.save.defeatedBosses = [];
     this.save.quests = [];
     this.save.openedChests = [];
+    this.save.gatherCooldowns = {};
     this.save.zone = "village";
     const village = ZONES.village;
     this.save.x = village.spawn.x;
@@ -268,7 +270,9 @@ export class GameSession {
     this.telegraphs = [];
     this.statuses = [];
     this.buffs = [];
-    this.gathered = new Set();
+    this.gathered = new Set(zone.gatherNodes
+      .filter((node) => (this.save.gatherCooldowns[`${zone.id}:${node.id}`] ?? 0) > this.save.playtime)
+      .map((node) => node.id));
     this.dead = false;
     this.respawnTimer = 0;
     this.shield = 0;
@@ -324,6 +328,31 @@ export class GameSession {
       }
     }
     return false;
+  }
+
+  hasLineOfSight(fromX: number, fromY: number, toX: number, toY: number): boolean {
+    const distance = length(toX - fromX, toY - fromY);
+    const steps = Math.ceil(distance / 8);
+    for (let i = 1; i < steps; i += 1) {
+      const progress = i / steps;
+      if (this.isBlockedAt(fromX + (toX - fromX) * progress, fromY + (toY - fromY) * progress, 2)) return false;
+    }
+    return true;
+  }
+
+  pushMonster(monster: MonsterInstance, dx: number, dy: number): void {
+    const distance = length(dx, dy);
+    const steps = Math.max(1, Math.ceil(distance / 4));
+    const stepX = dx / steps;
+    const stepY = dy / steps;
+    const radius = getMonster(monster.defId).radius;
+    for (let i = 0; i < steps; i += 1) {
+      const canMoveX = !this.isBlockedAt(monster.x + stepX, monster.y, radius);
+      const canMoveY = !this.isBlockedAt(monster.x, monster.y + stepY, radius);
+      if (canMoveX) monster.x += stepX;
+      if (canMoveY) monster.y += stepY;
+      if (!canMoveX && !canMoveY) break;
+    }
   }
 
   // Pushes a monster gently away from any other living monster standing too close,
@@ -401,6 +430,13 @@ export class GameSession {
     }
 
     this.save.playtime += clamped;
+    for (const node of this.zone.gatherNodes) {
+      const key = `${this.zone.id}:${node.id}`;
+      if ((this.save.gatherCooldowns[key] ?? 0) <= this.save.playtime) {
+        delete this.save.gatherCooldowns[key];
+        this.gathered.delete(node.id);
+      }
+    }
     for (const key of Object.keys(this.cooldowns)) {
       this.cooldowns[key] = Math.max(0, this.cooldowns[key] - clamped);
     }
@@ -473,6 +509,7 @@ export class GameSession {
     this.statuses = this.statuses.filter((s) => s.remaining > 0);
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
+      for (const status of monster.statuses) status.remaining -= dt;
       const damage = monster.statuses
         .filter((s) => s.kind === "burn" || s.kind === "poison")
         .reduce((sum, s) => sum + s.value * dt, 0);
@@ -509,11 +546,9 @@ export class GameSession {
         continue;
       }
       const def = getMonster(monster.defId);
-      for (const status of monster.statuses) status.remaining -= dt;
       const stunned = monster.statuses.some((s) => s.kind === "stun");
       const slowed = monster.statuses.find((s) => s.kind === "slow");
       const marked = monster.statuses.some((s) => s.kind === "mark");
-      monster.statuses = monster.statuses.filter((s) => s.remaining > 0);
       monster.attackTimer = Math.max(0, monster.attackTimer - dt);
       monster.wanderTimer -= dt;
 
@@ -563,6 +598,8 @@ export class GameSession {
       if (monster.state === "attack") {
         if (playerDist > def.attackRange + PLAYER_RADIUS + 12 || (def.role && playerDist < def.attackRange * 0.45)) {
           monster.state = "chase";
+        } else if (def.role && !this.hasLineOfSight(monster.x, monster.y, player.x, player.y)) {
+          monster.state = "chase";
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
           const raw = def.attack * this.difficultyScale.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
@@ -572,21 +609,22 @@ export class GameSession {
               .sort((a, b) => a.hp / (a.maxHp ?? getMonster(a.defId).maxHp) - b.hp / (b.maxHp ?? getMonster(b.defId).maxHp))[0];
             if (ally) {
               const maxHp = ally.maxHp ?? getMonster(ally.defId).maxHp;
-              ally.hp = Math.min(maxHp, ally.hp + Math.max(1, Math.round(maxHp * 0.12)));
-              this.emit({ type: "log", text: `${def.name} mends a nearby ally.`, tone: "bad" });
+              if (ally.hp < maxHp) {
+                ally.hp = Math.min(maxHp, ally.hp + Math.max(1, Math.round(maxHp * 0.12)));
+                this.emit({ type: "log", text: `${def.name} mends a nearby ally.`, tone: "bad" });
+              } else {
+                this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy", monster.uid);
+              }
             } else {
-              this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy");
+              this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy", monster.uid);
             }
           } else if (def.role === "ranged") {
-            this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy");
+            this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy", monster.uid);
           } else {
-            this.damagePlayer(raw, def.name);
-            if (this.dead) return;
-          }
-          if (monster.elite === "venomous" && !def.role) {
-            const existing = this.statuses.find((s) => s.kind === "poison");
-            if (existing) existing.remaining = Math.max(existing.remaining, 3);
-            else this.statuses.push({ kind: "poison", remaining: 3, value: def.attack * 0.12 });
+            const poison = monster.elite === "venomous"
+              ? { kind: "poison" as const, remaining: 3, value: def.attack * 0.12 }
+              : undefined;
+            this.spawnTelegraph(player.x, player.y, 26, raw, 0.4, "spot", 0, def.name, "enemy", monster.uid, poison);
           }
         }
       } else if (monster.state === "idle") {
@@ -604,7 +642,7 @@ export class GameSession {
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
         const phase = monster.phase ?? 0;
-        this.spawnTelegraph(player.x, player.y, 62 + phase * 8, def.attack * this.difficultyScale.attack * (1.8 + phase * 0.2), 1.25 - phase * 0.15, this.bossShape(def.id, phase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
+        this.spawnTelegraph(player.x, player.y, 62 + phase * 8, def.attack * this.difficultyScale.attack * (1.8 + phase * 0.2), 1.25 - phase * 0.15, this.bossShape(def.id, phase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid);
       }
 
       if (def.boss) {
@@ -614,7 +652,7 @@ export class GameSession {
           monster.phase = nextPhase;
           monster.attackTimer = Math.max(monster.attackTimer, 0.8);
           this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
-          this.spawnTelegraph(player.x, player.y, 74 + nextPhase * 12, def.attack * this.difficultyScale.attack * (2.2 + nextPhase * 0.25), Math.max(0.8, 1.5 - nextPhase * 0.2), this.bossShape(def.id, nextPhase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
+          this.spawnTelegraph(player.x, player.y, 74 + nextPhase * 12, def.attack * this.difficultyScale.attack * (2.2 + nextPhase * 0.25), Math.max(0.8, 1.5 - nextPhase * 0.2), this.bossShape(def.id, nextPhase), Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "boss", monster.uid);
           if (def.id === "hollow_king") {
             for (let i = 0; i < nextPhase; i += 1) {
               const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
@@ -653,6 +691,8 @@ export class GameSession {
     angle = 0,
     source = "Bone Warden",
     kind: TelegraphInstance["kind"] = "boss",
+    sourceUid?: string,
+    statusEffect?: TelegraphInstance["statusEffect"],
   ): void {
     const telegraph: TelegraphInstance = {
       uid: this.nextUid("t"),
@@ -666,6 +706,8 @@ export class GameSession {
       shape,
       angle,
       source,
+      sourceUid,
+      statusEffect,
     };
     this.telegraphs.push(telegraph);
     this.emit({ type: "telegraph", x, y, radius, remaining: delay, shape, angle });
@@ -675,12 +717,26 @@ export class GameSession {
     for (const telegraph of this.telegraphs) {
       telegraph.remaining -= dt;
       if (telegraph.remaining <= 0) {
+        const source = telegraph.sourceUid ? this.monsters.find((monster) => monster.uid === telegraph.sourceUid) : undefined;
+        if (source?.state === "dead") continue;
         if (this.telegraphHits(telegraph)) {
+          const wasInvulnerable = this.invulnerable > 0;
           this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden");
+          if (!wasInvulnerable && !this.dead && telegraph.statusEffect) {
+            const existing = this.statuses.find((status) => status.kind === telegraph.statusEffect?.kind);
+            if (existing) {
+              existing.remaining = Math.max(existing.remaining, telegraph.statusEffect.remaining);
+              existing.value = Math.max(existing.value, telegraph.statusEffect.value);
+            } else {
+              this.statuses.push({ ...telegraph.statusEffect });
+            }
+          }
         }
       }
     }
-    this.telegraphs = this.telegraphs.filter((t) => t.remaining > 0);
+    this.telegraphs = this.telegraphs.filter((telegraph) =>
+      telegraph.remaining > 0
+      && !this.monsters.some((monster) => monster.uid === telegraph.sourceUid && monster.state === "dead"));
   }
 
   private telegraphHits(t: TelegraphInstance): boolean {
@@ -688,23 +744,24 @@ export class GameSession {
     const py = this.save.y;
     const shape = t.shape ?? "ring";
     if (shape === "ring" || shape === "spot") {
-      return dist2(px, py, t.x, t.y) <= t.radius * t.radius;
+      return dist2(px, py, t.x, t.y) <= (t.radius + PLAYER_RADIUS) ** 2;
     }
     const dx = px - t.x;
     const dy = py - t.y;
     if (shape === "cone") {
-      if (dx * dx + dy * dy > t.radius * t.radius) return false;
+      const distance = Math.hypot(dx, dy);
+      if (distance > t.radius + PLAYER_RADIUS) return false;
       const a = Math.atan2(dy, dx);
       let diff = Math.abs(a - (t.angle ?? 0));
       if (diff > Math.PI) diff = Math.PI * 2 - diff;
-      return diff <= Math.PI / 4;
+      return diff <= Math.PI / 4 + Math.asin(Math.min(1, PLAYER_RADIUS / Math.max(distance, PLAYER_RADIUS)));
     }
     // line: a thin strip reaching out from the boss along its angle
     const cos = Math.cos(t.angle ?? 0);
     const sin = Math.sin(t.angle ?? 0);
     const along = dx * cos + dy * sin;
     const across = -dx * sin + dy * cos;
-    return along >= 0 && along <= t.radius && Math.abs(across) <= 14;
+    return along >= -PLAYER_RADIUS && along <= t.radius + PLAYER_RADIUS && Math.abs(across) <= 14 + PLAYER_RADIUS;
   }
 
   private updateTraps(dt: number): void {
@@ -785,22 +842,39 @@ export class GameSession {
   private updateProjectiles(dt: number): void {
     for (const projectile of this.projectiles) {
       projectile.ttl -= dt;
-      projectile.x += projectile.dirX * projectile.speed * dt;
-      projectile.y += projectile.dirY * projectile.speed * dt;
-      if (this.isBlockedAt(projectile.x, projectile.y, projectile.radius)) {
-        projectile.ttl = 0;
-        this.logArrowMiss(projectile);
-        continue;
-      }
-      for (const monster of this.monsters) {
-        if (monster.state === "dead") continue;
-        const def = getMonster(monster.defId);
-        if (dist2(projectile.x, projectile.y, monster.x, monster.y) <= (projectile.radius + def.radius) ** 2) {
-          this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses);
-          projectile.hit = true;
+      const startX = projectile.x;
+      const startY = projectile.y;
+      const endX = startX + projectile.dirX * projectile.speed * dt;
+      const endY = startY + projectile.dirY * projectile.speed * dt;
+      const steps = Math.max(1, Math.ceil(length(endX - startX, endY - startY) / 4));
+      for (let step = 1; step <= steps && projectile.ttl > 0; step += 1) {
+        const progress = step / steps;
+        const previousProgress = (step - 1) / steps;
+        const x = startX + (endX - startX) * progress;
+        const y = startY + (endY - startY) * progress;
+        if (this.isBlockedAt(x, y, projectile.radius)) {
           projectile.ttl = 0;
+          this.logArrowMiss(projectile);
           break;
         }
+        for (const monster of this.monsters) {
+          if (monster.state === "dead") continue;
+          const def = getMonster(monster.defId);
+          const segmentStartX = startX + (endX - startX) * previousProgress;
+          const segmentStartY = startY + (endY - startY) * previousProgress;
+          if (segmentDistanceSquared(monster.x, monster.y, segmentStartX, segmentStartY, x, y) <= (projectile.radius + def.radius) ** 2) {
+            projectile.x = x;
+            projectile.y = y;
+            this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses);
+            projectile.hit = true;
+            projectile.ttl = 0;
+            break;
+          }
+        }
+      }
+      if (projectile.ttl > 0) {
+        projectile.x = endX;
+        projectile.y = endY;
       }
       if (projectile.ttl <= 0 && !projectile.hit && !projectile.missLogged) {
         this.logArrowMiss(projectile);

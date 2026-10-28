@@ -21,7 +21,11 @@ export function travel(session: GameSession, portal: PortalDef): void {
     quest.objectives.forEach((objective, i) => {
       if (objective.kind === "visit" && objective.zone === session.save.zone) state.progress[i] = 1;
       if (objective.kind === "explore" && objective.zones.includes(session.save.zone)) {
-        state.progress[i] = Math.min(objective.zones.length, (state.progress[i] ?? 0) + 1);
+        const explored = state.exploredZones ?? [];
+        if (!explored.includes(session.save.zone)) {
+          state.exploredZones = [...explored, session.save.zone];
+          state.progress[i] = Math.min(objective.zones.length, new Set(state.exploredZones.filter((zone) => objective.zones.includes(zone))).size);
+        }
       }
     });
     session.refreshQuestCompletion(state);
@@ -52,13 +56,14 @@ export function openChest(session: GameSession, id: string): void {
 
 export function gatherNode(session: GameSession, id: string): void {
   const node = session.zone.gatherNodes.find((n) => n.id === id);
-  if (!node || session.gathered.has(id)) return;
+  if (!node || session.gathered.has(id) || (session.save.gatherCooldowns[`${session.zone.id}:${id}`] ?? 0) > session.save.playtime) return;
   const leftover = session.addItem(node.itemId, 1);
   if (leftover > 0) {
     session.emit({ type: "log", text: "Your inventory is full.", tone: "bad" });
     return;
   }
   session.gathered.add(id);
+  session.save.gatherCooldowns[`${session.zone.id}:${id}`] = session.save.playtime + 180;
   const def = ITEMS[node.itemId];
   session.emit({ type: "pickup", itemId: node.itemId, qty: 1 });
   session.emit({ type: "log", text: `Gathered ${def?.name ?? "an herb"}.`, tone: "good" });

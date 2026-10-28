@@ -49,7 +49,11 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
 /** Hits the monsters inside the area around a chosen point. */
 export function castPoint(s: GameSession, ability: AbilityDef, point: Vec2): void {
   const radius = ability.effects.find((e) => e.radius)?.radius ?? 40;
-  const targets = s.monsters.filter((m) => m.state !== "dead" && dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2);
+  const targets = s.monsters.filter((m) =>
+    m.state !== "dead"
+    && dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2
+    && s.hasLineOfSight(s.save.x, s.save.y, point.x, point.y)
+    && s.hasLineOfSight(point.x, point.y, m.x, m.y));
   if (targets.length === 0) {
     s.emit({ type: "log", text: `${ability.name} missed: nothing was in the area.`, tone: "info" });
   }
@@ -61,7 +65,10 @@ export function castSelf(s: GameSession, ability: AbilityDef): void {
   const radius = ability.effects.find((e) => e.radius)?.radius ?? 72;
   const damageEffects = ability.effects.some((e) => e.kind === "damage");
   const targets = damageEffects
-    ? s.monsters.filter((m) => m.state !== "dead" && dist2(m.x, m.y, s.save.x, s.save.y) <= (radius + 12) ** 2)
+    ? s.monsters.filter((m) =>
+      m.state !== "dead"
+      && dist2(m.x, m.y, s.save.x, s.save.y) <= (radius + 12) ** 2
+      && s.hasLineOfSight(s.save.x, s.save.y, m.x, m.y))
     : [];
   applyEffects(s, ability, targets, { x: s.save.x, y: s.save.y });
 }
@@ -71,12 +78,14 @@ export function castMelee(s: GameSession, ability: AbilityDef, dir: Vec2): void 
   const candidates = s.monsters
     .filter((m) => m.state !== "dead")
     .map((m) => ({ m, d: length(m.x - s.save.x, m.y - s.save.y), dot: normalize(m.x - s.save.x, m.y - s.save.y).x * dir.x + normalize(m.x - s.save.x, m.y - s.save.y).y * dir.y }))
-    .filter((entry) => entry.d <= ability.range + 14)
+    .filter((entry) => entry.d <= ability.range + 14 && (entry.d < 0.001 || entry.dot >= Math.cos(Math.PI / 3)) && s.hasLineOfSight(s.save.x, s.save.y, entry.m.x, entry.m.y))
     .sort((a, b) => b.dot - a.dot || a.d - b.d);
   const primary = candidates[0]?.m;
   const radius = ability.effects.find((e) => e.radius)?.radius;
   const targets = primary
-    ? s.monsters.filter((m) => m.state !== "dead" && (m === primary || (radius && dist2(m.x, m.y, primary.x, primary.y) <= radius * radius)))
+    ? s.monsters.filter((m) =>
+      m.state !== "dead"
+      && (m === primary || (radius && dist2(m.x, m.y, primary.x, primary.y) <= radius * radius && s.hasLineOfSight(primary.x, primary.y, m.x, m.y))))
     : [];
   if (targets.length === 0) {
     if (ability.targeting === "melee" && dir.x !== 0) s.facing = dir.x > 0 ? "right" : "left";
@@ -120,8 +129,7 @@ export function applyEffects(s: GameSession, ability: AbilityDef, targets: Monst
       const push = effect.amount ?? 40;
       for (const target of targets) {
         const away = normalize(target.x - center.x, target.y - center.y);
-        target.x += away.x * push;
-        target.y += away.y * push;
+        s.pushMonster(target, away.x * push, away.y * push);
       }
     } else if (effect.kind === "dash") {
       dash(s, effect.amount ?? 80);
@@ -159,8 +167,11 @@ export function dash(s: GameSession, distance: number): void {
 export function summon(s: GameSession, effect: AbilityEffect): void {
   const count = effect.summonCount ?? 1;
   const kind = effect.summonId === "skeleton_minion" ? "skeleton" : effect.summonId === "spirit_wolf" ? "wolf" : "familiar";
-  for (let i = 0; i < count; i += 1) {
-    const angle = (Math.PI * 2 * i) / count + s.rng.next();
+  const maxPets = 4;
+  const summoned = Math.min(count, maxPets);
+  if (s.pets.length + summoned > maxPets) s.pets.splice(0, s.pets.length + summoned - maxPets);
+  for (let i = 0; i < summoned; i += 1) {
+    const angle = (Math.PI * 2 * i) / summoned + s.rng.next();
     s.pets.push({
       uid: s.nextUid("pet"),
       kind,
@@ -172,7 +183,7 @@ export function summon(s: GameSession, effect: AbilityEffect): void {
       damage: Math.round((8 + s.save.level * 2 + s.stats.attack * 0.4) * 10) / 10,
     });
   }
-  s.emit({ type: "log", text: `${count > 1 ? count + " companions answer" : "A companion answers"} your call.`, tone: "good" });
+  s.emit({ type: "log", text: `${summoned > 1 ? summoned + " companions answer" : "A companion answers"} your call.`, tone: "good" });
 }
 
 /** Sets a trap on the ground that springs when a monster steps on it. */

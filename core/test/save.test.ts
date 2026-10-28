@@ -164,6 +164,16 @@ describe("save validation", () => {
     expect(migrated.quests[0]?.completed).toBe(true);
   });
 
+  it("resets ambiguous legacy exploration progress and initializes gathering cooldowns", () => {
+    const save = base();
+    save.quests.push({ id: "wider_world", progress: [2], completed: false, completions: 0 });
+    const migrated = migrateSave({ ...save, version: 8 });
+
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.quests[0]).toMatchObject({ progress: [0], exploredZones: [] });
+    expect(migrated.gatherCooldowns).toEqual({});
+  });
+
   it("summarizes a save for character select", () => {
     const save = base();
     expect(characterSummary(save)).toMatchObject({

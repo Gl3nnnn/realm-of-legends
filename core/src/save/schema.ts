@@ -39,6 +39,7 @@ const questSchema = z.object({
   progress: z.array(z.number().int().min(0)),
   completed: z.boolean(),
   completions: z.number().int().min(0),
+  exploredZones: z.array(z.enum(ZONE_IDS)).optional(),
   claimedReward: z.number().int().min(0).max(9).optional(),
 });
 
@@ -57,6 +58,7 @@ export const saveSchema = z.object({
   y: z.number().finite(),
   inventory: z.array(itemStackSchema.nullable()).length(INVENTORY_SIZE),
   quickSlots: z.tuple([z.string().nullable(), z.string().nullable()]),
+  gatherCooldowns: z.record(z.string().min(1), z.number().finite().min(0)).default({}),
   talents: z.array(z.string().min(1)).max(5),
   equipment: equipmentSchema,
   quests: z.array(questSchema),
@@ -136,6 +138,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     y: zone.spawn.y,
     inventory,
     quickSlots: ["health_potion", null],
+    gatherCooldowns: {},
     talents: [],
     equipment,
     quests: [],
@@ -253,6 +256,18 @@ export function migrateSave(input: unknown): CharacterSave {
       });
     }
     migrated.version = 8;
+  }
+  if (migrated.version === 8) {
+    if (Array.isArray(migrated.quests)) {
+      migrated.quests = migrated.quests.map((state) => {
+        if (!state || typeof state !== "object") return state;
+        const questState = state as Record<string, unknown>;
+        if (questState.id !== "wider_world" || questState.completed === true) return state;
+        const progress = Array.isArray(questState.progress) ? [0, ...questState.progress.slice(1)] : questState.progress;
+        return { ...questState, progress, exploredZones: [] };
+      });
+    }
+    migrated.version = 9;
   }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);

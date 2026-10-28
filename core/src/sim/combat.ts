@@ -72,15 +72,17 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   if (SUMMON_IDS.has(def.id)) return;
   // A boss pays its xp, gold and loot only on the first kill.
   if (def.boss && !firstBossKill) return;
-  if (def.xp > 0) s.gainXp(Math.round(def.xp * s.difficultyScale.xp));
-  const gold = Math.round(s.rng.int(def.goldMin, def.goldMax) * s.difficultyScale.gold);
+  const eliteReward = monster.elite ? 1.5 : 1;
+  if (def.xp > 0) s.gainXp(Math.round(def.xp * s.difficultyScale.xp * eliteReward));
+  const gold = Math.round(s.rng.int(def.goldMin, def.goldMax) * s.difficultyScale.gold * eliteReward);
   if (gold > 0) {
     s.save.gold += gold;
     s.emit({ type: "gold", amount: gold });
   }
   const drops: ItemStack[] = [];
   for (const entry of def.loot) {
-    if (!s.rng.chance(entry.chance)) continue;
+    const dropChance = monster.elite ? Math.min(1, entry.chance * 1.5) : entry.chance;
+    if (!s.rng.chance(dropChance)) continue;
     const item = ITEMS[entry.itemId];
     const qty = s.rng.int(entry.min, entry.max);
     const instance = item && isEquippable(item) ? createItemInstance(entry.itemId, s.rng) : undefined;
@@ -127,16 +129,14 @@ export function hitMonster(s: GameSession, monster: MonsterInstance, raw: number
     source: s.hatchlingHitting ? "hatchling" : undefined,
   });
   for (const status of statuses) {
-    if (status.kind === "stun") {
-      const existing = monster.statuses.find((st) => st.kind === "stun");
-      if (existing) existing.remaining = Math.max(existing.remaining, status.remaining);
-      else monster.statuses.push({ ...status });
-    } else if (status.kind === "slow" || status.kind === "mark") {
+    if (status.kind === "stun" || status.kind === "slow" || status.kind === "mark" || status.kind === "poison" || status.kind === "burn") {
       const existing = monster.statuses.find((st) => st.kind === status.kind);
+      if (existing) existing.remaining = Math.max(existing.remaining, status.remaining);
       if (existing) {
-        existing.remaining = Math.max(existing.remaining, status.remaining);
-        existing.value = Math.max(existing.value, status.value);
-      } else monster.statuses.push({ ...status });
+        if (status.kind !== "stun") existing.value = Math.max(existing.value, status.value);
+      } else {
+        monster.statuses.push({ ...status });
+      }
     } else {
       monster.statuses.push({ ...status });
     }

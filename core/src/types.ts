@@ -202,6 +202,7 @@ export interface QuestState {
   progress: number[];
   completed: boolean;
   completions: number;
+  exploredZones?: ZoneId[];
   /** Index of the reward picked from a choice quest; set once and never changed. */
   claimedReward?: number;
 }
@@ -307,6 +308,8 @@ export interface TelegraphInstance {
   angle?: number;
   /** Name of the boss that cast this telegraph, so the damage message names the right boss. */
   source?: string;
+  sourceUid?: string;
+  statusEffect?: StatusInstance;
 }
 
 export interface PetInstance {
@@ -436,6 +439,7 @@ export interface CharacterSave {
   y: number;
   inventory: (ItemStack | null)[];
   quickSlots: [string | null, string | null];
+  gatherCooldowns: Record<string, number>;
   talents: string[];
   equipment: Equipment;
   quests: QuestState[];
