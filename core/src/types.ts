@@ -23,7 +23,17 @@ export type ClassId =
   | "summoner"
   | "ranger"
   | "spellblade"
-  | "dragonknight";
+  | "dragonknight"
+  | "warden"
+  | "oracle"
+  | "battlemage"
+  | "shadowdancer"
+  | "artificer"
+  | "beastmaster"
+  | "duelist"
+  | "elementalist"
+  | "sentinel"
+  | "stormcaller";
 
 export type ResourceKind = "mana" | "energy" | "rage";
 

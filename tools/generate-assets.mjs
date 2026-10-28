@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeImage, savePng, rect, upscale } from "./lib/pixels.mjs";
 import { drawTileset, tintTileset, TILE_PALETTES } from "./lib/tiles.mjs";
-import { drawCharacters, CHAR_ORDER } from "./lib/characters.mjs";
+import { drawCharacters, CHAR_ORDER, CLASS_ORDER } from "./lib/characters.mjs";
 import { drawMonsters, drawPortraits, MONSTER_ORDER } from "./lib/creatures.mjs";
 import { drawAtlas, drawIcon } from "./lib/icons.mjs";
 import { buildWorld } from "./lib/maps.mjs";
@@ -96,6 +96,7 @@ function main() {
   const zones = buildWorld(path.join(ASSETS, "maps"), GENERATED);
 
   const manifest = `export const CHAR_ORDER = ${JSON.stringify(CHAR_ORDER)};
+export const CLASS_ORDER = ${JSON.stringify(CLASS_ORDER)};
 export const MONSTER_ORDER = ${JSON.stringify(MONSTER_ORDER)};
 export const ITEM_ICON_ORDER = ${JSON.stringify(items)};
 export const ABILITY_ICON_ORDER = ${JSON.stringify(abilities)};
@@ -106,7 +107,7 @@ export const ITEM_ICON_INDEX: Record<string, number> = ${JSON.stringify(Object.f
 export const ABILITY_ICON_INDEX: Record<string, number> = ${JSON.stringify(Object.fromEntries(abilities.map((id, i) => [id, i])), null, 2)};
 
 export const DIR_ORDER = ["down", "left", "right", "up"] as const;
-export const PORTRAIT_ORDER = CHAR_ORDER.slice(0, 15);
+export const PORTRAIT_ORDER = CLASS_ORDER;
 
 export function charFrame(sprite: string, dir: string, frame: number): number {
   const entity = CHAR_INDEX[sprite] ?? 0;

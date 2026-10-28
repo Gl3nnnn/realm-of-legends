@@ -43,8 +43,9 @@ describe("movement and collision", () => {
   });
 
   it("constructs every class and performs a basic attack", () => {
-    for (const classId of ["warrior", "mage", "archer", "assassin", "paladin", "priest", "necromancer", "druid", "monk", "gunslinger", "berserker", "summoner", "ranger", "spellblade", "dragonknight"] as const) {
+    for (const classId of ["warrior", "mage", "archer", "assassin", "paladin", "priest", "necromancer", "druid", "monk", "gunslinger", "berserker", "summoner", "ranger", "spellblade", "dragonknight", "warden", "oracle", "battlemage", "shadowdancer", "artificer", "beastmaster", "duelist", "elementalist", "sentinel", "stormcaller"] as const) {
       const session = forestSession(classId);
+      expect(session.save.equipment.weapon?.itemId).toBeTruthy();
       expect(session.castAbility("basic", { x: session.save.x + 40, y: session.save.y })).toBe(true);
       expect(session.abilityCooldown("basic")).toBeGreaterThan(0);
     }

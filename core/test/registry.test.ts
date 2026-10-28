@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ZoneId } from "../src/types";
+import type { ClassId, ZoneId } from "../src/types";
 import {
   ABILITY_ICON_INDEX,
   ALL_ABILITIES,
   CHAR_INDEX,
+  CLASS_STARTER_WEAPON_IDS,
   CLASS_LIST,
+  EXPANSION_GEAR_IDS,
+  EXPANSION_SUPPLY_IDS,
+  EXPANSION_WEAPON_IDS,
   FLAGSHIP_CLASSES,
   ITEM_ICON_INDEX,
   ITEM_LIST,
@@ -14,6 +18,7 @@ import {
   MONSTERS,
   NPCS,
   NPCS_LIST,
+  RECIPES,
   QUEST_LIST,
   QUESTS,
   SHOPS,
@@ -31,9 +36,9 @@ function blockedAt(zone: (typeof ZONE_LIST)[number], x: number, y: number): bool
 }
 
 describe("class registry", () => {
-  it("contains all 15 classes with unique ids and complete kits", () => {
-    expect(CLASS_LIST).toHaveLength(15);
-    expect(new Set(CLASS_LIST.map((c) => c.id)).size).toBe(15);
+  it("contains all 25 classes with unique ids and complete kits", () => {
+    expect(CLASS_LIST).toHaveLength(25);
+    expect(new Set(CLASS_LIST.map((c) => c.id)).size).toBe(25);
     expect(FLAGSHIP_CLASSES).toEqual(["warrior", "mage", "archer"]);
     for (const def of CLASS_LIST) {
       expect(def.name.length).toBeGreaterThan(1);
@@ -81,6 +86,51 @@ describe("item registry", () => {
       const weapon = ITEM_LIST.find((item) => item.type === "weapon" && canClassUse(item, def.id) && item.rarity === "common");
       expect(weapon, `${def.id} has no common weapon option`).toBeTruthy();
     }
+  });
+
+  it("registers ten new playable classes with portraits, starter gear, and advancement weapons", () => {
+    const newClassIds: ClassId[] = ["warden", "oracle", "battlemage", "shadowdancer", "artificer", "beastmaster", "duelist", "elementalist", "sentinel", "stormcaller"];
+    expect(CLASS_STARTER_WEAPON_IDS).toHaveLength(10);
+    for (const id of newClassIds) {
+      const def = CLASS_LIST.find((entry) => entry.id === id);
+      expect(def, id).toBeTruthy();
+      expect(CHAR_INDEX[def!.sprite]).toBeTypeOf("number");
+      const starter = ITEM_LIST.find((item) => CLASS_STARTER_WEAPON_IDS.includes(item.id) && item.classes?.includes(id));
+      expect(starter?.classes).toContain(id);
+      expect(starter?.rarity).toBe("common");
+      expect(SHOPS.forge.itemIds).toContain(starter?.id);
+      expect(ITEM_LIST.some((item) => item.type === "weapon" && item.requiresLevel && item.classes?.includes(id))).toBe(true);
+    }
+  });
+
+  it("adds 50 usable weapons and 50 mixed goods with shop and crafting access", () => {
+    expect(EXPANSION_WEAPON_IDS).toHaveLength(50);
+    expect(EXPANSION_GEAR_IDS).toHaveLength(16);
+    expect(EXPANSION_SUPPLY_IDS).toHaveLength(34);
+    for (const id of EXPANSION_WEAPON_IDS) {
+      expect(ITEMS[id]?.type, id).toBe("weapon");
+      expect(SHOPS.forge.itemIds).toContain(id);
+      expect(ITEMS[id]?.classes?.length).toBeGreaterThan(0);
+      expect(ITEMS[id]?.requiresLevel).toBeGreaterThan(1);
+    }
+    for (const id of EXPANSION_GEAR_IDS) {
+      expect(["armor", "helm", "boots", "trinket"]).toContain(ITEMS[id]?.type);
+      expect(SHOPS.forge.itemIds).toContain(id);
+    }
+    for (const id of EXPANSION_SUPPLY_IDS) {
+      expect(["consumable", "material"]).toContain(ITEMS[id]?.type);
+      expect(SHOPS.general.itemIds).toContain(id);
+    }
+    expect(EXPANSION_SUPPLY_IDS.filter((id) => ITEMS[id]?.type === "consumable")).toHaveLength(14);
+    expect(EXPANSION_SUPPLY_IDS.filter((id) => ITEMS[id]?.type === "material")).toHaveLength(20);
+
+    for (const recipe of RECIPES) {
+      expect(ITEMS[recipe.resultItemId], recipe.id).toBeTruthy();
+      for (const material of recipe.materials) expect(ITEMS[material.itemId], recipe.id).toBeTruthy();
+    }
+    const newMaterialIds = EXPANSION_SUPPLY_IDS.filter((id) => ITEMS[id]?.type === "material");
+    const recipeMaterials = new Set(RECIPES.flatMap((recipe) => recipe.materials.map(({ itemId }) => itemId)));
+    for (const id of newMaterialIds) expect(recipeMaterials, `${id} has a recipe use`).toContain(id);
   });
 });
 

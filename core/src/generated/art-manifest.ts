@@ -1,7 +1,8 @@
-export const CHAR_ORDER = ["warrior","mage","archer","assassin","paladin","priest","necromancer","druid","monk","gunslinger","berserker","summoner","ranger","spellblade","dragonknight","guard","merchant","blacksmith","healer","trainer"];
+export const CHAR_ORDER = ["warrior","mage","archer","assassin","paladin","priest","necromancer","druid","monk","gunslinger","berserker","summoner","ranger","spellblade","dragonknight","warden","oracle","battlemage","shadowdancer","artificer","beastmaster","duelist","elementalist","sentinel","stormcaller","guard","merchant","blacksmith","healer","trainer"];
+export const CLASS_ORDER = ["warrior","mage","archer","assassin","paladin","priest","necromancer","druid","monk","gunslinger","berserker","summoner","ranger","spellblade","dragonknight","warden","oracle","battlemage","shadowdancer","artificer","beastmaster","duelist","elementalist","sentinel","stormcaller"];
 export const MONSTER_ORDER = ["slime","wolf","skeleton","bone_warden","familiar"];
-export const ITEM_ICON_ORDER = ["sword","staff","bow","dagger","mace","fist","gun","axe","book","lance","armor","helm","boots","ring","potion_red","potion_blue","herb","gel","pelt","bone","ore","gem","coin"];
-export const ABILITY_ICON_ORDER = ["shield","whirlwind","axe","fire","ice","arcane","meteor","multiarrow","arrow","poison","rain","shadow","dagger","smoke","flurry","holy","heal","judgment","nova","skull","bone","summon","curse","leaf","roots","beast","fist","kick","combo","dragon","gun","ricochet","roll","bullet","eye","rage","cleave","slam","frenzy","familiar","link","command","trap","camouflage","mark","flameblade","frostblade","dash","burst","breath","scale","leap","infernal","book","mace","sword","lance","bow","staff"];
+export const ITEM_ICON_ORDER = ["armor","helm","boots","ring","potion_red","potion_blue","ore","pelt","bone","gem","herb","gel","mace","staff","sword","dagger","gun","bow","lance","fist","axe","book","coin"];
+export const ABILITY_ICON_ORDER = ["shield","whirlwind","axe","fire","ice","arcane","meteor","multiarrow","arrow","poison","rain","shadow","dagger","smoke","flurry","holy","heal","judgment","nova","skull","bone","summon","curse","leaf","roots","beast","fist","kick","combo","dragon","gun","ricochet","roll","bullet","eye","rage","cleave","slam","frenzy","familiar","link","command","trap","camouflage","mark","flameblade","frostblade","dash","burst","breath","scale","leap","infernal","earth","taunt","divine","barrier","explosion","lightning","sword","water","lance","wind","storm","book","mace","bow","staff"];
 
 export const CHAR_INDEX: Record<string, number> = {
   "warrior": 0,
@@ -19,11 +20,21 @@ export const CHAR_INDEX: Record<string, number> = {
   "ranger": 12,
   "spellblade": 13,
   "dragonknight": 14,
-  "guard": 15,
-  "merchant": 16,
-  "blacksmith": 17,
-  "healer": 18,
-  "trainer": 19
+  "warden": 15,
+  "oracle": 16,
+  "battlemage": 17,
+  "shadowdancer": 18,
+  "artificer": 19,
+  "beastmaster": 20,
+  "duelist": 21,
+  "elementalist": 22,
+  "sentinel": 23,
+  "stormcaller": 24,
+  "guard": 25,
+  "merchant": 26,
+  "blacksmith": 27,
+  "healer": 28,
+  "trainer": 29
 };
 export const MONSTER_INDEX: Record<string, number> = {
   "slime": 0,
@@ -33,28 +44,28 @@ export const MONSTER_INDEX: Record<string, number> = {
   "familiar": 4
 };
 export const ITEM_ICON_INDEX: Record<string, number> = {
-  "sword": 0,
-  "staff": 1,
-  "bow": 2,
-  "dagger": 3,
-  "mace": 4,
-  "fist": 5,
-  "gun": 6,
-  "axe": 7,
-  "book": 8,
-  "lance": 9,
-  "armor": 10,
-  "helm": 11,
-  "boots": 12,
-  "ring": 13,
-  "potion_red": 14,
-  "potion_blue": 15,
-  "herb": 16,
-  "gel": 17,
-  "pelt": 18,
-  "bone": 19,
-  "ore": 20,
-  "gem": 21,
+  "armor": 0,
+  "helm": 1,
+  "boots": 2,
+  "ring": 3,
+  "potion_red": 4,
+  "potion_blue": 5,
+  "ore": 6,
+  "pelt": 7,
+  "bone": 8,
+  "gem": 9,
+  "herb": 10,
+  "gel": 11,
+  "mace": 12,
+  "staff": 13,
+  "sword": 14,
+  "dagger": 15,
+  "gun": 16,
+  "bow": 17,
+  "lance": 18,
+  "fist": 19,
+  "axe": 20,
+  "book": 21,
   "coin": 22
 };
 export const ABILITY_ICON_INDEX: Record<string, number> = {
@@ -111,16 +122,25 @@ export const ABILITY_ICON_INDEX: Record<string, number> = {
   "scale": 50,
   "leap": 51,
   "infernal": 52,
-  "book": 53,
-  "mace": 54,
-  "sword": 55,
-  "lance": 56,
-  "bow": 57,
-  "staff": 58
+  "earth": 53,
+  "taunt": 54,
+  "divine": 55,
+  "barrier": 56,
+  "explosion": 57,
+  "lightning": 58,
+  "sword": 59,
+  "water": 60,
+  "lance": 61,
+  "wind": 62,
+  "storm": 63,
+  "book": 64,
+  "mace": 65,
+  "bow": 66,
+  "staff": 67
 };
 
 export const DIR_ORDER = ["down", "left", "right", "up"] as const;
-export const PORTRAIT_ORDER = CHAR_ORDER.slice(0, 15);
+export const PORTRAIT_ORDER = CLASS_ORDER;
 
 export function charFrame(sprite: string, dir: string, frame: number): number {
   const entity = CHAR_INDEX[sprite] ?? 0;

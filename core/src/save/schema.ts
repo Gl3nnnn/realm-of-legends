@@ -128,6 +128,16 @@ const STARTER_WEAPON: Record<ClassId, string> = {
   ranger: "shortbow",
   spellblade: "runeblade",
   dragonknight: "dragon_lance",
+  warden: "starter_warden_hammer",
+  oracle: "starter_oracle_focus",
+  battlemage: "starter_battlemage_blade",
+  shadowdancer: "starter_shadowdancer_blades",
+  artificer: "starter_artificer_repeater",
+  beastmaster: "starter_beastmaster_bow",
+  duelist: "starter_duelist_rapier",
+  elementalist: "starter_elementalist_focus",
+  sentinel: "starter_sentinel_halberd",
+  stormcaller: "starter_stormcaller_rod",
 };
 
 function newId(): string {

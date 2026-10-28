@@ -104,6 +104,13 @@ test("class browsing filters correctly and stays within a phone viewport", async
   await expect(page.locator('.class-card[data-class="necromancer"]')).toHaveCount(1);
   await expect(page.locator(".class-card")).toHaveCount(1);
 
+  await search.fill("stormcaller");
+  const stormcaller = page.locator('.class-card[data-class="stormcaller"]');
+  await expect(stormcaller).toBeVisible();
+  await expect(page.locator(".class-card")).toHaveCount(1);
+  await stormcaller.click();
+  await expect(stormcaller).toHaveAttribute("aria-pressed", "true");
+
   await search.fill("no matching class");
   await expect(page.locator(".class-listing .empty-state")).toBeVisible();
   await search.fill("");

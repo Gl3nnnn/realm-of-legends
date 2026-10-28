@@ -1,11 +1,14 @@
 import { makeImage, ellipse, px, rect, shade, blit } from "./pixels.mjs";
 
-export const CHAR_ORDER = [
+export const CLASS_ORDER = [
   "warrior", "mage", "archer", "assassin", "paladin",
   "priest", "necromancer", "druid", "monk", "gunslinger",
   "berserker", "summoner", "ranger", "spellblade", "dragonknight",
-  "guard", "merchant", "blacksmith", "healer", "trainer",
+  "warden", "oracle", "battlemage", "shadowdancer", "artificer",
+  "beastmaster", "duelist", "elementalist", "sentinel", "stormcaller",
 ];
+
+export const CHAR_ORDER = [...CLASS_ORDER, "guard", "merchant", "blacksmith", "healer", "trainer"];
 
 export const CHAR_STYLES = {
   warrior: { skin: "#e8b48b", hair: "#8a5a2b", hairStyle: "short", shirt: "#8a3b3b", pants: "#3f3f4a", accent: "#c9a24a", weapon: "sword", shield: true, cape: "#7a2f2f" },
@@ -23,6 +26,16 @@ export const CHAR_STYLES = {
   ranger: { skin: "#d9a06f", hair: "#4f7a3a", hairStyle: "long", shirt: "#4f7a3a", pants: "#5c3d24", accent: "#8a6238", weapon: "bow", hood: "#3d5f33" },
   spellblade: { skin: "#e8b48b", hair: "#4a6a9a", hairStyle: "long", shirt: "#3b4f8a", pants: "#2f2f3a", accent: "#6a8ad9", weapon: "sword", cape: "#35507a" },
   dragonknight: { skin: "#c9a06f", hair: "#2f2f3a", hairStyle: "short", shirt: "#7a2f2f", pants: "#3f2f2f", accent: "#d9a03a", weapon: "spear", shield: true, cape: "#7a2f2f", helm: "#8b8b94" },
+  warden: { skin: "#d9a06f", hair: "#5c3d24", hairStyle: "short", shirt: "#54736a", pants: "#3f4a45", accent: "#b9d1a6", weapon: "mace", shield: true, cape: "#3e5b54" },
+  oracle: { skin: "#e8b48b", hair: "#d9c26a", hairStyle: "long", shirt: "#8a7640", pants: "#5c4d2a", accent: "#fff0a8", weapon: "staff", cape: "#d9c26a" },
+  battlemage: { skin: "#e8b48b", hair: "#4a6a9a", hairStyle: "short", shirt: "#5869a8", pants: "#30374f", accent: "#b8a9ff", weapon: "sword", cape: "#414e85" },
+  shadowdancer: { skin: "#c9a0a0", hair: "#1f1f28", hairStyle: "long", shirt: "#473c68", pants: "#262331", accent: "#c08bda", weapon: "dagger", hood: "#302844", cape: "#382f50" },
+  artificer: { skin: "#d9a06f", hair: "#5c3d24", hairStyle: "short", shirt: "#a16d43", pants: "#4a3f3a", accent: "#f0c46b", weapon: "gun", hat: "#735032", helm: "#8b8b94" },
+  beastmaster: { skin: "#d9a06f", hair: "#4f7a3a", hairStyle: "ponytail", shirt: "#63834a", pants: "#4f5c2a", accent: "#d0b779", weapon: "bow", hood: "#47663c" },
+  duelist: { skin: "#e8b48b", hair: "#6a4230", hairStyle: "ponytail", shirt: "#387f86", pants: "#303b45", accent: "#c1e3d5", weapon: "sword", cape: "#285f68" },
+  elementalist: { skin: "#e8b48b", hair: "#e8e8f0", hairStyle: "long", shirt: "#4b8c9d", pants: "#34485b", accent: "#a6eef0", weapon: "staff", hat: "#367283" },
+  sentinel: { skin: "#d9a06f", hair: "#8a5a2b", hairStyle: "short", shirt: "#447b84", pants: "#3f454a", accent: "#d1e4d7", weapon: "spear", shield: true, cape: "#355f66", helm: "#8b8b94" },
+  stormcaller: { skin: "#c9a0a0", hair: "#1f1f28", hairStyle: "long", shirt: "#4877a6", pants: "#2f3f5a", accent: "#f1df7a", weapon: "staff", cape: "#365b83" },
   guard: { skin: "#d9a06f", hair: "#5c3d24", hairStyle: "short", shirt: "#3b4f7a", pants: "#3f3f4a", accent: "#a9b4c4", weapon: "spear", helm: "#8b8b94" },
   merchant: { skin: "#e8b48b", hair: "#8a5a2b", hairStyle: "short", shirt: "#7a5a2a", pants: "#5c3d24", accent: "#d9b45a", weapon: "none", hat: "#6a4a22" },
   blacksmith: { skin: "#c9a06f", hair: "#2f2f3a", hairStyle: "short", shirt: "#5f4a3a", pants: "#3f3f4a", accent: "#8b8b94", weapon: "mace" },

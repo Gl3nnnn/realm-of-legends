@@ -1,5 +1,5 @@
 import { makeImage, px, rect, ellipse, line, shade, upscale, hex } from "./pixels.mjs";
-import { CHAR_ORDER, CHAR_STYLES } from "./characters.mjs";
+import { CHAR_ORDER, CHAR_STYLES, CLASS_ORDER } from "./characters.mjs";
 
 export const MONSTER_ORDER = ["slime", "wolf", "skeleton", "bone_warden", "familiar"];
 
@@ -132,8 +132,8 @@ export function drawMonsters() {
 }
 
 export function drawPortraits(charSheet) {
-  const im = makeImage(5 * 64, 3 * 64);
-  CHAR_ORDER.slice(0, 15).forEach((id, index) => {
+  const im = makeImage(5 * 64, Math.ceil(CLASS_ORDER.length / 5) * 64);
+  CLASS_ORDER.forEach((id, index) => {
     const col = index % 5;
     const row = Math.floor(index / 5);
     const ox = col * 64;

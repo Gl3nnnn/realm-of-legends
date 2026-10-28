@@ -46,11 +46,11 @@ const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 
 const CLASS_CATEGORIES: { id: string; label: TextKey; classes: ClassId[] }[] = [
   { id: "all", label: "classFilterAll", classes: CLASS_LIST.map((def) => def.id) },
-  { id: "melee", label: "classFilterMelee", classes: ["warrior", "assassin", "paladin", "monk", "berserker", "spellblade", "dragonknight"] },
-  { id: "ranged", label: "classFilterRanged", classes: ["archer", "ranger", "gunslinger"] },
-  { id: "magic", label: "classFilterMagic", classes: ["mage", "priest", "necromancer", "druid", "summoner", "spellblade"] },
-  { id: "support", label: "classFilterSupport", classes: ["priest", "paladin", "druid", "summoner"] },
-  { id: "mobile", label: "classFilterMobile", classes: ["assassin", "monk", "ranger", "gunslinger"] },
+  { id: "melee", label: "classFilterMelee", classes: ["warrior", "assassin", "paladin", "monk", "berserker", "spellblade", "dragonknight", "warden", "battlemage", "shadowdancer", "duelist", "sentinel"] },
+  { id: "ranged", label: "classFilterRanged", classes: ["archer", "ranger", "gunslinger", "artificer", "beastmaster", "stormcaller"] },
+  { id: "magic", label: "classFilterMagic", classes: ["mage", "priest", "necromancer", "druid", "summoner", "spellblade", "oracle", "battlemage", "elementalist", "stormcaller"] },
+  { id: "support", label: "classFilterSupport", classes: ["priest", "paladin", "druid", "summoner", "warden", "oracle", "beastmaster", "sentinel"] },
+  { id: "mobile", label: "classFilterMobile", classes: ["assassin", "monk", "ranger", "gunslinger", "shadowdancer", "duelist", "beastmaster"] },
 ];
 
 export function characterSelectHtml(saves: CharacterSave[]): string {

@@ -14,7 +14,17 @@ export interface StoryChapter {
 export const CLASS_INTROS: Partial<Record<string, string>> = {
   warrior: "Your sword arm is known in every village, and Master Kael trusts you to hold the line.",
   mage: "Your magic answers to you alone, and Master Kael believes the cold winds are a sign you were meant to see.",
-  archer: "Your aim is steady and your eyes are sharp, and Master Kael sends you because no one reads the wild better."
+  archer: "Your aim is steady and your eyes are sharp, and Master Kael sends you because no one reads the wild better.",
+  warden: "You have guarded the village roads through every season. Master Kael trusts you to keep Eldoria standing.",
+  oracle: "You saw the northern chill in a dream before it came. Now Master Kael asks you to follow its trail.",
+  battlemage: "Your training joined spell and steel into one discipline. Master Kael believes both will be needed in the north.",
+  shadowdancer: "You know how to move unseen and strike only when it matters. The threat in the north will not see you coming.",
+  artificer: "Your clever devices have kept the village safe before. Master Kael hopes they can uncover what stirs beyond the forest.",
+  beastmaster: "The creatures of the wild trust your call. Their unease tells you the northern roads are in danger.",
+  duelist: "Your blade is quick, your judgment quicker. Master Kael asks you to meet the northern threat on your own terms.",
+  elementalist: "The elements have grown restless beneath the northern winds. You set out to learn why they have changed.",
+  sentinel: "You swore to stand between danger and the people of Eldoria. Master Kael holds you to that oath.",
+  stormcaller: "A strange storm gathers beyond the forest, and its lightning answers your voice. You follow it north."
 };
 
 // Each new cycle opens with a line that changes the story, so replaying feels different from the first run.

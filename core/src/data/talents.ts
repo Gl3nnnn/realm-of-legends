@@ -77,6 +77,16 @@ const ARCHETYPE_BY_CLASS: Record<ClassId, Archetype> = {
   ranger: "ranged",
   spellblade: "arcane",
   dragonknight: "martial",
+  warden: "martial",
+  oracle: "divine",
+  battlemage: "arcane",
+  shadowdancer: "shadow",
+  artificer: "tech",
+  beastmaster: "nature",
+  duelist: "martial",
+  elementalist: "arcane",
+  sentinel: "divine",
+  stormcaller: "arcane",
 };
 
 const NAMES: Record<Archetype, [string, string][]> = {
@@ -176,6 +186,16 @@ const PASSIVES: Record<ClassId, TalentPassive> = {
   ranger: { name: "Pathfinder", description: "No wild place is truly unknown.", stats: { moveSpeed: 2, attack: 2 } },
   spellblade: { name: "Arcane Edge", description: "Steel and sorcery are one weapon.", stats: { attack: 2, maxResource: 8 }, special: "cooldown", value: 3 },
   dragonknight: { name: "Draconic Scales", description: "The blood of dragons turns aside steel.", stats: { defense: 4, maxHp: 10 } },
+  warden: { name: "Steadfast", description: "A guardian's resolve makes every blow easier to bear.", stats: { defense: 3, maxHp: 10 } },
+  oracle: { name: "Clear Vision", description: "A glimpse of what is to come sharpens every spell.", stats: { maxResource: 10, crit: 0.01 } },
+  battlemage: { name: "Runic Guard", description: "Arcane wards temper your armor and focus.", stats: { defense: 2, maxResource: 8 } },
+  shadowdancer: { name: "Veiled Footwork", description: "You move through danger before it can find you.", stats: { moveSpeed: 3, crit: 0.02 } },
+  artificer: { name: "Field Engineer", description: "Careful preparation keeps your devices ready.", stats: { defense: 2, attack: 2 }, special: "cooldown", value: 2 },
+  beastmaster: { name: "Pack Bond", description: "Your companions make you stronger and more resilient.", stats: { maxHp: 10, attack: 2 } },
+  duelist: { name: "Measured Tempo", description: "Every clean exchange builds confidence and precision.", stats: { crit: 0.02, moveSpeed: 2 } },
+  elementalist: { name: "Elemental Attunement", description: "Your connection to the elements deepens your reserves.", stats: { maxResource: 14, attack: 1 } },
+  sentinel: { name: "Oathkeeper", description: "Your pledge to protect strengthens body and spirit.", stats: { defense: 3, maxHp: 12 } },
+  stormcaller: { name: "Storm's Reach", description: "The storm answers faster when you keep moving.", stats: { maxResource: 10, moveSpeed: 2 }, special: "cooldown", value: 2 },
 };
 
 const STAT_LABELS: Record<keyof StatBonus, string> = {

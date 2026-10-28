@@ -1,4 +1,5 @@
 import type { NpcDef, ShopDef } from "../types";
+import { CLASS_STARTER_WEAPON_IDS, EXPANSION_GEAR_IDS, EXPANSION_SUPPLY_IDS, EXPANSION_WEAPON_IDS } from "./items";
 
 export const NPCS: Record<string, NpcDef> = {
   guard: {
@@ -146,6 +147,7 @@ export const SHOPS: Record<string, ShopDef> = {
       "traveler_boots",
       "copper_ring",
       "sage_amulet",
+      ...EXPANSION_SUPPLY_IDS,
     ],
   },
   forge: {
@@ -182,6 +184,9 @@ export const SHOPS: Record<string, ShopDef> = {
       "plate_armor",
       "iron_helm",
       "swift_boots",
+      ...CLASS_STARTER_WEAPON_IDS,
+      ...EXPANSION_WEAPON_IDS,
+      ...EXPANSION_GEAR_IDS,
     ],
   },
   healer: {
