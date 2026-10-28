@@ -106,7 +106,7 @@ export function applyEffects(s: GameSession, ability: AbilityDef, targets: Monst
       const amount = (effect.amount ?? 0) + (effect.scaling ?? 0) * s.stats.attack;
       s.healPlayer(amount);
     } else if (effect.kind === "buff" && effect.stat && effect.duration) {
-      const existing = s.buffs.find((b) => b.name === (effect.name ?? ability.name));
+      const existing = s.buffs.find((b) => b.name === (effect.name ?? ability.name) && b.stat === effect.stat);
       if (existing) {
         existing.remaining = Math.max(existing.remaining, effect.duration);
         existing.percent = Math.max(existing.percent, effect.percent ?? 0);
@@ -194,8 +194,11 @@ export function placeTrap(s: GameSession, effect: AbilityEffect, center: Vec2): 
     y: center.y,
     radius: effect.radius ?? 40,
     damage: Math.round((effect.amount ?? 20) + (effect.scaling ?? 0) * s.stats.attack),
+    kind: "snare",
     armed: true,
     rearmTimer: 0,
+    rearmDelay: 0,
+    statusEffect: { kind: "stun", remaining: effect.duration ?? 1.5, value: 0 },
   });
   s.emit({ type: "log", text: "A trap is set.", tone: "info" });
 }

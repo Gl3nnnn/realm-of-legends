@@ -77,6 +77,26 @@ describe("combat", () => {
     expect(session.hasLineOfSight(100, 340, 140, 340)).toBe(true);
   });
 
+  it("keeps ordinary melee enemies from attacking through walls", () => {
+    const session = forestSession();
+    const slime = session.monsters.find((monster) => monster.defId === "slime")!;
+    session.save.x = 100;
+    session.save.y = 100;
+    slime.x = 140;
+    slime.y = 100;
+    slime.spawnX = slime.x;
+    slime.spawnY = slime.y;
+    slime.state = "attack";
+    slime.attackTimer = 0;
+    session.zone.blocked[6 * session.zone.width + 7] = true;
+    const hp = session.save.hp;
+
+    session.step(0.1, IDLE);
+
+    expect(session.save.hp).toBe(hp);
+    expect(session.telegraphs.some((telegraph) => telegraph.sourceUid === slime.uid)).toBe(false);
+  });
+
   it("prevents self-area attacks from damaging enemies behind walls", () => {
     const save = saveIn("forest");
     save.level = 3;
@@ -177,6 +197,84 @@ describe("combat", () => {
     expect(session.pets.some((pet) => pet.uid === oldest)).toBe(false);
   });
 
+  it("applies every stat in a multi-stat buff", () => {
+    const session = forestSession("priest");
+    session.save.level = 3;
+    const attack = session.stats.attack;
+    const defense = session.stats.defense;
+
+    expect(session.castAbility("blessing", { x: session.save.x, y: session.save.y })).toBe(true);
+
+    expect(session.stats.attack).toBeGreaterThan(attack);
+    expect(session.stats.defense).toBeGreaterThan(defense);
+    expect(session.buffs.filter((buff) => buff.name === "Blessing")).toHaveLength(2);
+  });
+
+  it("triggers ranger snares on monsters without harming the player", () => {
+    const session = forestSession("ranger");
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    for (const monster of session.monsters) {
+      if (monster !== target) monster.state = "dead";
+    }
+    session.save.x = 300;
+    session.save.y = 300;
+    target.x = 340;
+    target.y = 300;
+    target.state = "idle";
+    const hp = session.save.hp;
+    const monsterHp = target.hp;
+    session.placeTrap(
+      { kind: "trap", amount: 20, scaling: 0.8, damageType: "physical", radius: 45, duration: 1.5 },
+      { x: 300, y: 300 },
+    );
+
+    session.step(0.05, IDLE);
+
+    expect(session.save.hp).toBe(hp);
+    expect(target.hp).toBeLessThan(monsterHp);
+    expect(target.statuses.some((status) => status.kind === "stun" && status.remaining >= 1.5)).toBe(true);
+    expect(session.traps.some((trap) => trap.kind === "snare")).toBe(false);
+  });
+
+  it("uses each environment trap's configured cooldown", () => {
+    const session = new GameSession(saveIn("dungeon"));
+    for (const monster of session.monsters) monster.state = "dead";
+    const trap = session.traps[0]!;
+    session.save.x = trap.x;
+    session.save.y = trap.y;
+
+    session.step(0.05, IDLE);
+
+    expect(trap.armed).toBe(false);
+    expect(trap.rearmTimer).toBe(session.zone.traps[0]!.cooldown);
+    expect(trap.rearmDelay).toBe(session.zone.traps[0]!.cooldown);
+  });
+
+  it("updates existing monsters when difficulty changes", () => {
+    const session = forestSession();
+    const slime = session.monsters.find((monster) => monster.defId === "slime")!;
+    const healthRatio = slime.hp / slime.maxHp!;
+
+    expect(session.setDifficulty("nightmare")).toBe(true);
+
+    expect(slime.maxHp).toBeGreaterThan(45);
+    expect(slime.hp / slime.maxHp!).toBeCloseTo(healthRatio);
+  });
+
+  it("applies partial loot pickups only once", () => {
+    const session = forestSession();
+    session.save.inventory = session.save.inventory.map(() => ({ itemId: "herb", qty: 50 }));
+    session.save.inventory[0] = { itemId: "slime_gel", qty: 49 };
+    session.loot.push({ uid: "partial-gel", itemId: "slime_gel", qty: 2, x: session.save.x, y: session.save.y, ttl: 30 });
+
+    session.step(0.05, IDLE);
+
+    expect(session.countItem("slime_gel")).toBe(50);
+    expect(session.loot.find((drop) => drop.uid === "partial-gel")?.qty).toBe(1);
+    session.step(0.05, IDLE);
+    expect(session.countItem("slime_gel")).toBe(50);
+  });
+
   it("damages nearby monsters with a melee strike", () => {
     const session = forestSession();
     const slime = session.monsters.find((m) => m.defId === "slime");
@@ -237,6 +335,25 @@ describe("combat", () => {
     expect(session.save.hp).toBeGreaterThan(0);
   });
 
+  it("clears dodge and potion timers on respawn", () => {
+    const session = forestSession();
+    session.killPlayer("test");
+    session.dodgeCooldown = 1;
+    session.dodgeTimer = 1;
+    session.invulnerable = 1;
+    session.perfectDodgeTimer = 1;
+    session.potionCooldown = 1;
+
+    for (let i = 0; i < 50 && session.dead; i += 1) session.step(0.1, IDLE);
+
+    expect(session.dead).toBe(false);
+    expect(session.dodgeCooldown).toBe(0);
+    expect(session.dodgeTimer).toBe(0);
+    expect(session.invulnerable).toBe(0);
+    expect(session.perfectDodgeTimer).toBe(0);
+    expect(session.potionCooldown).toBe(0);
+  });
+
   it("gives ranged monsters a dodgeable, directional attack", () => {
     const session = new GameSession(saveIn("marsh"));
     const wisp = session.monsters.find((monster) => monster.defId === "mire_wisp")!;
@@ -282,6 +399,35 @@ describe("combat", () => {
     session.step(0.05, IDLE);
 
     expect(ally.hp).toBeGreaterThan(before);
+  });
+
+  it("does not let support monsters heal allies through walls", () => {
+    const session = new GameSession(saveIn("throne"));
+    const acolytes = session.monsters.filter((monster) => monster.defId === "hollow_acolyte");
+    const support = acolytes[0]!;
+    const ally = acolytes[1]!;
+    for (const monster of session.monsters) {
+      if (monster !== support && monster !== ally) monster.state = "dead";
+    }
+    support.x = 300;
+    support.y = 300;
+    support.spawnX = support.x;
+    support.spawnY = support.y;
+    support.state = "attack";
+    support.attackTimer = 0;
+    ally.x = 330;
+    ally.y = 300;
+    ally.hp = (ally.maxHp ?? 1) / 2;
+    session.save.x = 300;
+    session.save.y = 380;
+    session.zone.blocked = [...session.zone.blocked];
+    session.zone.blocked[18 * session.zone.width + 19] = true;
+    const before = ally.hp;
+
+    session.step(0.05, IDLE);
+
+    expect(session.hasLineOfSight(support.x, support.y, ally.x, ally.y)).toBe(false);
+    expect(ally.hp).toBe(before);
   });
 
   it("does not apply venom when the player dodges a melee windup", () => {
@@ -410,6 +556,7 @@ describe("combat", () => {
 
   it("makes support enemies attack when all nearby allies are already healthy", () => {
     const session = new GameSession(saveIn("throne"));
+    session.zone.blocked = [...session.zone.blocked];
     const support = session.monsters.find((monster) => monster.defId === "hollow_acolyte")!;
     const ally = session.monsters.find((monster) => monster !== support && monster.defId === "hollow_acolyte")!;
     for (const monster of session.monsters) {
@@ -426,6 +573,10 @@ describe("combat", () => {
     ally.hp = ally.maxHp ?? 1;
     session.save.x = 400;
     session.save.y = 300;
+    const row = Math.floor(support.y / session.zone.tileHeight);
+    for (let column = Math.floor(support.x / session.zone.tileWidth); column <= Math.floor(session.save.x / session.zone.tileWidth); column += 1) {
+      session.zone.blocked[row * session.zone.width + column] = false;
+    }
 
     session.step(0.05, IDLE);
 
@@ -460,6 +611,22 @@ describe("inventory, equipment and economy", () => {
     expect(session.save.inventory.some((stack) => stack?.itemId === "ember_staff")).toBe(true);
   });
 
+  it("preserves item instances when equipping and swapping equipment", () => {
+    const session = new GameSession(saveIn("village"));
+    session.addItem("steel_sword", 1, { uid: "affixed-steel", affixes: ["fierce"], upgrade: 2 });
+    const steelSlot = session.save.inventory.findIndex((stack) => stack?.itemId === "steel_sword");
+
+    expect(session.equip(steelSlot)).toBe(true);
+    expect(session.save.equipment.weapon?.instance).toEqual({ uid: "affixed-steel", affixes: ["fierce"], upgrade: 2 });
+    expect(session.save.inventory[steelSlot]?.itemId).toBe("iron_sword");
+
+    const steelAttack = session.stats.attack;
+    expect(session.equip(steelSlot)).toBe(true);
+    expect(session.save.equipment.weapon?.itemId).toBe("iron_sword");
+    expect(session.save.inventory.some((stack) => stack?.itemId === "steel_sword" && stack.instance?.uid === "affixed-steel")).toBe(true);
+    expect(session.stats.attack).toBeLessThan(steelAttack);
+  });
+
   it("buys, sells and heals at NPC prices", () => {
     const session = new GameSession(saveIn("village"));
     session.save.gold = 500;
@@ -477,6 +644,66 @@ describe("inventory, equipment and economy", () => {
     expect(session.save.hp).toBe(session.stats.maxHp);
     expect(session.save.gold).toBe(485 - healCost);
     expect(session.healAtNpc()).toBe(false);
+  });
+
+  it("rejects class-incompatible purchases and fractional economy quantities", () => {
+    const session = new GameSession(saveIn("village", "mage"));
+    session.save.gold = 1000;
+
+    expect(session.buy("forge", "iron_sword")).toBe(false);
+    expect(session.buy("general", "health_potion", 1.5)).toBe(false);
+    expect(session.sell(0, 1.5)).toBe(false);
+    expect(session.save.gold).toBe(1000);
+    expect(session.countItem("health_potion")).toBe(3);
+  });
+
+  it("rejects crafting class-incompatible gear", () => {
+    const session = new GameSession(saveIn("village", "mage"));
+    session.save.gold = 1000;
+    session.addItem("iron_ore", 3);
+
+    expect(session.craft("craft_iron_sword")).toBe(false);
+    expect(session.countItem("iron_ore")).toBe(3);
+  });
+
+  it("crafts when consuming materials creates the needed inventory space", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.gold = 1000;
+    session.save.inventory = session.save.inventory.map(() => ({ itemId: "herb", qty: 50 }));
+    session.save.inventory[0] = { itemId: "iron_ore", qty: 3 };
+
+    expect(session.craft("craft_iron_sword")).toBe(true);
+    expect(session.countItem("iron_ore")).toBe(0);
+    expect(session.save.inventory.some((stack) => stack?.itemId === "iron_sword")).toBe(true);
+  });
+
+  it("does not consume potions while dead", () => {
+    const session = new GameSession(saveIn("village"));
+    session.dead = true;
+    const before = session.countItem("health_potion");
+
+    expect(session.useItem(0)).toBe(false);
+    expect(session.countItem("health_potion")).toBe(before);
+  });
+
+  it("limits the kindness gold reward to once per NPC", () => {
+    const session = new GameSession(saveIn("village"));
+    const before = session.save.gold;
+
+    expect(session.pickNpcChoice("guard", "kind")).toBe(true);
+    expect(session.pickNpcChoice("guard", "rude")).toBe(true);
+    expect(session.pickNpcChoice("guard", "kind")).toBe(true);
+
+    expect(session.save.gold).toBe(before + 5);
+    expect(session.save.npcKindRewards).toEqual(["guard"]);
+  });
+
+  it("does not show gathering nodes during their persisted cooldown", () => {
+    const session = forestSession();
+    const node = session.zone.gatherNodes[0]!;
+    session.save.gatherCooldowns[`forest:${node.id}`] = session.save.playtime + 30;
+
+    expect(session.findInteractable()?.id).not.toBe(node.id);
   });
 
   it("persists gathered-node cooldowns across zone reloads and replenishes them", () => {
@@ -767,6 +994,7 @@ describe("difficulty, elites and bosses", () => {
     const ordinarySlime = ordinary.monsters.find((monster) => monster.defId === "slime")!;
     const eliteSlime = elite.monsters.find((monster) => monster.defId === "slime")!;
     ordinarySlime.hp = 1;
+    ordinarySlime.elite = undefined;
     eliteSlime.hp = 1;
     eliteSlime.elite = "swift";
 

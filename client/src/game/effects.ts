@@ -22,9 +22,10 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
   }
   for (const trap of scene.session.traps) {
     if (!trap.armed) continue;
-    g.fillStyle(preferences.highContrast ? 0xffffff : 0xff7a4a, preferences.highContrast ? 0.14 : 0.08);
+    const color = trap.kind === "snare" ? 0x78d18a : 0xff7a4a;
+    g.fillStyle(preferences.highContrast ? 0xffffff : color, preferences.highContrast ? 0.14 : 0.08);
     g.fillCircle(trap.x, trap.y, trap.radius);
-    g.lineStyle(preferences.highContrast ? 2 : 1, preferences.highContrast ? 0xffffff : 0xff9a6a, 0.75);
+    g.lineStyle(preferences.highContrast ? 2 : 1, preferences.highContrast ? 0xffffff : trap.kind === "snare" ? 0xa2f0ae : 0xff9a6a, 0.75);
     g.strokeCircle(trap.x, trap.y, trap.radius);
     if (preferences.highContrast) g.strokeCircle(trap.x, trap.y, Math.max(4, trap.radius - 5));
   }

@@ -178,6 +178,13 @@ export class GameSession {
     if (this.dead) return false;
     if (!["story", "normal", "nightmare"].includes(difficulty)) return false;
     this.save.difficulty = difficulty;
+    for (const monster of this.monsters) {
+      const def = getMonster(monster.defId);
+      const previousMaxHp = monster.maxHp ?? def.maxHp;
+      const nextMaxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (monster.elite ? 1.6 : 1)));
+      monster.hp = monster.state === "dead" ? 0 : Math.max(1, Math.round(monster.hp / previousMaxHp * nextMaxHp));
+      monster.maxHp = nextMaxHp;
+    }
     this.emit({ type: "log", text: `Difficulty set to ${difficulty}.`, tone: "info" });
     return true;
   }
@@ -261,8 +268,10 @@ export class GameSession {
       y: trap.y,
       radius: trap.radius,
       damage: trap.damage,
+      kind: "hazard",
       armed: true,
       rearmTimer: 0,
+      rearmDelay: trap.cooldown,
     }));
     this.projectiles = [];
     this.pets = [];
@@ -598,14 +607,18 @@ export class GameSession {
       if (monster.state === "attack") {
         if (playerDist > def.attackRange + PLAYER_RADIUS + 12 || (def.role && playerDist < def.attackRange * 0.45)) {
           monster.state = "chase";
-        } else if (def.role && !this.hasLineOfSight(monster.x, monster.y, player.x, player.y)) {
+        } else if (!this.hasLineOfSight(monster.x, monster.y, player.x, player.y)) {
           monster.state = "chase";
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
           const raw = def.attack * this.difficultyScale.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
           if (def.role === "support") {
             const ally = this.monsters
-              .filter((candidate) => candidate !== monster && candidate.state !== "dead" && length(candidate.x - monster.x, candidate.y - monster.y) <= 120)
+              .filter((candidate) =>
+                candidate !== monster
+                && candidate.state !== "dead"
+                && length(candidate.x - monster.x, candidate.y - monster.y) <= 120
+                && this.hasLineOfSight(monster.x, monster.y, candidate.x, candidate.y))
               .sort((a, b) => a.hp / (a.maxHp ?? getMonster(a.defId).maxHp) - b.hp / (b.maxHp ?? getMonster(b.defId).maxHp))[0];
             if (ally) {
               const maxHp = ally.maxHp ?? getMonster(ally.defId).maxHp;
@@ -766,6 +779,17 @@ export class GameSession {
 
   private updateTraps(dt: number): void {
     for (const trap of this.traps) {
+      if (trap.kind === "snare") {
+        if (!trap.armed) continue;
+        const target = this.monsters.find((monster) =>
+          monster.state !== "dead"
+          && dist2(monster.x, monster.y, trap.x, trap.y) <= (trap.radius + getMonster(monster.defId).radius) ** 2);
+        if (target) {
+          this.hitMonster(target, trap.damage, false, "physical", trap.statusEffect ? [trap.statusEffect] : []);
+          trap.armed = false;
+        }
+        continue;
+      }
       if (trap.rearmTimer > 0) {
         trap.rearmTimer -= dt;
         if (trap.rearmTimer <= 0) trap.armed = true;
@@ -775,10 +799,11 @@ export class GameSession {
       if (dist2(this.save.x, this.save.y, trap.x, trap.y) <= trap.radius * trap.radius) {
         this.damagePlayer(trap.damage, "Ancient Trap");
         trap.armed = false;
-        trap.rearmTimer = 3.5;
+        trap.rearmTimer = trap.rearmDelay;
         this.emit({ type: "log", text: "A hidden trap springs!", tone: "bad" });
       }
     }
+    this.traps = this.traps.filter((trap) => trap.kind !== "snare" || trap.armed);
   }
 
   damagePlayer(raw: number, source: string): void {
@@ -894,9 +919,12 @@ export class GameSession {
     for (const drop of this.loot) {
       drop.ttl -= dt;
       if (dist2(this.save.x, this.save.y, drop.x, drop.y) <= PICKUP_RANGE * PICKUP_RANGE) {
-        if (this.addItem(drop.itemId, drop.qty, drop.instance) === 0) {
-          this.emit({ type: "pickup", itemId: drop.itemId, qty: drop.qty });
-          drop.ttl = 0;
+        const leftover = this.addItem(drop.itemId, drop.qty, drop.instance);
+        const collected = drop.qty - leftover;
+        if (collected > 0) {
+          this.emit({ type: "pickup", itemId: drop.itemId, qty: collected });
+          if (leftover === 0) drop.ttl = 0;
+          else drop.qty = leftover;
         }
       }
     }
@@ -1277,6 +1305,7 @@ export class GameSession {
   }
 
   useItem(slotIndex: number): boolean {
+    if (this.dead) return false;
     const stack = this.save.inventory[slotIndex];
     if (!stack) return false;
     const def = getItem(stack.itemId);
@@ -1314,12 +1343,9 @@ export class GameSession {
     const type = def.type;
     if (type === "consumable" || type === "material") return false;
     const current = this.save.equipment[type];
-    this.save.equipment[type] = { itemId: stack.itemId, qty: 1 };
+    this.save.equipment[type] = { ...stack, qty: 1 };
     stack.qty -= 1;
-    if (stack.qty <= 0) this.save.inventory[slotIndex] = null;
-    if (current) {
-      this.addItem(current.itemId, current.qty);
-    }
+    this.save.inventory[slotIndex] = stack.qty <= 0 ? current ?? null : stack;
     const before = this.stats;
     this.save.hp = Math.min(this.save.hp, before.maxHp);
     this.save.resource = Math.min(this.save.resource, before.maxResource);
@@ -1346,7 +1372,7 @@ export class GameSession {
 
   sell(slotIndex: number, qty = 1): boolean {
     const stack = this.save.inventory[slotIndex];
-    if (!stack) return false;
+    if (!stack || !Number.isInteger(qty) || qty < 1) return false;
     const amount = Math.max(1, Math.min(qty, stack.qty));
     const def = getItem(stack.itemId);
     const gold = itemSellValue(stack) * amount;
@@ -1361,8 +1387,12 @@ export class GameSession {
 
   buy(shopId: string, itemId: string, qty = 1): boolean {
     const shop = SHOPS[shopId];
-    if (!shop || !shop.itemIds.includes(itemId)) return false;
+    if (!shop || !shop.itemIds.includes(itemId) || !Number.isInteger(qty) || qty < 1) return false;
     const def = getItem(itemId);
+    if (!canClassUse(def, this.save.classId)) {
+      this.emit({ type: "log", text: `${this.classDef.name}s cannot use ${def.name}.`, tone: "bad" });
+      return false;
+    }
     const amount = Math.max(1, Math.min(qty, def.stack));
     const cost = (def.buy ?? 0) * amount;
     if (!def.buy) return false;
@@ -1436,12 +1466,18 @@ export class GameSession {
         return false;
       }
     }
+    const result = getItem(recipe.resultItemId);
+    if (!canClassUse(result, this.save.classId)) {
+      this.emit({ type: "log", text: `${this.classDef.name}s cannot use ${result.name}.`, tone: "bad" });
+      return false;
+    }
+    for (const material of recipe.materials) this.removeItem(material.itemId, material.qty);
     if (!this.canAdd(recipe.resultItemId, 1)) {
+      for (const material of recipe.materials) this.addItem(material.itemId, material.qty);
       this.emit({ type: "log", text: "Your inventory is full.", tone: "bad" });
       return false;
     }
     this.save.gold -= recipe.gold;
-    for (const material of recipe.materials) this.removeItem(material.itemId, material.qty);
     const instance = createItemInstance(recipe.resultItemId, this.rng, 1);
     this.addItem(recipe.resultItemId, 1, instance);
     this.emit({ type: "log", text: `Borin crafts ${recipe.name}${instance ? " with an affix" : ""}.`, tone: "good" });
@@ -1502,14 +1538,19 @@ export class GameSession {
 
   /** Pick a dialogue choice with an NPC. Changes that NPC's standing and gives a small reward. */
   pickNpcChoice(npcId: string, choice: "kind" | "rude"): boolean {
-    if (!npcId || (choice !== "kind" && choice !== "rude")) return false;
+    if (!NPCS[npcId] || (choice !== "kind" && choice !== "rude")) return false;
     const relationships = this.save.relationships;
     const current = relationships[npcId] ?? 0;
     if (choice === "kind") {
       relationships[npcId] = Math.min(10, current + 1);
-      this.save.gold += 5;
-      this.emit({ type: "gold", amount: 5 });
-      this.emit({ type: "log", text: "They appreciate your kindness. +5 gold.", tone: "good" });
+      if (!this.save.npcKindRewards.includes(npcId)) {
+        this.save.npcKindRewards.push(npcId);
+        this.save.gold += 5;
+        this.emit({ type: "gold", amount: 5 });
+        this.emit({ type: "log", text: "They appreciate your kindness. +5 gold.", tone: "good" });
+      } else {
+        this.emit({ type: "log", text: "They appreciate your kind words.", tone: "good" });
+      }
     } else {
       relationships[npcId] = Math.max(-10, current - 1);
       this.emit({ type: "log", text: "They remember that. Their trust drops a little.", tone: "bad" });
@@ -1547,6 +1588,7 @@ export class GameSession {
     }
     for (const node of this.zone.gatherNodes) {
       if (this.gathered.has(node.id)) continue;
+      if ((this.save.gatherCooldowns[`${this.zone.id}:${node.id}`] ?? 0) > this.save.playtime) continue;
       const def = ITEMS[node.itemId];
       consider(node.x, node.y, { kind: "gather", id: node.id, label: `Gather ${def?.name ?? "herb"}` });
     }

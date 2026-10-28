@@ -336,8 +336,11 @@ export interface TrapInstance {
   y: number;
   radius: number;
   damage: number;
+  kind: "hazard" | "snare";
   armed: boolean;
   rearmTimer: number;
+  rearmDelay: number;
+  statusEffect?: StatusInstance;
 }
 
 export interface PortalDef {
@@ -450,6 +453,7 @@ export interface CharacterSave {
   storyChapter: number;
   introShown?: boolean;
   relationships: Record<string, number>;
+  npcKindRewards: string[];
   playtime: number;
   rngState: number;
   createdAt: number;

@@ -3,6 +3,7 @@ import { INVENTORY_SIZE, LEVEL_CAP, SAVE_VERSION } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
 import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
 import { getTalentChoice, talentTierChosen } from "../data/talents";
+import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
 import { clampLevel } from "../progression";
@@ -68,6 +69,7 @@ export const saveSchema = z.object({
   defeatedBosses: z.array(z.enum(BOSS_IDS)).max(32),
   storyChapter: z.number().int().min(0).max(99),
   relationships: z.record(z.string().min(1).max(40), z.number().int().min(-10).max(10)).default({}),
+  npcKindRewards: z.array(z.string().min(1)).max(Object.keys(NPCS).length).default([]),
   playtime: z.number().finite().min(0),
   rngState: z.number().int().min(0).max(0xffffffff),
   createdAt: z.number().int().min(0),
@@ -148,6 +150,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     defeatedBosses: [],
     storyChapter: 0,
     relationships: {},
+    npcKindRewards: [],
     playtime: 0,
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
@@ -183,10 +186,15 @@ export function validateSave(input: unknown): SaveParseResult {
   for (const stack of save.inventory) {
     if (!stack) continue;
     if (!ITEMS[stack.itemId]) return { ok: false, error: `Unknown inventory item: ${stack.itemId}` };
+    if (stack.qty > ITEMS[stack.itemId].stack) return { ok: false, error: `${ITEMS[stack.itemId].name} exceeds its stack limit.` };
     if (stack.instance && (stack.qty !== 1 || !isEquippable(ITEMS[stack.itemId]))) return { ok: false, error: "Item instances must be single pieces of equipment." };
   }
   for (const itemId of save.quickSlots) {
     if (itemId && !ITEMS[itemId]) return { ok: false, error: `Unknown quick-slot item: ${itemId}` };
+    if (itemId && ITEMS[itemId].type !== "consumable") return { ok: false, error: "Quick slots can only contain consumables." };
+  }
+  if (new Set(save.npcKindRewards).size !== save.npcKindRewards.length || save.npcKindRewards.some((npcId) => !NPCS[npcId])) {
+    return { ok: false, error: "Invalid NPC kindness reward tracking." };
   }
   const seenTiers = new Set<number>();
   for (const talentId of save.talents) {
@@ -204,6 +212,7 @@ export function validateSave(input: unknown): SaveParseResult {
     if (!def) return { ok: false, error: `Unknown equipped item: ${stack.itemId}` };
     if (stack.instance && (stack.qty !== 1 || !isEquippable(def))) return { ok: false, error: "Invalid equipment instance." };
     if (!isEquippable(def)) return { ok: false, error: `${def.name} cannot be equipped.` };
+    if (stack.qty !== 1) return { ok: false, error: "Equipped items must be single pieces." };
     if (!canClassUse(def, save.classId)) return { ok: false, error: `${def.name} cannot be used by this class.` };
     if (slot !== def.type) return { ok: false, error: `${def.name} does not belong in the ${slot} slot.` };
   }
@@ -268,6 +277,10 @@ export function migrateSave(input: unknown): CharacterSave {
       });
     }
     migrated.version = 9;
+  }
+  if (migrated.version === 9) {
+    migrated.npcKindRewards = [];
+    migrated.version = 10;
   }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);

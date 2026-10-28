@@ -27,6 +27,11 @@ export function respawn(session: GameSession): void {
   session.save.resource = session.classDef.resource === "rage" ? 0 : stats.maxResource;
   session.dead = false;
   session.shield = 0;
+  session.dodgeCooldown = 0;
+  session.dodgeTimer = 0;
+  session.invulnerable = 0;
+  session.perfectDodgeTimer = 0;
+  session.potionCooldown = 0;
   session.loadZone();
   session.emit({ type: "respawn" });
   session.emit({ type: "zone", zone: "village" });

@@ -309,6 +309,7 @@ function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
   const stats = statLines(def.stats).slice(0, 2).join(" · ");
   const canAfford = session.save.gold >= (def.buy ?? 0);
+  const canUse = canClassUse(def, session.save.classId);
   return `<div class="shop-row">
     ${itemIconHtml(def.icon, 30)}
     <div>
@@ -317,7 +318,7 @@ function shopRow(session: GameSession, itemId: string): string {
     </div>
     <div style="display:grid;gap:5px;justify-items:end">
       <span class="gold-line">${def.buy ?? "-"} g</span>
-      <button class="btn small" data-action="buy" data-item="${def.id}" ${canAfford ? "" : "disabled"}>Buy</button>
+      <button class="btn small" data-action="buy" data-item="${def.id}" ${canAfford && canUse ? "" : "disabled"}>${canUse ? "Buy" : "Not for class"}</button>
     </div>
   </div>`;
 }

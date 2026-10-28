@@ -89,6 +89,28 @@ describe("save validation", () => {
     expect(() => migrateSave(null)).toThrow();
   });
 
+  it("migrates v9 saves to one-time NPC kindness reward tracking", () => {
+    const save = base();
+    const v9 = { ...save, version: 9 } as unknown as Record<string, unknown>;
+    delete v9.npcKindRewards;
+
+    const migrated = migrateSave(v9);
+
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.npcKindRewards).toEqual([]);
+    expect(validateSave(migrated).ok).toBe(true);
+  });
+
+  it("rejects overfull item stacks and non-consumable quick slots", () => {
+    const overfull = base();
+    overfull.inventory[1] = { itemId: "herb", qty: 51 };
+    expect(validateSave(overfull).ok).toBe(false);
+
+    const invalidQuickSlot = base();
+    invalidQuickSlot.quickSlots[0] = "iron_sword";
+    expect(validateSave(invalidQuickSlot).ok).toBe(false);
+  });
+
   it("migrates v2 saves to talents and validates talent choices", () => {
     const save = base();
     save.level = 10;
