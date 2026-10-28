@@ -1,23 +1,32 @@
 import Phaser from "phaser";
 import { MONSTERS, type ProjectileInstance, type SimEvent } from "@realm/core";
-import type { GamePreferences } from "../ui/preferences";
+import { loadPreferences, type GamePreferences } from "../ui/preferences";
 import { projectileStyle, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
 import type { WorldScene } from "./WorldScene";
 
 /** Draws portal glows, traps, telegraphs, projectiles and monster health bars for one frame. */
 export function renderFloorEffects(scene: WorldScene, time: number): void {
+  const preferences = loadPreferences();
   const g = scene.floorFx;
   g.clear();
   for (const portal of scene.session.zone.portals) {
-    g.fillStyle(0xd9b45a, 0.05);
-    g.fillCircle(portal.x + portal.w / 2, portal.y + portal.h / 2, 20 + Math.sin(time / 350) * 3);
+    g.fillStyle(preferences.highContrast ? 0xffffff : 0xd9b45a, preferences.highContrast ? 0.12 : 0.05);
+    const pulse = preferences.reducedMotion ? 0 : Math.sin(time / 350) * 3;
+    const x = portal.x + portal.w / 2;
+    const y = portal.y + portal.h / 2;
+    g.fillCircle(x, y, 20 + pulse);
+    if (preferences.highContrast) {
+      g.lineStyle(2, 0xffffff, 0.9);
+      g.strokeCircle(x, y, 23 + pulse);
+    }
   }
   for (const trap of scene.session.traps) {
     if (!trap.armed) continue;
-    g.fillStyle(0xff7a4a, 0.08);
+    g.fillStyle(preferences.highContrast ? 0xffffff : 0xff7a4a, preferences.highContrast ? 0.14 : 0.08);
     g.fillCircle(trap.x, trap.y, trap.radius);
-    g.lineStyle(1, 0xff9a6a, 0.3);
+    g.lineStyle(preferences.highContrast ? 2 : 1, preferences.highContrast ? 0xffffff : 0xff9a6a, 0.75);
     g.strokeCircle(trap.x, trap.y, trap.radius);
+    if (preferences.highContrast) g.strokeCircle(trap.x, trap.y, Math.max(4, trap.radius - 5));
   }
   for (const telegraph of scene.session.telegraphs) {
     const progress = 1 - Math.max(0, telegraph.remaining) / Math.max(0.001, telegraph.total);
@@ -25,7 +34,8 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
     const shape = telegraph.shape ?? "ring";
     const angle = telegraph.angle ?? 0;
     g.fillStyle(fillColor, 0.1 + progress * 0.2);
-    g.lineStyle(2, 0xff6a6a, 0.9);
+    const highContrast = preferences.highContrast;
+    g.lineStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xff6a6a, 0.95);
     if (shape === "line") {
       const half = 14;
       const len = telegraph.radius;
@@ -54,9 +64,14 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
     } else if (shape === "spot") {
       g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
       g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
+      g.lineStyle(highContrast ? 3 : 2, 0xffffff, 0.9);
+      g.lineBetween(telegraph.x - 7, telegraph.y, telegraph.x + 7, telegraph.y);
+      g.lineBetween(telegraph.x, telegraph.y - 7, telegraph.x, telegraph.y + 7);
     } else {
       g.fillCircle(telegraph.x, telegraph.y, telegraph.radius);
       g.strokeCircle(telegraph.x, telegraph.y, telegraph.radius);
+      g.lineStyle(1, highContrast ? 0xffffff : 0xffd0a0, 0.75);
+      g.strokeCircle(telegraph.x, telegraph.y, Math.max(4, telegraph.radius * 0.65));
     }
     g.lineStyle(3, 0xffd0a0, 0.5);
     g.beginPath();
@@ -65,6 +80,34 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
   }
   for (const projectile of scene.session.projectiles) {
     drawProjectile(scene, g, projectile);
+  }
+
+  const targetFx = scene.interactionFx;
+  targetFx.clear();
+  const interactable = scene.session.findInteractable();
+  if (interactable) {
+    let position: { x: number; y: number } | undefined;
+    if (interactable.kind === "npc") {
+      position = scene.session.npcById(interactable.id);
+    } else if (interactable.kind === "portal") {
+      const portal = scene.session.portalById(interactable.id);
+      if (portal) position = { x: portal.x + portal.w / 2, y: portal.y + portal.h / 2 };
+    } else if (interactable.kind === "chest") {
+      position = scene.session.chestById(interactable.id);
+    } else {
+      position = scene.session.gatherById(interactable.id);
+    }
+    if (position) {
+      const { x, y } = position;
+      const color = preferences.highContrast ? 0xffffff : 0xffe26b;
+      targetFx.setDepth(y + 5);
+      targetFx.lineStyle(2, color, 0.95);
+      targetFx.strokeCircle(x, y, 18);
+      targetFx.lineBetween(x - 24, y, x - 12, y);
+      targetFx.lineBetween(x + 12, y, x + 24, y);
+      targetFx.lineBetween(x, y - 24, x, y - 12);
+      targetFx.lineBetween(x, y + 12, x, y + 24);
+    }
   }
 
   const bars = scene.barFx;
@@ -76,8 +119,12 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
     const boss = def.boss;
     const width = boss ? 64 : 26;
     const y = monster.y - (boss ? 44 : 24);
-    bars.fillStyle(0x08060c, 0.85);
+    bars.fillStyle(0x08060c, 0.95);
     bars.fillRect(monster.x - width / 2 - 1, y - 1, width + 2, boss ? 5 : 4);
+    if (preferences.highContrast) {
+      bars.lineStyle(1, 0xffffff, 0.95);
+      bars.strokeRect(monster.x - width / 2 - 1, y - 1, width + 2, boss ? 5 : 4);
+    }
     bars.fillStyle(boss ? 0xd95454 : 0xc04a4a, 1);
     bars.fillRect(monster.x - width / 2, y, width * Math.max(0, monster.hp / def.maxHp), boss ? 3 : 2);
   }

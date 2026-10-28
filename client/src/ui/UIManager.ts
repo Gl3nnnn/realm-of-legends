@@ -84,6 +84,7 @@ export class UIManager {
   private saves: CharacterSave[] = [];
   private selectedClass: ClassId = "warrior";
   private classRoleFilter = "all";
+  private classSearch = "";
   private selectedSlot: number | null = null;
   private selectedEquip: string | null = null;
   private inventoryFilter: InventoryFilter = "all";
@@ -111,6 +112,8 @@ export class UIManager {
   private lastCoinSound = 0;
   private lastPickupSound = 0;
   private persistTimer: number | null = null;
+  private panelOpener: HTMLElement | null = null;
+  private minimapCollapsed = false;
 
   private readonly dom = {
     boot: must("boot-screen"),
@@ -162,6 +165,7 @@ export class UIManager {
     this.onExitToMenu = options.onExitToMenu;
     applyPreferences(this.preferences);
     setLanguage(this.preferences.language);
+    this.updateMinimapLabel();
     this.bindEvents();
 
     window.setInterval(() => {
@@ -222,6 +226,7 @@ export class UIManager {
     this.session = session;
     this.panel = null;
     this.dom.overlay.classList.add("hidden");
+    this.dom.overlay.setAttribute("aria-hidden", "true");
     this.dom.overlay.innerHTML = "";
     this.dom.charSelect.classList.add("hidden");
     this.dom.boot.classList.add("hidden");
@@ -240,6 +245,9 @@ export class UIManager {
     this.dom.log.innerHTML = "";
     this.showTutorialIfNeeded();
     this.refreshTouchVisibility();
+    const opener = this.panelOpener;
+    this.panelOpener = null;
+    if (opener?.isConnected) opener.focus();
 
     const def = session.classInfo;
     this.dom.portrait.style.borderColor = classColor(def.id);
@@ -308,9 +316,8 @@ export class UIManager {
         this.updateClassSelection();
         this.sfx.ui();
       } else if (action === "class-role-filter") {
-        const currentName = (this.dom.createPanel.querySelector<HTMLInputElement>("#char-name")?.value) ?? "";
         this.classRoleFilter = target.dataset.value ?? "all";
-        this.renderCreate(currentName);
+        this.updateClassListing();
         this.sfx.ui();
       } else if (action === "cancel-create") {
         this.dom.createPanel.classList.add("hidden");
@@ -322,6 +329,20 @@ export class UIManager {
     });
 
     must("btn-import-save").addEventListener("click", () => this.dom.importFile.click());
+    must("minimap-toggle").addEventListener("click", (event) => {
+      this.minimapCollapsed = !this.minimapCollapsed;
+      this.dom.hud.classList.toggle("map-collapsed", this.minimapCollapsed);
+      const button = event.currentTarget as HTMLButtonElement;
+      button.setAttribute("aria-expanded", String(!this.minimapCollapsed));
+      this.updateMinimapLabel();
+    });
+
+    this.dom.createPanel.addEventListener("input", (event) => {
+      const target = event.target as HTMLInputElement;
+      if (!target.matches("[data-class-search]")) return;
+      this.classSearch = target.value;
+      this.updateClassListing();
+    });
     this.dom.importFile.addEventListener("change", () => {
       const file = this.dom.importFile.files?.[0];
       this.dom.importFile.value = "";
@@ -402,6 +423,7 @@ export class UIManager {
         const language = input.value === "tl" ? "tl" : "en";
         this.preferences = updatePreferences({ language });
         setLanguage(language);
+        this.updateMinimapLabel();
         this.renderPanel();
       }
       if (input.id === "difficulty-select" && this.session) {
@@ -535,6 +557,25 @@ export class UIManager {
 
   private onKeyDown(event: KeyboardEvent): void {
     if (event.repeat) return;
+    if (this.panel && event.key === "Tab") {
+      const focusable = Array.from(this.dom.overlay.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !this.dom.overlay.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !this.dom.overlay.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    }
     if (this.rebinding) {
       event.preventDefault();
       if (event.key === "Escape") {
@@ -642,10 +683,12 @@ export class UIManager {
   private updateClassSelection(): void {
     const cards = this.dom.createPanel.querySelectorAll<HTMLElement>(".class-card");
     cards.forEach((card) => {
-      card.classList.toggle("selected", card.dataset.class === this.selectedClass);
+      const selected = card.dataset.class === this.selectedClass;
+      card.classList.toggle("selected", selected);
+      card.setAttribute("aria-pressed", String(selected));
     });
     const fresh = document.createElement("div");
-    fresh.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter);
+    fresh.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter, this.classSearch);
     const freshPreview = fresh.querySelector<HTMLElement>(".class-preview");
     const preview = this.dom.createPanel.querySelector<HTMLElement>(".class-preview");
     if (freshPreview && preview) preview.replaceWith(freshPreview);
@@ -654,8 +697,27 @@ export class UIManager {
     if (freshTitle && titles[0]) titles[0].replaceWith(freshTitle);
   }
 
+  private updateClassListing(): void {
+    const fresh = document.createElement("div");
+    fresh.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter, this.classSearch);
+    const freshListing = fresh.querySelector<HTMLElement>(".class-listing");
+    const listing = this.dom.createPanel.querySelector<HTMLElement>(".class-listing");
+    if (freshListing && listing) listing.replaceWith(freshListing);
+    this.dom.createPanel.querySelectorAll<HTMLElement>("[data-action='class-role-filter']").forEach((button) => {
+      const selected = button.dataset.value === this.classRoleFilter;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+  }
+
+  private updateMinimapLabel(): void {
+    const button = must<HTMLButtonElement>("minimap-toggle");
+    button.setAttribute("aria-label", t(this.minimapCollapsed ? "minimapShow" : "minimapHide"));
+    button.title = t("minimapToggle");
+  }
+
   private renderCreate(name: string): void {
-    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter);
+    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter, this.classSearch);
     const input = this.dom.createPanel.querySelector<HTMLInputElement>("#char-name");
     if (input) {
       input.value = name;
@@ -724,6 +786,7 @@ export class UIManager {
 
   openPanel(kind: PanelState["kind"], id?: string): void {
     if (!this.session && kind !== "settings") return;
+    if (!this.panel) this.panelOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (kind === "npc" && id) this.panel = { kind, id };
     else if (kind === "shop" && id) this.panel = { kind, id };
     else if (kind === "inventory") this.panel = { kind };
@@ -742,14 +805,24 @@ export class UIManager {
     if (!this.panel) return;
     this.panel = null;
     this.dom.overlay.classList.add("hidden");
+    this.dom.overlay.setAttribute("aria-hidden", "true");
     this.dom.overlay.innerHTML = "";
     this.updateHud(true);
     this.refreshTouchVisibility();
+    const opener = this.panelOpener;
+    this.panelOpener = null;
+    if (opener?.isConnected && !opener.closest(".hidden")) opener.focus();
     if (persist) this.schedulePersist();
   }
 
   private renderPanel(): void {
     if (!this.panel) return;
+    const focused = document.activeElement instanceof HTMLElement && this.dom.overlay.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+    const focusSignature = focused?.dataset.action
+      ? ["action", focused.dataset.action, focused.dataset.key ?? "", focused.dataset.slot ?? "", focused.dataset.quest ?? ""]
+      : null;
     let title = "Panel";
     let body = "";
     let narrow = false;
@@ -781,6 +854,20 @@ export class UIManager {
       <div class="panel-body">${body}</div>
     </section>`;
     this.dom.overlay.classList.remove("hidden");
+    this.dom.overlay.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      const panel = this.dom.overlay.querySelector<HTMLElement>(".panel");
+      if (!panel) return;
+      const focusTarget = focusSignature
+        ? Array.from(panel.querySelectorAll<HTMLElement>("[data-action]")).find((element) =>
+            element.dataset.action === focusSignature[1]
+            && (element.dataset.key ?? "") === focusSignature[2]
+            && (element.dataset.slot ?? "") === focusSignature[3]
+            && (element.dataset.quest ?? "") === focusSignature[4],
+          )
+        : null;
+      (focusTarget ?? panel.querySelector<HTMLElement>(".panel-close"))?.focus();
+    });
   }
 
   private listenForPadButton(): void {

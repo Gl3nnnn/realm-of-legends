@@ -21,6 +21,12 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   await expect(page.locator("#difficulty-select")).toBeVisible();
   await page.locator("#difficulty-select").selectOption("nightmare");
   await expect(page.locator("#hud-cycle")).toHaveText("Nightmare");
+  await page.locator("#brightness-select").selectOption("1.4");
+  await expect(page.locator("#game canvas")).toHaveCSS("filter", "brightness(1.4)");
+  await page.locator("#contrast-toggle").check();
+  await expect(page.locator("#game canvas")).toHaveCSS("filter", "brightness(1.4) contrast(1.18)");
+  await page.locator("#motion-toggle").check();
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
   await page.locator('[data-action="close-panel"]').click();
 
   await page.keyboard.press("i");
@@ -85,4 +91,67 @@ test("enables touch controls for touch-capable players", async ({ page }) => {
   await expect(page.locator("#touch-controls")).toBeVisible();
   await expect(page.locator("#touch-stick")).toBeVisible();
   await page.locator('[data-touch="attack"]').dispatchEvent("pointerdown");
+});
+
+test("class browsing filters correctly and stays within a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.locator('[data-action="new-character"]').click();
+
+  const search = page.locator("[data-class-search]");
+  await expect(search).toBeVisible();
+  await search.fill("necromancer");
+  await expect(page.locator('.class-card[data-class="necromancer"]')).toHaveCount(1);
+  await expect(page.locator(".class-card")).toHaveCount(1);
+
+  await search.fill("no matching class");
+  await expect(page.locator(".class-listing .empty-state")).toBeVisible();
+  await search.fill("");
+  const magicFilter = page.locator('[data-action="class-role-filter"][data-value="magic"]');
+  await magicFilter.click();
+  await expect(magicFilter).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.class-card[data-class="mage"]')).toBeVisible();
+
+  const hasHorizontalOverflow = await page.locator("#char-select").evaluate((element) => element.scrollWidth > element.clientWidth);
+  expect(hasHorizontalOverflow).toBe(false);
+});
+
+test("minimap toggle updates its visibility and accessible state", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-action="new-character"]').click();
+  await page.locator("#char-name").fill("Map Hero");
+  await page.locator('[data-action="create-character"]').click();
+  await page.locator("#tutorial-close").click();
+
+  const toggle = page.locator("#minimap-toggle");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toHaveAttribute("aria-label", "Show minimap");
+  await expect(page.locator("#minimap")).toBeHidden();
+  await toggle.click();
+  await expect(page.locator("#minimap")).toBeVisible();
+});
+
+test("journal navigation and modal keyboard focus are accessible", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('[data-action="new-character"]').click();
+  await page.locator("#char-name").fill("Focus Hero");
+  await page.locator('[data-action="create-character"]').click();
+  await page.locator("#tutorial-close").click();
+
+  await page.locator('[data-panel="quests"]').click();
+  await expect(page.getByRole("navigation", { name: "Journal sections" })).toBeVisible();
+  await page.getByRole("link", { name: "World lore" }).click();
+  await expect(page).toHaveURL(/#journal-lore$/);
+  await page.keyboard.press("Escape");
+
+  const settings = page.locator('[data-panel="settings"]');
+  await settings.click();
+  await expect(page.locator(".panel-close")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator('[data-action="delete-current"]')).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeFocused();
+  await expect(page.locator("#overlay")).toHaveAttribute("aria-hidden", "true");
 });

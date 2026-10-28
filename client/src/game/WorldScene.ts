@@ -81,6 +81,7 @@ export class WorldScene extends Phaser.Scene {
   private npcSprites: { id: string; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Text; baseY: number; lastMark: string }[] = [];
   private buffGlow!: Phaser.GameObjects.Ellipse;
   floorFx!: Phaser.GameObjects.Graphics;
+  interactionFx!: Phaser.GameObjects.Graphics;
   barFx!: Phaser.GameObjects.Graphics;
   monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private monsterOutlines = new Map<string, Phaser.GameObjects.Sprite>();
@@ -130,6 +131,8 @@ export class WorldScene extends Phaser.Scene {
           ? "#15263a"
           : "#141a17";
     this.cameras.main.setBackgroundColor(bg);
+    const preferences = loadPreferences();
+    this.tweens.timeScale = preferences.reducedMotion ? 0 : 1;
     this.buildMap();
     this.createPortals();
     this.createChests();
@@ -138,6 +141,7 @@ export class WorldScene extends Phaser.Scene {
     this.createPlayer();
     this.createAmbience();
     this.floorFx = this.add.graphics().setDepth(4);
+    this.interactionFx = this.add.graphics().setDepth(5);
     this.barFx = this.add.graphics().setDepth(9000);
 
     for (const monster of session.monsters) this.spawnMonster(monster);
@@ -145,9 +149,9 @@ export class WorldScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, session.zone.width * session.zone.tileWidth, session.zone.height * session.zone.tileHeight);
     this.cameras.main.startFollow(this.player, true, 0.16, 0.16);
-    this.cameras.main.setZoom(loadPreferences().cameraZoom);
+    this.cameras.main.setZoom(preferences.cameraZoom);
     this.cameras.main.roundPixels = true;
-    this.cameras.main.fadeIn(260, 10, 8, 14);
+    if (!preferences.reducedMotion) this.cameras.main.fadeIn(260, 10, 8, 14);
     const vignette = this.add.graphics().setScrollFactor(0).setDepth(9500);
     const vw = this.scale.width;
     const vh = this.scale.height;
@@ -157,7 +161,7 @@ export class WorldScene extends Phaser.Scene {
     vignette.fillRect(0, vh * 0.75, vw, vh * 0.25);
 
     if (session.zone.ambience === "dungeon" || session.zone.ambience === "throne") {
-      const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2 / loadPreferences().brightness);
+      const shade = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x06040a, 0.2);
       shade.setOrigin(0, 0).setScrollFactor(0).setDepth(9500);
       const onResize = () => shade.setSize(this.scale.width, this.scale.height);
       this.scale.on("resize", onResize);
@@ -213,16 +217,6 @@ export class WorldScene extends Phaser.Scene {
     ground.setDepth(-10);
     decor.setDepth(-5);
 
-    // Blocked-tile highlight: a faint red mark on every tile the player cannot walk onto.
-    const blockedMarks = this.add.graphics().setDepth(-6);
-    for (let ty = 0; ty < zone.height; ty += 1) {
-      for (let tx = 0; tx < zone.width; tx += 1) {
-        if (!zone.blocked[ty * zone.width + tx]) continue;
-        blockedMarks.fillStyle(0xff3b3b, 0.12);
-        blockedMarks.fillRect(tx * zone.tileWidth, ty * zone.tileHeight, zone.tileWidth, zone.tileHeight);
-      }
-    }
-
     for (const chest of zone.chests) {
       const tx = Math.floor(chest.x / zone.tileWidth);
       const ty = Math.floor(chest.y / zone.tileHeight);
@@ -270,17 +264,18 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createPortals(): void {
+    const highContrast = loadPreferences().highContrast;
     for (const portal of this.session.zone.portals) {
       const cx = portal.x + portal.w / 2;
       const cy = portal.y + portal.h / 2;
       const pad = this.add.rectangle(cx, cy, portal.w, portal.h, 0x7a5ac0, 0.2).setDepth(2);
-      pad.setStrokeStyle(2, 0xe8c05a, 0.9);
+      pad.setStrokeStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xe8c05a, 0.9);
       this.tweens.add({ targets: pad, alpha: { from: 0.35, to: 0.9 }, duration: 1200, yoyo: true, repeat: -1 });
       this.add
         .text(cx, portal.y - 6, portal.label, {
           fontFamily: '"Press Start 2P", monospace',
           fontSize: "6px",
-          color: "#e8c05a",
+          color: highContrast ? "#ffffff" : "#e8c05a",
           stroke: "#000000",
           strokeThickness: 3,
           align: "center",
@@ -576,6 +571,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createAmbience(): void {
+    if (loadPreferences().reducedMotion) return;
     const ambience = this.session.zone.ambience;
     const config = {
       village: { color: 0xe8d8a0, count: 5, radius: 1.2, drift: 10, alpha: 0.1 },
@@ -605,6 +601,7 @@ export class WorldScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (!this.session) return;
+    this.tweens.timeScale = loadPreferences().reducedMotion ? 0 : 1;
     this.syncKeybinds();
     if (this.ui.modalOpen) {
       this.ui.update(0);

@@ -28,7 +28,7 @@ import {
   type ItemStack,
 } from "@realm/core";
 import { KEYBIND_LABELS, type GamePreferences, type KeybindAction } from "./preferences";
-import { t } from "./text";
+import { t, type TextKey } from "./text";
 import {
   abilityIconHtml,
   charIconHtml,
@@ -43,6 +43,15 @@ import {
 } from "./helpers";
 
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
+
+const CLASS_CATEGORIES: { id: string; label: TextKey; classes: ClassId[] }[] = [
+  { id: "all", label: "classFilterAll", classes: CLASS_LIST.map((def) => def.id) },
+  { id: "melee", label: "classFilterMelee", classes: ["warrior", "assassin", "paladin", "monk", "berserker", "spellblade", "dragonknight"] },
+  { id: "ranged", label: "classFilterRanged", classes: ["archer", "ranger", "gunslinger"] },
+  { id: "magic", label: "classFilterMagic", classes: ["mage", "priest", "necromancer", "druid", "summoner", "spellblade"] },
+  { id: "support", label: "classFilterSupport", classes: ["priest", "paladin", "druid", "summoner"] },
+  { id: "mobile", label: "classFilterMobile", classes: ["assassin", "monk", "ranger", "gunslinger"] },
+];
 
 export function characterSelectHtml(saves: CharacterSave[]): string {
   const cards = saves
@@ -62,7 +71,7 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
           <div class="card-actions">
             <button class="btn small" data-action="play" data-id="${esc(save.id)}">${t("btnPlay")}</button>
             <button class="btn ghost small" data-action="export-save" data-id="${esc(save.id)}">${t("btnExport")}</button>
-            <button class="btn ghost small" data-action="delete-save" data-id="${esc(save.id)}">${t("btnDelete")}</button>
+            <button class="btn danger small" data-action="delete-save" data-id="${esc(save.id)}">${t("btnDelete")}</button>
           </div>
         </div>
       </article>`;
@@ -79,15 +88,17 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
   return `${cards}${newCard}`;
 }
 
-export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "all"): string {
-  const roles = Array.from(new Set(CLASS_LIST.map((def) => def.role)));
-  const filterButtons = ["all", ...roles]
-    .map((role) => `<button class="chip-btn ${roleFilter === role ? "active" : ""}" data-action="class-role-filter" data-value="${esc(role)}">${role === "all" ? t("labelAll") : esc(role)}</button>`)
+export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "all", search = ""): string {
+  const filterButtons = CLASS_CATEGORIES
+    .map((category) => `<button class="chip-btn ${roleFilter === category.id ? "active" : ""}" data-action="class-role-filter" data-value="${esc(category.id)}" aria-pressed="${roleFilter === category.id}">${esc(t(category.label))}</button>`)
     .join("");
-  const visibleClasses = CLASS_LIST.filter((def) => roleFilter === "all" || def.role === roleFilter);
+  const category = CLASS_CATEGORIES.find((entry) => entry.id === roleFilter) ?? CLASS_CATEGORIES[0]!;
+  const query = search.trim().toLocaleLowerCase();
+  const visibleClasses = CLASS_LIST.filter((def) => category.classes.includes(def.id))
+    .filter((def) => !query || `${def.name} ${def.role} ${def.weapon} ${def.description}`.toLocaleLowerCase().includes(query));
   const cards = visibleClasses.map((def) => {
     const flagship = FLAGSHIP_CLASSES.includes(def.id);
-    return `<button class="class-card ${def.id === selectedClass ? "selected" : ""}" data-action="select-class" data-class="${def.id}">
+    return `<button class="class-card ${def.id === selectedClass ? "selected" : ""}" data-action="select-class" data-class="${def.id}" aria-pressed="${def.id === selectedClass}">
       ${classPortrait(def.id, 52, "card-portrait")}
       <span>
         <span class="class-name">${esc(def.name)}</span>
@@ -107,7 +118,7 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
     .join("");
   const previewAbilities = [
     `<span class="preview-ability"><b>${esc(def.basic.name)}</b><span>Basic</span></span>`,
-    ...def.abilities.map((ability) => `<span class="preview-ability"><b>${esc(ability.name)}</b><span>Lv ${ability.unlockLevel}</span></span>`),
+    ...def.abilities.map((ability) => `<span class="preview-ability" title="${esc(ability.description)}"><b>${esc(ability.name)}</b><span>Lv ${ability.unlockLevel}</span><small>${esc(ability.description)}</small></span>`),
   ].join("");
   return `<div class="create-top">
     <div class="field">
@@ -123,8 +134,13 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
   <div>
     <div class="section-title">Choose a class — ${esc(def.name)}</div>
     <div class="muted small" style="margin-bottom:10px">${esc(def.description)}</div>
-    <div class="role-filters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${filterButtons}</div>
-    <div class="class-grid">${cards}</div>
+    <div class="class-filters">
+      <label class="class-search"><span>${esc(t("classSearchLabel"))}</span><input type="search" data-class-search value="${esc(search)}" placeholder="${esc(t("classSearchPlaceholder"))}" aria-label="${esc(t("classSearchLabel"))}" /></label>
+      <div class="role-filters" aria-label="${esc(t("classFiltersLabel"))}">${filterButtons}</div>
+    </div>
+    <div class="class-listing" aria-live="polite">
+      ${cards ? `<div class="class-grid">${cards}</div>` : `<div class="empty-state">${esc(t("classNoResults"))}</div>`}
+    </div>
     <div class="class-preview">
       <div class="preview-hero">${classPortrait(def.id, 128, "preview-portrait")}</div>
       <div>
@@ -409,13 +425,14 @@ export function questsPanelHtml(session: GameSession): string {
       </div>`,
           )
           .join("");
-  const loreSection = `<div class="lore-section">
+  const loreSection = `<div class="lore-section" id="journal-lore">
       <div class="qtitle">Records of the Fallen</div>
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
   if (active.length === 0) {
-    return `<div class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
+    return `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>
+      <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
       ${loreSection}`;
   }
@@ -434,7 +451,8 @@ export function questsPanelHtml(session: GameSession): string {
       </div>`;
     })
     .join("");
-  return `<div style="display:grid;gap:10px">${rows}</div>
+  return `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>
+    <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
     ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
 }

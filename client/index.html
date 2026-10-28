@@ -65,6 +65,7 @@
           <button class="icon-btn" data-panel="quests" title="Quests (Q)">Q</button>
           <button class="icon-btn" data-panel="talents" title="Talents (T)">T</button>
           <button class="icon-btn" data-panel="settings" title="Settings (Esc)">⚙</button>
+          <button class="icon-btn map-toggle" id="minimap-toggle" aria-controls="minimap" aria-expanded="true" aria-label="Hide minimap" title="Toggle minimap">M</button>
         </div>
         <div class="zone-card">
           <span id="hud-zone">Eldoria Village</span>
@@ -134,7 +135,7 @@
       </div>
     </div>
 
-    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlay-title"></div>
+    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlay-title" aria-hidden="true"></div>
     <div id="toasts" class="toasts" aria-live="polite"></div>
 
     <script type="module" src="/src/main.ts"></script>
