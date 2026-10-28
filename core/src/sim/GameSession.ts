@@ -255,7 +255,9 @@ export class GameSession {
   private loadZone(): void {
     const zone = getZone(this.save.zone);
     this.zone = zone;
-    this.monsters = zone.monsterSpawns.map((spawn) => this.makeMonster(spawn));
+    this.monsters = zone.monsterSpawns
+      .filter((spawn) => !(getMonster(spawn.id).boss && this.save.defeatedBosses.includes(spawn.id)))
+      .map((spawn) => this.makeMonster(spawn));
     this.traps = zone.traps.map((trap) => ({
       uid: trap.id,
       x: trap.x,
@@ -423,7 +425,6 @@ export class GameSession {
     this.statuses = this.statuses.filter((s) => s.remaining > 0);
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
-      for (const status of monster.statuses) status.remaining -= dt;
       const damage = monster.statuses
         .filter((s) => s.kind === "burn" || s.kind === "poison")
         .reduce((sum, s) => sum + s.value * dt, 0);
@@ -531,7 +532,7 @@ export class GameSession {
       }
 
       if (def.boss && monster.state !== "idle" && monster.attackTimer <= 0 && this.rng.chance(dt * 0.16)) {
-        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25, this.bossShape(def.id, 0), Math.atan2(player.y - monster.y, player.x - monster.x));
+        this.spawnTelegraph(player.x, player.y, 62, def.attack * this.difficultyScale.attack * 1.8, 1.25, this.bossShape(def.id, 0), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
       }
 
       if (def.boss) {
@@ -541,7 +542,7 @@ export class GameSession {
           monster.phase = nextPhase;
           monster.attackTimer = Math.max(monster.attackTimer, 0.8);
           this.emit({ type: "log", text: `${def.name} enters phase ${nextPhase + 1}!`, tone: "bad" });
-          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5, this.bossShape(def.id, 1), Math.atan2(player.y - monster.y, player.x - monster.x));
+          this.spawnTelegraph(player.x, player.y, 74, def.attack * this.difficultyScale.attack * 2.2, 1.5, this.bossShape(def.id, 1), Math.atan2(player.y - monster.y, player.x - monster.x), def.name);
           if (def.id === "hollow_king") {
             for (let i = 0; i < nextPhase; i += 1) {
               const angle = (Math.PI * 2 * i) / nextPhase + this.rng.next();
@@ -578,6 +579,7 @@ export class GameSession {
     delay: number,
     shape: "ring" | "line" | "cone" | "spot" = "ring",
     angle = 0,
+    source = "Bone Warden",
   ): void {
     const telegraph: TelegraphInstance = {
       uid: this.nextUid("t"),
@@ -590,6 +592,7 @@ export class GameSession {
       kind: "boss",
       shape,
       angle,
+      source,
     };
     this.telegraphs.push(telegraph);
     this.emit({ type: "telegraph", x, y, radius, remaining: delay, shape, angle });
@@ -600,7 +603,7 @@ export class GameSession {
       telegraph.remaining -= dt;
       if (telegraph.remaining <= 0) {
         if (this.telegraphHits(telegraph)) {
-          this.damagePlayer(telegraph.damage, "Bone Warden");
+          this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden");
         }
       }
     }
@@ -732,10 +735,12 @@ export class GameSession {
     if (monster.state === "dead") return;
     monster.state = "dead";
     const def = getMonster(monster.defId);
-    monster.respawnTimer = def.respawn > 0 ? def.respawn : 0;
+    // A boss that was already defeated never comes back, so it has no respawn timer.
+    monster.respawnTimer = def.respawn > 0 && !def.boss ? def.respawn : 0;
     this.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y });
     this.lastCombat = this.elapsed;
-    if (def.boss && !this.save.defeatedBosses.includes(def.id)) {
+    const firstBossKill = def.boss && !this.save.defeatedBosses.includes(def.id);
+    if (firstBossKill) {
       this.save.defeatedBosses.push(def.id);
     }
     if (def.boss) this.advanceStoryFromBoss();
@@ -744,6 +749,8 @@ export class GameSession {
       this.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
     }
     if (SUMMON_IDS.has(def.id)) return;
+    // A boss pays its xp, gold and loot only on the first kill.
+    if (def.boss && !firstBossKill) return;
     if (def.xp > 0) this.gainXp(Math.round(def.xp * this.difficultyScale.xp));
     const gold = Math.round(this.rng.int(def.goldMin, def.goldMax) * this.difficultyScale.gold);
     if (gold > 0) {
@@ -1009,11 +1016,13 @@ export class GameSession {
     return statuses;
   }
 
-  private effectDamage(effect: AbilityEffect): number {
+  /** Rolls damage and the critical hit once. The same result drives the damage and the crit indicator. */
+  private effectDamage(effect: AbilityEffect): { damage: number; crit: boolean } {
     const stats = this.stats;
     const raw = (effect.amount ?? 0) + (effect.scaling ?? 0) * stats.attack;
     const crit = this.rng.chance(stats.crit);
-    return Math.round(raw * (crit ? 1.8 + this.modifiers.critDamage / 100 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
+    const damage = Math.round(raw * (crit ? 1.8 + this.modifiers.critDamage / 100 : 1) * this.rng.between(0.9, 1.1)) + (crit ? 1 : 0);
+    return { damage, crit };
   }
 
   private castDirection(ability: AbilityDef, dir: Vec2): void {
@@ -1029,8 +1038,8 @@ export class GameSession {
       const speed = effect.projectile?.speed ?? 430;
       const radius = effect.projectile?.radius ?? 6;
       const damageType = effect.damageType ?? "physical";
-      const damage = this.effectDamage(effect);
-      const crit = damage > 0 && this.rng.chance(this.stats.crit);
+      const { damage, crit: rolledCrit } = this.effectDamage(effect);
+      const crit = damage > 0 && rolledCrit;
       const angle = (index - (count - 1) / 2) * spreadStep;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
@@ -1091,8 +1100,7 @@ export class GameSession {
   private applyEffects(ability: AbilityDef, targets: MonsterInstance[], center: Vec2): void {
     for (const effect of ability.effects) {
       if (effect.kind === "damage") {
-        const damage = this.effectDamage(effect);
-        const crit = this.rng.chance(this.stats.crit);
+        const { damage, crit } = this.effectDamage(effect);
         const statuses = this.statusesFromEffects(ability.effects, effect.damageType ?? "physical");
         if (targets.length === 0) continue;
         for (const target of targets) this.hitMonster(target, damage, crit, effect.damageType ?? "physical", statuses);

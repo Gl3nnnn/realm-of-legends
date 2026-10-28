@@ -300,6 +300,8 @@ export interface TelegraphInstance {
   kind: "boss" | "trap";
   shape?: "ring" | "line" | "cone" | "spot";
   angle?: number;
+  /** Name of the boss that cast this telegraph, so the damage message names the right boss. */
+  source?: string;
 }
 
 export interface PetInstance {
