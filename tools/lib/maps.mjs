@@ -26,12 +26,16 @@ class MapBuilder {
   }
 
   setGround(x, y, tile) {
-    if (this.inside(x, y)) this.ground[y * this.w + x] = tile;
+    if (!this.inside(x, y)) return;
+    const i = y * this.w + x;
+    this.ground[i] = tile;
+    if (tile === TILE.path && this.decor[i] === TILE.flowers) this.decor[i] = 0;
   }
 
   setDecor(x, y, tile, block = BLOCKING.has(tile)) {
     if (!this.inside(x, y)) return;
     const i = y * this.w + x;
+    if (tile === TILE.flowers && this.ground[i] === TILE.path) return;
     this.decor[i] = tile;
     if (block) this.blocked.add(i);
     else this.blocked.delete(i);
@@ -73,7 +77,7 @@ class MapBuilder {
       const y = Math.floor(r() * this.h);
       if (this.blocked.has(y * this.w + x)) continue;
       if (avoid.some(([ax, ay, aw, ah]) => x >= ax && y >= ay && x < ax + aw && y < ay + ah)) continue;
-      this.setDecor(x, y, tile, true);
+      this.setDecor(x, y, tile, tile !== TILE.flowers);
     }
   }
 
