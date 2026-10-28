@@ -35,5 +35,8 @@ game.events.once("boot-error", () => {
 });
 
 if (import.meta.env.PROD) {
-  registerSW({ immediate: true });
+  registerSW({
+    immediate: true,
+    onNeedReload: () => ui.toast("A game update is ready. Refresh when convenient to apply it.", "info"),
+  });
 }
