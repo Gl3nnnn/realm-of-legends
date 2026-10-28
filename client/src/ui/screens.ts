@@ -18,6 +18,7 @@ import {
   isEquippable,
   itemDisplayName,
   itemSellValue,
+  loreBySubject,
   revealedLore,
   talentTierChosen,
   type CharacterSave,
@@ -386,19 +387,27 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
 export function questsPanelHtml(session: GameSession): string {
   const active = session.save.quests.filter((state) => QUESTS[state.id]);
   const lore = revealedLore(session.save);
+  const loreGroups = loreBySubject(session.save);
   const loreRows =
     lore.length === 0
       ? `<div class="small muted">Nothing recorded yet. Old stories surface as you travel and fight.</div>`
-      : lore
+      : loreGroups
+          .map(
+            (group) => `<div class="lore-group">
+        <div class="small muted">${esc(group.title)}</div>
+        ${group.entries
           .map(
             (entry) => `<details class="lore-entry">
         <summary>${esc(entry.title)}</summary>
         <div class="small">${esc(entry.text)}</div>
       </details>`,
           )
+          .join("")}
+      </div>`,
+          )
           .join("");
   const loreSection = `<div class="lore-section">
-      <div class="qtitle">Records of the Barrow</div>
+      <div class="qtitle">Records of the Fallen</div>
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;

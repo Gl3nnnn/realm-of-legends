@@ -1127,29 +1127,39 @@ export class UIManager {
     const py = (y: number) => (y / (zone.height * zone.tileHeight)) * h;
     for (const portal of zone.portals) {
       ctx.fillStyle = "#e8c05a";
-      ctx.fillRect(px(portal.x + portal.w / 2) - 1.5, py(portal.y + portal.h / 2) - 1.5, 3, 3);
+      ctx.fillRect(px(portal.x + portal.w / 2) - 2, py(portal.y + portal.h / 2) - 2, 4, 4);
     }
     for (const npc of zone.npcs) {
       ctx.fillStyle = "#7fd4ff";
-      ctx.fillRect(px(npc.x) - 1.5, py(npc.y) - 1.5, 3, 3);
+      ctx.fillRect(px(npc.x) - 2.5, py(npc.y) - 2.5, 5, 5);
     }
     for (const chest of zone.chests) {
       if (session.save.openedChests.includes(chest.id)) continue;
       ctx.fillStyle = "#ffd76a";
-      ctx.fillRect(px(chest.x) - 1, py(chest.y) - 1, 2, 2);
+      ctx.fillRect(px(chest.x) - 2, py(chest.y) - 2, 4, 4);
     }
     for (const monster of session.monsters) {
       if (monster.state === "dead") continue;
       const boss = MONSTERS[monster.defId]?.boss;
       ctx.fillStyle = boss ? "#ff6b6b" : "#cf5f5f";
-      const size = boss ? 5 : 2.5;
+      const size = boss ? 8 : 4;
       ctx.fillRect(px(monster.x) - size / 2, py(monster.y) - size / 2, size, size);
+      if (boss) {
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px(monster.x) - size / 2, py(monster.y) - size / 2, size, size);
+      }
     }
+    const youX = px(session.save.x);
+    const youY = py(session.save.y);
     ctx.fillStyle = "#fff4cf";
-    ctx.fillRect(px(session.save.x) - 2, py(session.save.y) - 2, 4, 4);
+    ctx.fillRect(youX - 4, youY - 4, 8, 8);
     ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(youX - 4, youY - 4, 8, 8);
+    ctx.strokeStyle = "#fff4cf";
     ctx.lineWidth = 1;
-    ctx.strokeRect(px(session.save.x) - 2.5, py(session.save.y) - 2.5, 5, 5);
+    ctx.strokeRect(youX - 7.5, youY - 7.5, 15, 15);
   }
 
   showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {
