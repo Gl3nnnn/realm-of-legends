@@ -1107,9 +1107,29 @@ export class UIManager {
     const save = session.save;
     let target: { x: number; y: number; label: string; zone?: string; stay?: boolean } | null = null;
     const portalToward = (zoneId: string) => {
-      const direct = session.zone.portals.find((portal) => portal.targetZone === zoneId);
-      const fallback = session.zone.portals[0];
-      const portal = direct ?? fallback;
+      if (zoneId === session.zone.id) return null;
+      const queue: { zoneId: string; firstPortal: (typeof session.zone.portals)[number] | null }[] = [
+        { zoneId: session.zone.id, firstPortal: null },
+      ];
+      const visited = new Set([session.zone.id]);
+      let firstPortal: (typeof session.zone.portals)[number] | null = null;
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        const zone = Object.values(ZONES).find((candidate) => candidate.id === current.zoneId);
+        if (!zone) continue;
+        for (const candidate of zone.portals) {
+          if (visited.has(candidate.targetZone)) continue;
+          const routePortal = current.firstPortal ?? candidate;
+          if (candidate.targetZone === zoneId) {
+            firstPortal = routePortal;
+            queue.length = 0;
+            break;
+          }
+          visited.add(candidate.targetZone);
+          queue.push({ zoneId: candidate.targetZone, firstPortal: routePortal });
+        }
+      }
+      const portal = firstPortal;
       if (!portal) return null;
       return {
         x: portal.x + portal.w / 2,
@@ -1144,26 +1164,40 @@ export class UIManager {
             : 1;
         if ((state.progress[index] ?? 0) >= count) continue;
         if (objective.kind === "kill" || objective.kind === "boss") {
-          const alive = session.monsters
-            .filter((monster) => monster.defId === objective.monsterId && monster.state !== "dead")
-            .sort((left, right) => Math.hypot(left.x - save.x, left.y - save.y) - Math.hypot(right.x - save.x, right.y - save.y));
-          const spawn = alive[0];
-          if (spawn) {
-            target = { x: spawn.x, y: spawn.y, label: MONSTERS[objective.monsterId]?.name ?? objective.monsterId };
-            break;
+          const objectiveZone = Object.values(ZONES).find((zone) =>
+            zone.monsterSpawns.some((entry) => entry.id === objective.monsterId));
+          if (objectiveZone && objectiveZone.id !== session.zone.id) {
+            target = portalToward(objectiveZone.id);
+          } else if (objectiveZone) {
+            const alive = session.monsters
+              .filter((monster) => monster.defId === objective.monsterId && monster.state !== "dead")
+              .sort((left, right) => Math.hypot(left.x - save.x, left.y - save.y) - Math.hypot(right.x - save.x, right.y - save.y));
+            const spawn = alive[0] ?? session.zone.monsterSpawns.find((entry) => entry.id === objective.monsterId);
+            if (spawn) {
+              target = { x: spawn.x, y: spawn.y, label: MONSTERS[objective.monsterId]?.name ?? objective.monsterId };
+            }
           }
-          const staticSpawn = session.zone.monsterSpawns.find((entry) => entry.id === objective.monsterId);
-          if (staticSpawn) {
-            target = { x: staticSpawn.x, y: staticSpawn.y, label: MONSTERS[objective.monsterId]?.name ?? objective.monsterId };
-            break;
-          }
+          if (target) break;
         } else if (objective.kind === "collect") {
-          const nodes = session.zone.gatherNodes
-            .filter((node) => node.itemId === objective.itemId && !session.isGathered(node.id))
-            .sort((left, right) => Math.hypot(left.x - save.x, left.y - save.y) - Math.hypot(right.x - save.x, right.y - save.y));
-          if (nodes[0]) {
-            target = { x: nodes[0].x, y: nodes[0].y, label: getItem(objective.itemId).name };
+          const availableNodes = Object.values(ZONES)
+            .flatMap((zone) => zone.gatherNodes
+              .filter((node) =>
+                node.itemId === objective.itemId
+                && (zone.id !== session.zone.id || !session.isGathered(node.id))
+                && (save.gatherCooldowns[`${zone.id}:${node.id}`] ?? 0) <= save.playtime)
+              .map((node) => ({ zone, node })))
+            .sort((left, right) => {
+              const leftDistance = left.zone.id === session.zone.id ? Math.hypot(left.node.x - save.x, left.node.y - save.y) : Number.POSITIVE_INFINITY;
+              const rightDistance = right.zone.id === session.zone.id ? Math.hypot(right.node.x - save.x, right.node.y - save.y) : Number.POSITIVE_INFINITY;
+              return leftDistance - rightDistance;
+            });
+          const closest = availableNodes[0];
+          if (closest?.zone.id === session.zone.id) {
+            target = { x: closest.node.x, y: closest.node.y, label: getItem(objective.itemId).name };
             break;
+          } else if (closest) {
+            target = portalToward(closest.zone.id);
+            if (target) break;
           }
         } else if (objective.kind === "visit") {
           if (objective.zone !== session.zone.id) {

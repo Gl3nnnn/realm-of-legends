@@ -157,8 +157,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
       }
     }
   }
-  session.save.gold += quest.rewards.gold;
-  session.emit({ type: "gold", amount: quest.rewards.gold });
+  const gold = session.gainGold(quest.rewards.gold);
   session.gainXp(quest.rewards.xp);
   for (const reward of quest.rewards.items ?? []) {
     const leftover = session.addItem(reward.itemId, reward.qty);
@@ -175,7 +174,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
     state.completed = true;
   }
   session.emit({ type: "quest", questId, text: `Quest turned in: ${quest.name}.` });
-  session.emit({ type: "log", text: `Turned in ${quest.name}. Earned ${quest.rewards.gold} gold and ${quest.rewards.xp} XP.`, tone: "good" });
+  session.emit({ type: "log", text: `Turned in ${quest.name}. Earned ${gold} gold and ${quest.rewards.xp} XP.`, tone: "good" });
   return true;
 }
 
@@ -191,8 +190,7 @@ export function pickQuestReward(session: GameSession, questId: string, index: nu
     return false;
   }
   state.claimedReward = index;
-  session.save.gold += reward.gold;
-  session.emit({ type: "gold", amount: reward.gold });
+  session.gainGold(reward.gold);
   session.gainXp(reward.xp);
   for (const item of reward.items ?? []) {
     const leftover = session.addItem(item.itemId, item.qty);

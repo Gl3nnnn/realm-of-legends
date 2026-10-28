@@ -307,13 +307,30 @@ export class WorldScene extends Phaser.Scene {
 
   private createGatherNodes(): void {
     for (const node of this.session.zone.gatherNodes) {
-      const def = getItem(node.itemId);
-      const glow = this.add.circle(0, 4, 8, 0x8ef0a0, 0.16);
-      const icon = this.add.sprite(0, 0, "items", itemIcon(def.icon)).setScale(1);
-      const container = this.add.container(node.x, node.y, [glow, icon]).setDepth(node.y);
-      this.tweens.add({ targets: icon, y: -2, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      this.tweens.add({ targets: glow, alpha: { from: 0.1, to: 0.3 }, duration: 900, yoyo: true, repeat: -1 });
-      this.gatherSprites.set(node.id, container);
+      if (this.session.isGathered(node.id)) continue;
+      this.createGatherNode(node);
+    }
+  }
+
+  private createGatherNode(node: (typeof this.session.zone.gatherNodes)[number]): void {
+    const def = getItem(node.itemId);
+    const glow = this.add.circle(0, 4, 8, 0x8ef0a0, 0.16);
+    const icon = this.add.sprite(0, 0, "items", itemIcon(def.icon)).setScale(1);
+    const container = this.add.container(node.x, node.y, [glow, icon]).setDepth(node.y);
+    this.tweens.add({ targets: icon, y: -2, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: glow, alpha: { from: 0.1, to: 0.3 }, duration: 900, yoyo: true, repeat: -1 });
+    this.gatherSprites.set(node.id, container);
+  }
+
+  private syncGatherSprites(): void {
+    for (const node of this.session.zone.gatherNodes) {
+      const sprite = this.gatherSprites.get(node.id);
+      if (this.session.isGathered(node.id)) {
+        sprite?.destroy();
+        this.gatherSprites.delete(node.id);
+      } else if (!sprite) {
+        this.createGatherNode(node);
+      }
     }
   }
 
@@ -564,8 +581,10 @@ export class WorldScene extends Phaser.Scene {
       this.ui.requestSave();
     }
     if (target?.kind === "gather") {
-      this.gatherSprites.get(target.id)?.destroy();
-      this.gatherSprites.delete(target.id);
+      if (this.session.isGathered(target.id)) {
+        this.gatherSprites.get(target.id)?.destroy();
+        this.gatherSprites.delete(target.id);
+      }
       this.ui.requestSave();
     }
   }
@@ -602,6 +621,7 @@ export class WorldScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     if (!this.session) return;
     this.tweens.timeScale = loadPreferences().reducedMotion ? 0 : 1;
+    this.syncGatherSprites();
     this.syncKeybinds();
     if (this.ui.modalOpen) {
       this.ui.update(0);

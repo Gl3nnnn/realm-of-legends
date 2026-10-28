@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GameSession,
   INVENTORY_SIZE,
+  MAX_GOLD,
   RECIPES,
   ZONES,
   getItem,
@@ -1185,5 +1186,189 @@ describe("walkable placement", () => {
         expect(isWalkable(zone, chest.x, chest.y), chest.id).toBe(true);
       }
     });
+
+    it(`${zone.id}: every NPC is on walkable ground`, () => {
+      for (const npc of zone.npcs) {
+        expect(isWalkable(zone, npc.x, npc.y), npc.id).toBe(true);
+      }
+    });
   }
+});
+
+describe("audited gameplay fixes", () => {
+  function placeOnlyTargets(session: GameSession, positions: { x: number; y: number }[]): void {
+    session.zone.blocked.fill(false);
+    for (const monster of session.monsters) monster.state = "dead";
+    const targets = session.monsters.filter((monster) => monster.defId === "slime").slice(0, positions.length);
+    positions.forEach((position, index) => {
+      const target = targets[index]!;
+      Object.assign(target, position, {
+        hp: 1000,
+        maxHp: 1000,
+        spawnX: position.x,
+        spawnY: position.y,
+        state: "idle",
+        wanderTimer: 100,
+        attackTimer: 100,
+      });
+    });
+  }
+
+  it.each([
+    ["dragonknight", "dragon_leap"],
+    ["spellblade", "arcane_dash"],
+  ] as const)("moves and hits with %s %s", (classId, abilityId) => {
+    const save = saveIn("forest", classId);
+    save.level = 5;
+    const session = new GameSession(save);
+    session.save.x = 100;
+    session.save.y = 300;
+    placeOnlyTargets(session, [{ x: 220, y: 300 }]);
+    const target = session.monsters.find((monster) => monster.state !== "dead")!;
+    const hp = target.hp;
+
+    expect(session.castAbility(abilityId, { x: 300, y: 300 })).toBe(true);
+
+    expect(session.save.x).toBeGreaterThan(200);
+    expect(target.hp).toBeLessThan(hp);
+  });
+
+  it("fires Eagle's Volley projectiles instead of applying their damage instantly", () => {
+    const save = saveIn("forest", "archer");
+    save.level = 9;
+    const session = new GameSession(save);
+    session.save.x = 100;
+    session.save.y = 300;
+    placeOnlyTargets(session, [{ x: 220, y: 300 }]);
+    const target = session.monsters.find((monster) => monster.state !== "dead")!;
+    const before = target.hp;
+
+    expect(session.castAbility("eagles_volley", { x: 220, y: 300 })).toBe(true);
+
+    expect(session.projectiles).toHaveLength(2);
+    expect(target.hp).toBeLessThan(before);
+  });
+
+  it("chains Ricochet Shot to a nearby second enemy", () => {
+    const save = saveIn("forest", "gunslinger");
+    save.level = 3;
+    const session = new GameSession(save);
+    session.save.x = 100;
+    session.save.y = 300;
+    placeOnlyTargets(session, [{ x: 220, y: 300 }, { x: 280, y: 300 }]);
+    const targets = session.monsters.filter((monster) => monster.state !== "dead");
+    const secondHp = targets[1]!.hp;
+
+    expect(session.castAbility("ricochet_shot", { x: 220, y: 300 })).toBe(true);
+    for (let i = 0; i < 20; i += 1) session.step(0.05, IDLE);
+
+    expect(targets[1]!.hp).toBeLessThan(secondHp);
+  });
+
+  it("limits Dragon Breath hits to its forward cone", () => {
+    const save = saveIn("forest", "dragonknight");
+    const session = new GameSession(save);
+    session.save.x = 100;
+    session.save.y = 300;
+    placeOnlyTargets(session, [{ x: 180, y: 300 }, { x: 140, y: 380 }]);
+    const targets = session.monsters.filter((monster) => monster.state !== "dead");
+    const sideHp = targets[1]!.hp;
+
+    expect(session.castAbility("dragon_breath", { x: 280, y: 300 })).toBe(true);
+
+    expect(targets[0]!.hp).toBeLessThan(1000);
+    expect(targets[1]!.hp).toBe(sideHp);
+  });
+
+  it("marks Piercing Arrow projectiles to bypass armor", () => {
+    const save = saveIn("forest", "archer");
+    save.level = 3;
+    const session = new GameSession(save);
+    session.zone.blocked.fill(false);
+
+    expect(session.castAbility("piercing_arrow", { x: session.save.x + 100, y: session.save.y })).toBe(true);
+
+    expect(session.projectiles[0]?.armorPiercing).toBe(true);
+  });
+
+  it("sets dash cast visuals to the actual destination", () => {
+    const save = saveIn("forest", "gunslinger");
+    save.level = 5;
+    const session = new GameSession(save);
+    session.save.x = 100;
+    session.save.y = 300;
+    session.zone.blocked.fill(false);
+
+    expect(session.castAbility("evasive_roll", { x: 200, y: 300 })).toBe(true);
+    const cast = session.drainEvents().find((event) => event.type === "cast");
+
+    expect(cast?.type).toBe("cast");
+    if (cast?.type === "cast") {
+      expect(cast.targetX).toBeGreaterThan(cast.x);
+      expect(cast.targetX).toBe(session.save.x);
+    }
+  });
+
+  it("caps shields and expires them", () => {
+    const session = forestSession();
+    for (const monster of session.monsters) monster.state = "dead";
+
+    session.addShield(100_000, 1);
+    session.addShield(100_000, 1);
+    expect(session.shield).toBe(session.stats.maxHp);
+    for (let i = 0; i < 10; i += 1) session.step(0.1, IDLE);
+
+    expect(session.shield).toBe(0);
+  });
+
+  it("preserves cooldowns, monsters, and dropped loot while traveling between zones", () => {
+    const session = forestSession();
+    const monster = session.monsters[0]!;
+    monster.state = "dead";
+    session.loot.push({ uid: "saved-loot", itemId: "herb", qty: 1, x: 100, y: 100, ttl: 30 });
+    session.cooldowns.example = 3;
+
+    session.save.zone = "village";
+    session.loadZone();
+    session.save.zone = "forest";
+    session.loadZone();
+
+    expect(session.cooldowns.example).toBe(3);
+    expect(session.monsters.find((entry) => entry.uid === monster.uid)?.state).toBe("dead");
+    expect(session.loot.some((entry) => entry.uid === "saved-loot")).toBe(true);
+  });
+
+  it("does not mark an uncollected gather node unavailable when inventory is full", () => {
+    const session = new GameSession(saveIn("marsh"));
+    const node = session.zone.gatherNodes[0]!;
+    session.save.x = node.x;
+    session.save.y = node.y;
+    session.save.inventory = session.save.inventory.map(() => ({ itemId: "herb", qty: 50 }));
+
+    session.interact();
+
+    expect(session.isGathered(node.id)).toBe(false);
+  });
+
+  it("resets story progression for New Game+ and enforces the cycle cap", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.defeatedBosses.push("hollow_king");
+    session.save.storyChapter = 4;
+
+    expect(session.startNewGamePlus()).toBe(true);
+    expect(session.save.storyChapter).toBe(0);
+    session.save.ngPlus = 99;
+    session.save.defeatedBosses.push("hollow_king");
+    expect(session.canNewGamePlus()).toBe(false);
+    expect(session.startNewGamePlus()).toBe(false);
+  });
+
+  it("caps earned gold at the save limit", () => {
+    const session = forestSession();
+    session.save.gold = MAX_GOLD - 1;
+
+    expect(session.gainGold(100)).toBe(1);
+    expect(session.save.gold).toBe(MAX_GOLD);
+    expect(validateSave(session.save).ok).toBe(true);
+  });
 });

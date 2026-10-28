@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { INVENTORY_SIZE, LEVEL_CAP, PLAYER_RADIUS, SAVE_VERSION } from "../constants";
+import { INVENTORY_SIZE, LEVEL_CAP, MAX_GOLD, PLAYER_RADIUS, SAVE_VERSION } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
 import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
 import { getTalentChoice, talentTierChosen } from "../data/talents";
@@ -51,7 +51,7 @@ export const saveSchema = z.object({
   classId: z.enum(CLASS_IDS),
   level: z.number().int().min(1).max(LEVEL_CAP),
   xp: z.number().int().min(0),
-  gold: z.number().int().min(0).max(9_999_999),
+  gold: z.number().int().min(0).max(MAX_GOLD),
   hp: z.number().finite().min(0),
   resource: z.number().finite().min(0),
   zone: z.enum(ZONE_IDS),
@@ -307,6 +307,12 @@ export function migrateSave(input: unknown): CharacterSave {
   if (migrated.version === 9) {
     migrated.npcKindRewards = [];
     migrated.version = 10;
+  }
+  if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
+    migrated.gold = MAX_GOLD;
+  }
+  if (typeof migrated.ngPlus === "number" && Number.isFinite(migrated.ngPlus) && migrated.ngPlus > 99) {
+    migrated.ngPlus = 99;
   }
   const result = validateSave(migrated);
   if (!result.ok) throw new Error(result.error);

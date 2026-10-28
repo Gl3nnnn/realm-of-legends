@@ -10,6 +10,7 @@ import {
   PLAYER_RADIUS,
   POTION_COOLDOWN,
   RESOURCE_LABELS,
+  MAX_GOLD,
 } from "../constants";
 import { getClass } from "../data/classes";
 import {
@@ -101,6 +102,7 @@ export class GameSession {
   buffs: BuffInstance[] = [];
   cooldowns: Record<string, number> = {};
   shield = 0;
+  shieldRemaining = 0;
   dodgeCooldown = 0;
   dodgeTimer = 0;
   invulnerable = 0;
@@ -123,6 +125,8 @@ export class GameSession {
   lastAim: Vec2 = { x: 0, y: 1 };
   dodgeDir: Vec2 = { x: 0, y: 1 };
   lastImmuneEvent = -999;
+  private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
+  private zoneLoaded = false;
 
   constructor(save: CharacterSave) {
     this.save = save;
@@ -190,21 +194,30 @@ export class GameSession {
   }
 
   canNewGamePlus(): boolean {
-    return this.save.defeatedBosses.includes("hollow_king");
+    return this.save.ngPlus < 99 && this.save.defeatedBosses.includes("hollow_king");
   }
 
   startNewGamePlus(): boolean {
     if (!this.canNewGamePlus()) {
-      this.emit({ type: "log", text: "Defeat the Hollow King before beginning a new cycle.", tone: "info" });
+      const message = this.save.ngPlus >= 99
+        ? "New Game+ has reached the maximum cycle."
+        : "Defeat the Hollow King before beginning a new cycle.";
+      this.emit({ type: "log", text: message, tone: "info" });
       return false;
     }
 
     this.save.ngPlus += 1;
+    this.save.storyChapter = 0;
     this.save.defeatedBosses = [];
     this.save.quests = [];
     this.save.openedChests = [];
     this.save.gatherCooldowns = {};
     this.save.zone = "village";
+    this.zoneStates.clear();
+    this.zoneLoaded = false;
+    this.monsters = [];
+    this.loot = [];
+    this.cooldowns = {};
     const village = ZONES.village;
     this.save.x = village.spawn.x;
     this.save.y = village.spawn.y;
@@ -257,9 +270,11 @@ export class GameSession {
   }
 
   loadZone(): void {
+    if (this.zoneLoaded) this.zoneStates.set(this.zone.id, { monsters: this.monsters, loot: this.loot });
     const zone = getZone(this.save.zone);
     this.zone = zone;
-    this.monsters = zone.monsterSpawns
+    const savedState = this.zoneStates.get(zone.id);
+    this.monsters = savedState?.monsters ?? zone.monsterSpawns
       .filter((spawn) => !(getMonster(spawn.id).boss && this.save.defeatedBosses.includes(spawn.id)))
       .map((spawn) => this.makeMonster(spawn));
     this.traps = zone.traps.map((trap) => ({
@@ -275,7 +290,7 @@ export class GameSession {
     }));
     this.projectiles = [];
     this.pets = [];
-    this.loot = [];
+    this.loot = savedState?.loot ?? [];
     this.telegraphs = [];
     this.statuses = [];
     this.buffs = [];
@@ -285,9 +300,10 @@ export class GameSession {
     this.dead = false;
     this.respawnTimer = 0;
     this.shield = 0;
-    this.cooldowns = {};
+    this.shieldRemaining = 0;
     this.save.x = Math.max(8, Math.min(this.save.x, zone.width * zone.tileWidth - 8));
     this.save.y = Math.max(8, Math.min(this.save.y, zone.height * zone.tileHeight - 8));
+    this.zoneLoaded = true;
   }
 
   private makeMonster(spawn: { id: string; x: number; y: number }, uid?: string): MonsterInstance {
@@ -440,6 +456,13 @@ export class GameSession {
     }
 
     this.save.playtime += clamped;
+    if (this.shieldRemaining > 0) {
+      this.shieldRemaining = Math.max(0, this.shieldRemaining - clamped);
+      if (this.shieldRemaining <= 1e-6) {
+        this.shieldRemaining = 0;
+        this.shield = 0;
+      }
+    }
     for (const node of this.zone.gatherNodes) {
       const key = `${this.zone.id}:${node.id}`;
       if ((this.save.gatherCooldowns[key] ?? 0) <= this.save.playtime) {
@@ -866,6 +889,7 @@ export class GameSession {
   }
 
   private updateProjectiles(dt: number): void {
+    const ricochets: ProjectileInstance[] = [];
     for (const projectile of this.projectiles) {
       const startX = projectile.x;
       const startY = projectile.y;
@@ -886,14 +910,41 @@ export class GameSession {
         }
         for (const monster of this.monsters) {
           if (monster.state === "dead") continue;
+          if (projectile.hitTargets?.includes(monster.uid)) continue;
           const def = getMonster(monster.defId);
           const segmentStartX = startX + (endX - startX) * previousProgress;
           const segmentStartY = startY + (endY - startY) * previousProgress;
           if (segmentDistanceSquared(monster.x, monster.y, segmentStartX, segmentStartY, x, y) <= (projectile.radius + def.radius) ** 2) {
             projectile.x = x;
             projectile.y = y;
-            this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses);
+            this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses, projectile.armorPiercing);
             if (projectile.healingOnHit) this.healPlayer(projectile.healingOnHit);
+            if (projectile.ricochetsRemaining && projectile.ricochetsRemaining > 0) {
+              const hitTargets = [...(projectile.hitTargets ?? []), monster.uid];
+              const next = this.monsters
+                .filter((candidate) =>
+                  candidate.state !== "dead"
+                  && !hitTargets.includes(candidate.uid)
+                  && length(candidate.x - monster.x, candidate.y - monster.y) <= 180
+                  && this.hasLineOfSight(monster.x, monster.y, candidate.x, candidate.y))
+                .sort((left, right) => length(left.x - monster.x, left.y - monster.y) - length(right.x - monster.x, right.y - monster.y))[0];
+              if (next) {
+                const direction = normalize(next.x - monster.x, next.y - monster.y);
+                ricochets.push({
+                  ...projectile,
+                  uid: this.nextUid("p"),
+                  x: monster.x,
+                  y: monster.y,
+                  dirX: direction.x,
+                  dirY: direction.y,
+                  ttl: 180 / projectile.speed,
+                  hit: false,
+                  missLogged: false,
+                  ricochetsRemaining: projectile.ricochetsRemaining - 1,
+                  hitTargets,
+                });
+              }
+            }
             projectile.hit = true;
             projectile.ttl = 0;
             break;
@@ -909,6 +960,7 @@ export class GameSession {
       }
     }
     this.projectiles = this.projectiles.filter((p) => p.ttl > 0);
+    this.projectiles.push(...ricochets);
   }
 
   private logArrowMiss(projectile: ProjectileInstance): void {
@@ -948,8 +1000,23 @@ export class GameSession {
     return best;
   }
 
-  hitMonster(monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[]): void {
-    combat.hitMonster(this, monster, raw, crit, damageType, statuses);
+  hitMonster(monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[], armorPiercing = false): void {
+    combat.hitMonster(this, monster, raw, crit, damageType, statuses, armorPiercing);
+  }
+
+  addShield(amount: number, duration: number): void {
+    this.shield = Math.min(this.stats.maxHp, this.shield + Math.max(0, amount));
+    this.shieldRemaining = Math.max(this.shieldRemaining, duration);
+  }
+
+  gainGold(amount: number): number {
+    if (!Number.isFinite(amount)) return 0;
+    const gained = Math.max(0, Math.min(MAX_GOLD - this.save.gold, Math.floor(amount)));
+    if (gained > 0) {
+      this.save.gold += gained;
+      this.emit({ type: "gold", amount: gained });
+    }
+    return gained;
   }
 
   gainXp(amount: number): void {
@@ -1015,8 +1082,10 @@ export class GameSession {
     this.cooldowns[id] = this.abilityCooldownDuration(id);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
+    const origin = { x: this.save.x, y: this.save.y };
+    const dashDistance = ability.effects.find((effect) => effect.kind === "dash")?.amount;
     const castRadius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 0);
-    const castRange = ability.range > 0 ? ability.range : ability.targeting === "point" ? 160 : 0;
+    const castRange = ability.range > 0 ? ability.range : ability.targeting === "point" ? 160 : dashDistance ?? 0;
     const castTarget =
       ability.targeting === "self"
         ? { x: this.save.x, y: this.save.y }
@@ -1024,20 +1093,6 @@ export class GameSession {
             x: this.save.x + dir.x * Math.min(castRange, Math.max(0, length(aim.x - this.save.x, aim.y - this.save.y))),
             y: this.save.y + dir.y * Math.min(castRange, Math.max(0, length(aim.x - this.save.x, aim.y - this.save.y))),
           };
-    this.emit({
-      type: "cast",
-      abilityId: ability.id,
-      x: this.save.x,
-      y: this.save.y,
-      targetX: castTarget.x,
-      targetY: castTarget.y,
-      targeting: ability.targeting,
-      radius: castRadius,
-      basic,
-      color: this.classDef.accent,
-      icon: ability.icon,
-    });
-
     if (ability.targeting === "self") {
       this.castSelf(ability);
     } else if (ability.targeting === "point") {
@@ -1050,6 +1105,20 @@ export class GameSession {
     } else {
       this.castMelee(ability, dir);
     }
+    const isDash = ability.effects.some((effect) => effect.kind === "dash");
+    this.emit({
+      type: "cast",
+      abilityId: ability.id,
+      x: origin.x,
+      y: origin.y,
+      targetX: isDash ? this.save.x : castTarget.x,
+      targetY: isDash ? this.save.y : castTarget.y,
+      targeting: ability.targeting,
+      radius: castRadius,
+      basic,
+      color: this.classDef.accent,
+      icon: ability.icon,
+    });
     return true;
   }
 
@@ -1201,7 +1270,7 @@ export class GameSession {
     this.perfectDodgeTimer = PERFECT_DODGE_WINDOW;
     this.dodgeCooldown = DODGE_COOLDOWN;
     const shieldOnDodge = this.modifiers.shieldOnDodge;
-    if (shieldOnDodge > 0) this.shield += shieldOnDodge;
+    if (shieldOnDodge > 0) this.addShield(shieldOnDodge, 5);
     if (Math.abs(dir.x) > Math.abs(dir.y)) this.facing = dir.x > 0 ? "right" : "left";
     else this.facing = dir.y > 0 ? "down" : "up";
     this.emit({ type: "dodge", x: this.save.x, y: this.save.y });
@@ -1386,14 +1455,17 @@ export class GameSession {
   sell(slotIndex: number, qty = 1): boolean {
     const stack = this.save.inventory[slotIndex];
     if (!stack || !Number.isInteger(qty) || qty < 1) return false;
+    if (this.save.gold >= MAX_GOLD) {
+      this.emit({ type: "log", text: "Your gold is already at its limit.", tone: "bad" });
+      return false;
+    }
     const amount = Math.max(1, Math.min(qty, stack.qty));
     const def = getItem(stack.itemId);
     const gold = itemSellValue(stack) * amount;
     stack.qty -= amount;
     if (stack.qty <= 0) this.save.inventory[slotIndex] = null;
-    this.save.gold += gold;
-    this.emit({ type: "gold", amount: gold });
-    this.emit({ type: "log", text: `Sold ${amount}x ${def.name} for ${gold} gold.`, tone: "good" });
+    const gained = this.gainGold(gold);
+    this.emit({ type: "log", text: `Sold ${amount}x ${def.name} for ${gained} gold.`, tone: "good" });
     this.refreshCollectQuests();
     return true;
   }
@@ -1563,9 +1635,8 @@ export class GameSession {
       relationships[npcId] = Math.min(10, current + 1);
       if (!this.save.npcKindRewards.includes(npcId)) {
         this.save.npcKindRewards.push(npcId);
-        this.save.gold += 5;
-        this.emit({ type: "gold", amount: 5 });
-        this.emit({ type: "log", text: "They appreciate your kindness. +5 gold.", tone: "good" });
+        const gained = this.gainGold(5);
+        this.emit({ type: "log", text: gained > 0 ? "They appreciate your kindness. +5 gold." : "They appreciate your kindness.", tone: "good" });
       } else {
         this.emit({ type: "log", text: "They appreciate your kind words.", tone: "good" });
       }

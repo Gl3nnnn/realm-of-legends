@@ -353,7 +353,7 @@ function forestMap() {
   const free = [];
   Object.values(spawns).flat().forEach(([x, y]) => free.push([x, y]));
   gather.forEach(([x, y]) => free.push([x, y]));
-  free.push(chest, [4, 22], [59, 5], [59, 42]);
+  free.push(chest, [4, 22], [8, 22], [59, 5], [59, 42]);
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.darkGrass); m.ensureFree(x, y, TILE.darkGrass); });
   m.clearRect(0, 21, 3, 3, TILE.path);
   m.clearRect(59, 4, 3, 3, TILE.path);
@@ -382,7 +382,7 @@ function forestMap() {
         portal(59, 4, 3, 3, "dungeon", 26, 34, "Sunken Barrow", "to_dungeon"),
         portal(59, 41, 3, 3, "marsh", 4, 22, "Ashen Marsh", "to_marsh"),
       ],
-      npcs: [],
+      npcs: [{ id: "tobin", x: center(8), y: center(22) }],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
       chests: [{ id: "forest_chest_1", x: center(chest[0]), y: center(chest[1]) }],
       traps: [],
@@ -494,7 +494,7 @@ function marshMap() {
   m.scatter(TILE.bush, 0.05, avoid, 83);
   m.scatter(TILE.rock, 0.02, avoid, 89);
   const free = Object.values(spawns).flat();
-  free.push([4, 22], [58, 22], [30, 30], [30, 20]);
+  free.push([4, 22], [8, 22], [58, 22], [30, 30], [30, 20]);
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.darkGrass); m.ensureFree(x, y, TILE.darkGrass); });
   m.borderTrees([[0, 20, 4, 5], [57, 20, 4, 5]]);
   m.clearRect(0, 21, 3, 3, TILE.path2);
@@ -520,7 +520,7 @@ function marshMap() {
         portal(0, 21, 3, 3, "forest", 58, 42, "Whispering Forest", "to_forest_marsh"),
         portal(57, 21, 3, 3, "frost", 4, 24, "Frostfell Ruins", "to_frost"),
       ],
-      npcs: [],
+      npcs: [{ id: "wenna", x: center(8), y: center(22) }],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
       chests: [
         { id: "marsh_chest_1", x: center(9), y: center(38) },
@@ -571,7 +571,7 @@ function frostMap() {
   m.scatter(TILE.rock, 0.03, avoid, 101);
   m.scatter(TILE.bush, 0.01, avoid, 103);
   const free = Object.values(spawns).flat();
-  free.push([4, 24], [60, 24]);
+  free.push([4, 24], [6, 24], [60, 24]);
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.caveFloor); m.ensureFree(x, y, TILE.caveFloor); });
   m.clearRect(0, 23, 4, 3, TILE.stone2);
   m.clearRect(59, 23, 4, 3, TILE.stone2);
@@ -596,7 +596,7 @@ function frostMap() {
         portal(0, 23, 3, 3, "marsh", 56, 22, "Ashen Marsh", "to_marsh_frost"),
         portal(60, 23, 3, 3, "throne", 4, 18, "Hollow Throne", "to_throne"),
       ],
-      npcs: [],
+      npcs: [{ id: "ysolde", x: center(6), y: center(24) }],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
       chests: [
         { id: "frost_chest_1", x: center(12), y: center(8) },
@@ -636,7 +636,7 @@ function throneMap() {
     hollow_king: [[24, 9]],
   };
   const free = Object.values(spawns).flat();
-  free.push([24, 31]);
+  free.push([24, 31], [24, 28]);
   free.forEach(([x, y]) => { m.clearRect(x - 1, y - 1, 3, 3, TILE.caveFloor); m.ensureFree(x, y, TILE.caveFloor); });
   m.clearRect(21, 31, 6, 4, TILE.caveFloor);
   return {
@@ -653,7 +653,7 @@ function throneMap() {
       ambience: "throne",
       spawn: { x: center(24), y: center(31) },
       portals: [portal(21, 31, 6, 3, "frost", 59, 24, "Frostfell Ruins", "to_frost_throne")],
-      npcs: [],
+      npcs: [{ id: "aldric", x: center(24), y: center(28) }],
       monsterSpawns: Object.entries(spawns).flatMap(([id, list]) => list.map(([x, y]) => ({ id, x: center(x), y: center(y) }))),
       chests: [],
       traps: [],

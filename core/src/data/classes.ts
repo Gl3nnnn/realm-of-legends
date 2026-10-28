@@ -156,7 +156,7 @@ const classes: ClassDef[] = [
         proj(10, 0.6, "physical", 470, 5),
       ]),
       skill("piercing_arrow", "Piercing Arrow", "arrow", "A heavy arrow that punches through armor.", 15, 7, 380, 3, "direction", [
-        proj(24, 1.2, "physical", 520, 7),
+        { ...proj(24, 1.2, "physical", 520, 7), armorPiercing: true },
       ]),
       skill("poison_arrow", "Poison Arrow", "poison", "A venom-coated arrow that applies a lingering poison.", 14, 8, 340, 5, "direction", [
         proj(12, 0.7, "poison", 470, 6),
@@ -407,7 +407,7 @@ const classes: ClassDef[] = [
         proj(16, 0.9, "physical", 620, 5),
       ]),
       skill("ricochet_shot", "Ricochet Shot", "ricochet", "A bullet that ricochets through a cluster of foes.", 15, 6, 300, 3, "point", [
-        dmg(20, 1.0, "physical", 72),
+        { ...proj(20, 1.0, "physical", 520, 6), radius: 72, ricochets: 3 },
       ]),
       skill("evasive_roll", "Evasive Roll", "roll", "Roll out of danger and pick up speed.", 12, 8, 0, 5, "direction", [
         { kind: "dash", amount: 100 },
@@ -581,7 +581,7 @@ const classes: ClassDef[] = [
     basic: basicMelee("fire", "lance"),
     abilities: [
       skill("dragon_breath", "Dragon Breath", "breath", "Exhale a cone of fire that scorches everything in front of you.", 20, 8, 180, 1, "point", [
-        dmg(24, 1.2, "fire", 82),
+        { ...dmg(24, 1.2, "fire", 82), shape: "cone" },
         { kind: "dot", amount: 7, duration: 3 },
       ]),
       skill("scaled_armor", "Scaled Armor", "scale", "Harden your scales, gaining a shield and defense.", 18, 16, 0, 3, "self", [

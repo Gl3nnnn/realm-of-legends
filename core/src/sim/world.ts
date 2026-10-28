@@ -38,8 +38,7 @@ export function openChest(session: GameSession, id: string): void {
   if (session.save.openedChests.includes(id)) return;
   session.save.openedChests.push(id);
   const gold = session.save.zone === "dungeon" ? session.rng.int(90, 170) : session.rng.int(45, 90);
-  session.save.gold += gold;
-  session.emit({ type: "gold", amount: gold });
+  const gained = session.gainGold(gold);
   const items: ItemStack[] = session.save.zone === "dungeon"
     ? [{ itemId: "greater_health_potion", qty: 1 }, { itemId: "iron_ore", qty: session.rng.int(1, 3) }]
     : [{ itemId: "health_potion", qty: 2 }, { itemId: "herb", qty: session.rng.int(1, 2) }];
@@ -51,7 +50,7 @@ export function openChest(session: GameSession, id: string): void {
     }
     session.emit({ type: "loot", itemId: item.itemId, qty: item.qty - leftover, x: chest.x, y: chest.y });
   }
-  session.emit({ type: "log", text: `Opened a chest: ${gold} gold and supplies.`, tone: "good" });
+  session.emit({ type: "log", text: `Opened a chest: ${gained} gold and supplies.`, tone: "good" });
 }
 
 export function gatherNode(session: GameSession, id: string): void {

@@ -75,10 +75,7 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   const eliteReward = monster.elite ? 1.5 : 1;
   if (def.xp > 0) s.gainXp(Math.round(def.xp * s.difficultyScale.xp * eliteReward));
   const gold = Math.round(s.rng.int(def.goldMin, def.goldMax) * s.difficultyScale.gold * eliteReward);
-  if (gold > 0) {
-    s.save.gold += gold;
-    s.emit({ type: "gold", amount: gold });
-  }
+  if (gold > 0) s.gainGold(gold);
   const drops: ItemStack[] = [];
   for (const entry of def.loot) {
     const dropChance = monster.elite ? Math.min(1, entry.chance * 1.5) : entry.chance;
@@ -105,7 +102,15 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   s.recordKill(def.id);
 }
 
-export function hitMonster(s: GameSession, monster: MonsterInstance, raw: number, crit: boolean, damageType: DamageType, statuses: StatusInstance[]): void {
+export function hitMonster(
+  s: GameSession,
+  monster: MonsterInstance,
+  raw: number,
+  crit: boolean,
+  damageType: DamageType,
+  statuses: StatusInstance[],
+  armorPiercing = false,
+): void {
   if (monster.state === "dead") return;
   const def = getMonster(monster.defId);
   const mods = s.modifiers;
@@ -113,7 +118,8 @@ export function hitMonster(s: GameSession, monster: MonsterInstance, raw: number
   const maxHp = monster.maxHp ?? def.maxHp;
   const execute = monster.hp / maxHp <= 0.3 ? 1 + mods.execute / 100 : 1;
   const eliteDefense = monster.elite === "armored" ? 1.35 : 1;
-  const mitigated = Math.max(1, Math.round(raw * (100 / (100 + def.defense * 2.5 * eliteDefense)) * (marked ? 1.2 : 1) * execute));
+  const defenseMultiplier = armorPiercing ? 1 : 100 / (100 + def.defense * 2.5 * eliteDefense);
+  const mitigated = Math.max(1, Math.round(raw * defenseMultiplier * (marked ? 1.2 : 1) * execute));
   monster.hp -= mitigated;
   if (mods.lifesteal > 0) s.healPlayer(mitigated * (mods.lifesteal / 100));
   s.lastCombat = s.elapsed;

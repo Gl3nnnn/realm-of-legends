@@ -102,8 +102,11 @@ export interface AbilityEffect {
   scaling?: number;
   damageType?: DamageType;
   radius?: number;
+  shape?: "cone";
   duration?: number;
   percent?: number;
+  armorPiercing?: boolean;
+  ricochets?: number;
   stat?: "attack" | "defense" | "moveSpeed" | "maxHp";
   name?: string;
   projectile?: { speed: number; radius: number };
@@ -284,6 +287,9 @@ export interface ProjectileInstance {
   missLogged?: boolean;
   abilityName?: string;
   healingOnHit?: number;
+  armorPiercing?: boolean;
+  ricochetsRemaining?: number;
+  hitTargets?: string[];
 }
 
 export interface GroundLoot {

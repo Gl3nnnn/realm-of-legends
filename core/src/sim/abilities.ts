@@ -11,6 +11,19 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
     castSelf(s, ability);
     return;
   }
+  const dashEffect = ability.effects.find((effect) => effect.kind === "dash");
+  if (dashEffect) {
+    dash(s, dashEffect.amount ?? 80);
+    const center = { x: s.save.x, y: s.save.y };
+    const radius = damageEffects.find((effect) => effect.radius)?.radius ?? 40;
+    const targets = s.monsters.filter((monster) =>
+      monster.state !== "dead"
+      && dist2(monster.x, monster.y, center.x, center.y) <= (radius + 12) ** 2
+      && s.hasLineOfSight(center.x, center.y, monster.x, monster.y));
+    const impactAbility = { ...ability, effects: ability.effects.filter((effect) => effect.kind !== "dash") };
+    applyEffects(s, impactAbility, targets, center);
+    return;
+  }
   const healingOnHit = ability.effects
     .filter((effect) => effect.kind === "heal")
     .reduce((sum, effect) => sum + (effect.amount ?? 0) + (effect.scaling ?? 0) * s.stats.attack, 0);
@@ -46,6 +59,9 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
       statuses: s.statusesFromEffects(ability.effects, damageType),
       owner: "player",
       healingOnHit: healingOnHit > 0 ? healingOnHit : undefined,
+      armorPiercing: effect.armorPiercing,
+      ricochetsRemaining: effect.ricochets,
+      hitTargets: [],
     });
   });
 }
@@ -53,15 +69,57 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
 /** Hits the monsters inside the area around a chosen point. */
 export function castPoint(s: GameSession, ability: AbilityDef, point: Vec2): void {
   const radius = ability.effects.find((e) => e.radius)?.radius ?? 40;
+  const cone = ability.effects.some((effect) => effect.shape === "cone");
+  const direction = normalize(point.x - s.save.x, point.y - s.save.y);
+  const range = Math.min(ability.range || 160, length(point.x - s.save.x, point.y - s.save.y));
   const targets = s.monsters.filter((m) =>
     m.state !== "dead"
-    && dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2
-    && s.hasLineOfSight(s.save.x, s.save.y, point.x, point.y)
-    && s.hasLineOfSight(point.x, point.y, m.x, m.y));
+    && (cone
+      ? dist2(m.x, m.y, s.save.x, s.save.y) <= range ** 2
+        && normalize(m.x - s.save.x, m.y - s.save.y).x * direction.x
+          + normalize(m.x - s.save.x, m.y - s.save.y).y * direction.y >= Math.cos(Math.PI / 4)
+      : dist2(m.x, m.y, point.x, point.y) <= (radius + 12) ** 2)
+    && (cone
+      ? s.hasLineOfSight(s.save.x, s.save.y, m.x, m.y)
+      : s.hasLineOfSight(s.save.x, s.save.y, point.x, point.y)
+        && s.hasLineOfSight(point.x, point.y, m.x, m.y)));
   if (targets.length === 0) {
     s.emit({ type: "log", text: `${ability.name} missed: nothing was in the area.`, tone: "info" });
   }
-  applyEffects(s, ability, targets, point);
+  const projectileEffects = ability.effects.filter((effect) => effect.kind === "damage" && effect.projectile);
+  if (projectileEffects.length > 0) {
+    projectileEffects.forEach((effect, index) => {
+      const target = targets[index % Math.max(1, targets.length)];
+      const aim = target ? { x: target.x - s.save.x, y: target.y - s.save.y } : { x: point.x - s.save.x, y: point.y - s.save.y };
+      const dir = normalize(aim.x, aim.y);
+      const speed = effect.projectile?.speed ?? 430;
+      const damageType = effect.damageType ?? "physical";
+      const { damage, crit } = s.effectDamage(effect, ability.id);
+      s.projectiles.push({
+        uid: s.nextUid("p"),
+        abilityId: ability.id,
+        abilityName: ability.name,
+        x: s.save.x + dir.x * 14,
+        y: s.save.y + dir.y * 14,
+        dirX: dir.x,
+        dirY: dir.y,
+        speed,
+        ttl: Math.max(0, ability.range - 14) / speed,
+        radius: effect.projectile?.radius ?? 6,
+        damage,
+        crit: damage > 0 && crit ? 1 : 0,
+        damageType,
+        color: DAMAGE_COLORS[damageType],
+        statuses: s.statusesFromEffects(ability.effects, damageType),
+        owner: "player",
+        armorPiercing: effect.armorPiercing,
+        ricochetsRemaining: effect.ricochets,
+        hitTargets: [],
+      });
+    });
+  }
+  const directEffects = ability.effects.filter((effect) => effect.kind !== "damage" || !effect.projectile);
+  if (directEffects.length > 0) applyEffects(s, { ...ability, effects: directEffects }, targets, point);
 }
 
 /** Affects the monsters around the hero, or heals and buffs the hero. */
@@ -105,7 +163,7 @@ export function applyEffects(s: GameSession, ability: AbilityDef, targets: Monst
       const { damage, crit } = s.effectDamage(effect, ability.id);
       const statuses = s.statusesFromEffects(ability.effects, effect.damageType ?? "physical");
       if (targets.length === 0) continue;
-      for (const target of targets) s.hitMonster(target, damage, crit, effect.damageType ?? "physical", statuses);
+      for (const target of targets) s.hitMonster(target, damage, crit, effect.damageType ?? "physical", statuses, effect.armorPiercing);
     } else if (effect.kind === "heal") {
       const amount = (effect.amount ?? 0) + (effect.scaling ?? 0) * s.stats.attack;
       s.healPlayer(amount);
@@ -124,7 +182,7 @@ export function applyEffects(s: GameSession, ability: AbilityDef, targets: Monst
       }
       s.emit({ type: "log", text: `${effect.name ?? ability.name} activated.`, tone: "good" });
     } else if (effect.kind === "shield") {
-      s.shield += effect.amount ?? 30;
+      s.addShield(effect.amount ?? 30, effect.duration ?? 8);
       s.emit({ type: "log", text: `A shield absorbs incoming damage.`, tone: "good" });
     } else if (effect.kind === "summon") {
       summon(s, effect);

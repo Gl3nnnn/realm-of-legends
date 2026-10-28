@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CLASS_LIST,
   INVENTORY_SIZE,
+  MAX_GOLD,
   SAVE_VERSION,
   ZONES,
   characterSummary,
@@ -51,6 +52,15 @@ describe("save validation", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.save.gold).toBe(1234);
     expect(cloneSave(save)).not.toBe(save);
+  });
+
+  it("normalizes legacy gold and New Game+ values to supported limits", () => {
+    const save = base();
+    const migrated = migrateSave({ ...save, gold: MAX_GOLD + 50, ngPlus: 120 });
+
+    expect(migrated.gold).toBe(MAX_GOLD);
+    expect(migrated.ngPlus).toBe(99);
+    expect(validateSave(migrated).ok).toBe(true);
   });
 
   it("rejects malformed saves with readable errors", () => {

@@ -275,9 +275,12 @@ export function inventoryPanelHtml(
       actions += `<button class="btn ghost small" data-action="bind-quick" data-slot="${selectedSlot}" data-quick="1">Bind X</button>`;
     }
     if (isEquippable(def)) {
-      const usable = canClassUse(def, save.classId);
+      const usableByClass = canClassUse(def, save.classId);
+      const meetsLevel = !def.requiresLevel || save.level >= def.requiresLevel;
+      const usable = usableByClass && meetsLevel;
       actions += `<button class="btn small" data-action="equip" data-slot="${selectedSlot}" ${usable ? "" : "disabled"}>Equip</button>`;
-      if (!usable) actions += `<span class="small" style="color:#ff9fa0;align-self:center">Not usable by ${esc(getClass(save.classId).name)}</span>`;
+      if (!usableByClass) actions += `<span class="small" style="color:#ff9fa0;align-self:center">Not usable by ${esc(getClass(save.classId).name)}</span>`;
+      else if (!meetsLevel) actions += `<span class="small" style="color:#ff9fa0;align-self:center">Requires level ${def.requiresLevel}</span>`;
     }
     actions += `<button class="btn ghost small" data-action="sell" data-slot="${selectedSlot}">Sell for ${itemSellValue(stack)}g</button>`;
   }
@@ -472,16 +475,21 @@ function npcDialogueFor(session: GameSession, npcId: string): string {
   const npc = NPCS[npcId];
   if (!npc || npc.dialogue.length === 0) return "";
   const save = session.save;
-  // Once a New Game+ cycle has begun, each NPC remembers the earlier runs.
-  if (save.ngPlus > 0 && NG_PLUS_DIALOGUE[npcId]) return NG_PLUS_DIALOGUE[npcId];
-  const hasBoss = save.defeatedBosses.length > 0;
-  const hasQuest = save.quests.some((q) => !q.completed);
-  const lines = npc.dialogue;
-  // Later lines are for players who have progressed further.
-  if (hasBoss && lines.length > 2) return lines[2];
-  if (hasQuest && lines.length > 1) return lines[1];
-  if (save.level >= 5 && lines.length > 1) return lines[1];
-  return lines[0];
+  let dialogue: string;
+  if (save.ngPlus > 0 && NG_PLUS_DIALOGUE[npcId]) {
+    dialogue = NG_PLUS_DIALOGUE[npcId];
+  } else {
+    const hasBoss = save.defeatedBosses.length > 0;
+    const hasQuest = save.quests.some((q) => !q.completed);
+    const lines = npc.dialogue;
+    if (hasBoss && lines.length > 2) dialogue = lines[2];
+    else if ((hasQuest || save.level >= 5) && lines.length > 1) dialogue = lines[1];
+    else dialogue = lines[0]!;
+  }
+  const relationship = save.relationships[npcId] ?? 0;
+  if (relationship >= 3) return `${dialogue} I have come to trust you.`;
+  if (relationship <= -3) return `${dialogue} I will not forget your words.`;
+  return dialogue;
 }
 
 export function npcPanelHtml(session: GameSession, npcId: string): string {

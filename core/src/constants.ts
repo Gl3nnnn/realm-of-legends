@@ -5,6 +5,7 @@ export const FIXED_DT = 1 / TICK_RATE;
 export const LEVEL_CAP = 50;
 export const INVENTORY_SIZE = 24;
 export const MAX_CHARACTERS = 5;
+export const MAX_GOLD = 9_999_999;
 export const SAVE_VERSION = 10;
 export const PLAYER_RADIUS = 9;
 export const PLAYER_SPEED = 96;
