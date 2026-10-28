@@ -53,7 +53,7 @@ const COUNT = COLS * ROWS;
 export const TILE_PALETTES = {
   village: { r: 1, g: 1, b: 1, sat: 1, lift: 0 },
   forest: { r: 0.82, g: 1.03, b: 0.8, sat: 1.12, lift: 2 },
-  dungeon: { r: 0.62, g: 0.56, b: 0.8, sat: 0.72, lift: -2 },
+  dungeon: { r: 0.8, g: 0.76, b: 0.98, sat: 0.9, lift: 14 },
   marsh: { r: 0.7, g: 0.9, b: 0.62, sat: 0.8, lift: -1 },
   frost: { r: 0.76, g: 0.94, b: 1.2, sat: 0.68, lift: 4 },
   throne: { r: 0.82, g: 0.52, b: 0.68, sat: 0.86, lift: -3 },
@@ -210,11 +210,11 @@ export function drawTileset() {
     t(2, 2, 4, 2, "#666672");
   });
   tile(TILE.darkWall, (t) => {
-    t(0, 0, 16, 16, "#3b3947");
-    t(0, 0, 16, 1, "#2d2b36");
-    t(0, 15, 16, 1, "#24222c");
-    for (let i = 0; i < 3; i += 1) t(0, 5 + i * 5, 16, 1, "#312f3c");
-    t(3, 2, 3, 2, "#474455");
+    t(0, 0, 16, 16, "#1f1d28");
+    t(0, 0, 16, 2, "#0f0e15");
+    t(0, 14, 16, 2, "#0a090e");
+    for (let i = 0; i < 3; i += 1) t(0, 5 + i * 5, 16, 1, "#2c2a37");
+    t(3, 2, 3, 2, "#3a3746");
   });
   tile(TILE.brick, (t) => {
     t(0, 0, 16, 16, "#7a4a3a");
@@ -382,14 +382,14 @@ export function drawTileset() {
     t(6, 6, 4, 4, "#c9a24a");
   });
   tile(TILE.caveFloor, (t) => {
-    t(0, 0, 16, 16, "#3f3b4a");
-    speckle(im, at(41)[0], at(41)[1], "#3f3b4a", 8, 20, 15);
-    t(4, 11, 3, 1, "#332f3d");
+    t(0, 0, 16, 16, "#6e6678");
+    speckle(im, at(41)[0], at(41)[1], "#6e6678", 8, 20, 15);
+    t(4, 11, 3, 1, "#5c5468");
   });
   tile(TILE.caveFloor2, (t) => {
-    t(0, 0, 16, 16, "#474252");
-    speckle(im, at(42)[0], at(42)[1], "#474252", 8, 18, 16);
-    t(9, 5, 3, 1, "#393444");
+    t(0, 0, 16, 16, "#7a7286");
+    speckle(im, at(42)[0], at(42)[1], "#7a7286", 8, 18, 16);
+    t(9, 5, 3, 1, "#665e72");
   });
 
   return { image: im, cols: COLS, rows: ROWS, count: COUNT };
