@@ -260,7 +260,16 @@ function villageMap() {
   m.setDecor(32, 9, TILE.sign, true);
   m.setDecor(9, 34, TILE.sign, true);
   m.setDecor(43, 34, TILE.sign, true);
-  for (const [x, y] of [[17, 13], [34, 13], [17, 24], [34, 24], [23, 13], [27, 24]]) m.setDecor(x, y, TILE.lamp, false);
+  // Plaza: lamp posts at the corners and a flower bed on each side of the well.
+  for (const [x, y] of [[17, 13], [34, 13], [17, 24], [34, 24], [23, 13], [27, 24], [25, 13], [25, 24]]) m.setDecor(x, y, TILE.lamp, false);
+  for (const [x, y] of [[28, 22], [32, 22], [29, 24], [31, 24]]) m.setDecor(x, y, TILE.flowers, false);
+  // Garden rows of bushes along the north and south edges of the square.
+  for (let x = 18; x <= 33; x += 3) {
+    m.setDecor(x, 12, TILE.bush, true);
+    m.setDecor(x, 25, TILE.bush, true);
+  }
+  // Shady trees beside the homes to break up the flat grass.
+  for (const [x, y] of [[2, 14], [2, 22], [48, 14], [48, 22], [15, 33], [36, 33]]) m.setDecor(x, y, TILE.tree, true);
   for (const [x, y] of [[39, 11], [40, 11], [45, 11], [6, 11], [13, 33], [39, 33], [46, 33]]) m.setDecor(x, y, TILE.barrel, true);
   for (const [x, y] of [[14, 12], [15, 12], [36, 12], [13, 34]]) m.setDecor(x, y, TILE.crate, true);
   m.setDecor(36, 22, TILE.table, true);
@@ -275,6 +284,9 @@ function villageMap() {
   }
   m.clearRect(49, 18, 3, 3, TILE.path);
   m.borderTrees([[49, 18, 3, 3]]);
+  // Lit path edges so the road reads clearly from the plaza to the forest gate.
+  for (let x = 40; x <= 48; x += 2) m.setDecor(x, 17, TILE.lamp, false);
+  for (let x = 40; x <= 48; x += 2) m.setDecor(x, 21, TILE.lamp, false);
   const npcTiles = { guard: [32, 10], merchant: [42, 12], blacksmith: [9, 12], healer: [9, 35], trainer: [43, 35] };
   Object.values(npcTiles).forEach(([x, y]) => { m.clearTile(x, y, TILE.stone); m.ensureFree(x, y); });
   m.ensureFree(25, 23, TILE.stone);

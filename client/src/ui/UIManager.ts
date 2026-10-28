@@ -304,9 +304,8 @@ export class UIManager {
       if (!target) return;
       const action = target.dataset.action ?? "";
       if (action === "select-class" && target.dataset.class) {
-        const currentName = (this.dom.createPanel.querySelector<HTMLInputElement>("#char-name")?.value) ?? "";
         this.selectedClass = target.dataset.class as ClassId;
-        this.renderCreate(currentName);
+        this.updateClassSelection();
         this.sfx.ui();
       } else if (action === "class-role-filter") {
         const currentName = (this.dom.createPanel.querySelector<HTMLInputElement>("#char-name")?.value) ?? "";
@@ -633,6 +632,22 @@ export class UIManager {
       this.toast(t("saveDeleted", { name: save.name }), "info");
       await this.renderSelect();
     }
+  }
+
+  /** Update only the selected card and the preview, so the grid does not re-run its entrance animation. */
+  private updateClassSelection(): void {
+    const cards = this.dom.createPanel.querySelectorAll<HTMLElement>(".class-card");
+    cards.forEach((card) => {
+      card.classList.toggle("selected", card.dataset.class === this.selectedClass);
+    });
+    const fresh = document.createElement("div");
+    fresh.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter);
+    const freshPreview = fresh.querySelector<HTMLElement>(".class-preview");
+    const preview = this.dom.createPanel.querySelector<HTMLElement>(".class-preview");
+    if (freshPreview && preview) preview.replaceWith(freshPreview);
+    const freshTitle = fresh.querySelector<HTMLElement>(".section-title");
+    const titles = this.dom.createPanel.querySelectorAll<HTMLElement>(".section-title");
+    if (freshTitle && titles[0]) titles[0].replaceWith(freshTitle);
   }
 
   private renderCreate(name: string): void {
