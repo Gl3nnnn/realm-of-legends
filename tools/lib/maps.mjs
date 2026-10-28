@@ -306,7 +306,7 @@ function villageMap() {
       portals: [portal(49, 18, 3, 3, "forest", 4, 22, "Whispering Forest", "to_forest")],
       npcs: Object.entries(npcTiles).map(([id, [x, y]]) => ({ id, x: center(x), y: center(y) })),
       monsterSpawns: [],
-      chests: [],
+      chests: [{ id: "village_chest_1", x: center(30), y: center(27) }],
       traps: [],
       gatherNodes: [],
     },
@@ -327,6 +327,15 @@ function forestMap() {
   m.setDecor(26, 13, TILE.well, false);
   m.setDecor(40, 16, TILE.sign, true);
   m.setDecor(10, 22, TILE.torch, false);
+  // Dense forest edge along the outer ring, so the map reads as a forest.
+  for (let x = 0; x < m.w; x += 1) for (let y = 0; y < m.h; y += 1) {
+    const edge = x < 2 || y < 2 || x >= m.w - 2 || y >= m.h - 2;
+    if (edge && r() < 0.55) m.setDecor(x, y, r() < 0.5 ? TILE.pine : TILE.tree, true);
+  }
+  // Flower patches beside the path, for colour and a clearer route.
+  for (let x = 6; x < m.w - 6; x += 5) for (let y = 17; y < 28; y += 4) {
+    if (r() < 0.45) m.setDecor(x + 1, y, TILE.flowers, false);
+  }
   const spawns = {
     slime: [[13, 26], [19, 31], [28, 18], [36, 27], [43, 33]],
     wolf: [[47, 17], [54, 27], [50, 9], [35, 39]],
@@ -334,7 +343,7 @@ function forestMap() {
     bone_warden: [],
   };
   const gather = [[20, 12, "herb_forest_1"], [33, 30, "herb_forest_2"], [44, 21, "herb_forest_3"], [12, 35, "herb_forest_4"]];
-  const chest = [52, 39];
+  const chest = [30, 36];
   const avoid = [[8, 20, 14, 8], [36, 14, 14, 12], [16, 33, 12, 10], [46, 28, 10, 14], [28, 2, 27, 12], [0, 20, 5, 5], [57, 2, 7, 7]];
   m.scatter(TILE.tree, 0.055, avoid, 31);
   m.scatter(TILE.pine, 0.04, avoid, 37);

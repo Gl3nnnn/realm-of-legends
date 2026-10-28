@@ -102,13 +102,27 @@ export function drawTileset() {
   tile(TILE.grass, (t) => {
     t(0, 0, 16, 16, "#4f7a3a");
     speckle(im, at(0)[0], at(0)[1], "#4f7a3a", 12, 34, 2);
-    t(3, 4, 1, 2, "#5f8f48");
-    t(11, 10, 1, 2, "#5f8f48");
+    // soft mottled patches so the field does not read as one flat colour
+    t(1, 2, 4, 2, "#56823f");
+    t(9, 7, 5, 2, "#466e33");
+    t(4, 12, 4, 2, "#56823f");
+    // little grass tufts
+    for (const [gx, gy] of [[3, 4], [11, 10], [7, 13]]) {
+      t(gx, gy, 1, 2, "#6aa050");
+      t(gx + 1, gy - 1, 1, 2, "#5f9448");
+      t(gx - 1, gy, 1, 1, "#3f6a30");
+    }
   });
   tile(TILE.grass2, (t) => {
     t(0, 0, 16, 16, "#557f3d");
     speckle(im, at(1)[0], at(1)[1], "#557f3d", 10, 30, 3);
+    // darker moss and leaf litter
+    t(0, 10, 6, 3, "#4a7134");
+    t(10, 2, 6, 2, "#4a7134");
+    t(12, 13, 3, 2, "#3f6029");
+    // lighter blades
     t(6, 3, 2, 1, "#6a9a50");
+    t(4, 7, 1, 2, "#6aa050");
     t(9, 12, 2, 1, "#446a32");
   });
   tile(TILE.grassFlowerWhite, (t) => {

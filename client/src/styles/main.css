@@ -733,9 +733,9 @@ input[type="text"]:focus {
   height: 198px;
   image-rendering: pixelated;
   border: 2px solid #c9a95f;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #8c7b5e;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 230, 170, 0.18);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 230, 170, 0.18);
 }
 
 .minimap-key {
@@ -807,7 +807,7 @@ input[type="text"]:focus {
 
 .quest-tracker {
   position: absolute;
-  top: 220px;
+  top: 352px;
   right: clamp(10px, 1.6vw, 22px);
   width: min(280px, 32vw);
   display: grid;
@@ -815,12 +815,14 @@ input[type="text"]:focus {
 }
 
 .quest-chip {
-  background: rgba(20, 17, 27, 0.86);
+  background: rgba(20, 17, 27, 0.9);
+  border: 1px solid rgba(201, 169, 95, 0.35);
   border-left: 3px solid var(--gold);
-  border-radius: 5px;
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 9px 12px;
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.45;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 .quest-chip .qname {
