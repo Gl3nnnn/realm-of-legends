@@ -128,6 +128,11 @@ export function acceptQuest(session: GameSession, questId: string): boolean {
   for (const [i, objective] of quest.objectives.entries()) {
     if (objective.kind === "collect") state.progress[i] = Math.min(objective.count, session.countItem(objective.itemId));
     if (objective.kind === "visit" && objective.zone === session.save.zone) state.progress[i] = 1;
+    if (objective.kind === "explore" && objective.zones.includes(session.save.zone)) {
+      state.exploredZones = [session.save.zone];
+      state.progress[i] = 1;
+    }
+    if (objective.kind === "boss" && session.save.defeatedBosses.includes(objective.monsterId)) state.progress[i] = 1;
   }
   refreshQuestCompletion(session, state);
   session.emit({ type: "quest", questId, text: `Quest accepted: ${quest.name}.` });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { INVENTORY_SIZE, LEVEL_CAP, SAVE_VERSION } from "../constants";
+import { INVENTORY_SIZE, LEVEL_CAP, PLAYER_RADIUS, SAVE_VERSION } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
 import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
 import { getTalentChoice, talentTierChosen } from "../data/talents";
@@ -86,6 +86,30 @@ export function sanitizeName(raw: string): string {
 export function isValidName(raw: string): boolean {
   const name = sanitizeName(raw);
   return name.length >= 2 && /^[\p{L}\p{N}][\p{L}\p{N} _'’.-]*$/u.test(name);
+}
+
+function positionBlocked(zone: ReturnType<typeof getZone>, x: number, y: number): boolean {
+  if (
+    x < PLAYER_RADIUS
+    || y < PLAYER_RADIUS
+    || x > zone.width * zone.tileWidth - PLAYER_RADIUS
+    || y > zone.height * zone.tileHeight - PLAYER_RADIUS
+  ) return true;
+  const minTx = Math.max(0, Math.floor((x - PLAYER_RADIUS) / zone.tileWidth));
+  const maxTx = Math.min(zone.width - 1, Math.floor((x + PLAYER_RADIUS) / zone.tileWidth));
+  const minTy = Math.max(0, Math.floor((y - PLAYER_RADIUS) / zone.tileHeight));
+  const maxTy = Math.min(zone.height - 1, Math.floor((y + PLAYER_RADIUS) / zone.tileHeight));
+  for (let ty = minTy; ty <= maxTy; ty += 1) {
+    for (let tx = minTx; tx <= maxTx; tx += 1) {
+      if (!zone.blocked[ty * zone.width + tx]) continue;
+      const left = tx * zone.tileWidth;
+      const top = ty * zone.tileHeight;
+      const nearestX = Math.max(left, Math.min(x, left + zone.tileWidth));
+      const nearestY = Math.max(top, Math.min(y, top + zone.tileHeight));
+      if ((x - nearestX) ** 2 + (y - nearestY) ** 2 < PLAYER_RADIUS ** 2) return true;
+    }
+  }
+  return false;
 }
 
 const STARTER_WEAPON: Record<ClassId, string> = {
@@ -183,6 +207,7 @@ export function validateSave(input: unknown): SaveParseResult {
   if (save.x < 0 || save.y < 0 || save.x > zone.width * zone.tileWidth || save.y > zone.height * zone.tileHeight) {
     return { ok: false, error: "Player position is outside the map." };
   }
+  if (positionBlocked(zone, save.x, save.y)) return { ok: false, error: "Player position is inside blocked terrain." };
   for (const stack of save.inventory) {
     if (!stack) continue;
     if (!ITEMS[stack.itemId]) return { ok: false, error: `Unknown inventory item: ${stack.itemId}` };
@@ -214,6 +239,7 @@ export function validateSave(input: unknown): SaveParseResult {
     if (!isEquippable(def)) return { ok: false, error: `${def.name} cannot be equipped.` };
     if (stack.qty !== 1) return { ok: false, error: "Equipped items must be single pieces." };
     if (!canClassUse(def, save.classId)) return { ok: false, error: `${def.name} cannot be used by this class.` };
+    if (def.requiresLevel && save.level < def.requiresLevel) return { ok: false, error: `${def.name} requires level ${def.requiresLevel}.` };
     if (slot !== def.type) return { ok: false, error: `${def.name} does not belong in the ${slot} slot.` };
   }
   const classDef = getClass(save.classId);

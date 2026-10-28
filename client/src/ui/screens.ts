@@ -310,6 +310,9 @@ function shopRow(session: GameSession, itemId: string): string {
   const stats = statLines(def.stats).slice(0, 2).join(" · ");
   const canAfford = session.save.gold >= (def.buy ?? 0);
   const canUse = canClassUse(def, session.save.classId);
+  const levelMet = !def.requiresLevel || session.save.level >= def.requiresLevel;
+  const hasSpace = session.canAdd(itemId, 1);
+  const canBuy = canAfford && canUse && levelMet && hasSpace;
   return `<div class="shop-row">
     ${itemIconHtml(def.icon, 30)}
     <div>
@@ -318,7 +321,7 @@ function shopRow(session: GameSession, itemId: string): string {
     </div>
     <div style="display:grid;gap:5px;justify-items:end">
       <span class="gold-line">${def.buy ?? "-"} g</span>
-      <button class="btn small" data-action="buy" data-item="${def.id}" ${canAfford && canUse ? "" : "disabled"}>${canUse ? "Buy" : "Not for class"}</button>
+      <button class="btn small" data-action="buy" data-item="${def.id}" ${canBuy ? "" : "disabled"}>${!canUse ? "Not for class" : !levelMet ? `Requires level ${def.requiresLevel}` : !hasSpace ? "Inventory full" : "Buy"}</button>
     </div>
   </div>`;
 }
@@ -330,19 +333,25 @@ function forgeSectionHtml(session: GameSession): string {
       const stack = session.save.equipment[slot];
       if (!stack) return "";
       const cost = session.upgradeCost(slot);
+      const canAfford = Boolean(cost && session.save.gold >= cost.gold && session.countItem("iron_ore") >= cost.ore);
       return `<div class="forge-row">
         ${itemIconHtml(getItem(stack.itemId).icon, 26)}
         <div>
           <div class="name">${esc(itemDisplayName(stack))}</div>
           <div class="sub">${cost ? `${cost.gold} gold · ${cost.ore}x Iron Ore` : "Masterwork"}</div>
         </div>
-        <button class="btn small" data-action="upgrade-slot" data-slot="${slot}" ${cost ? "" : "disabled"}>${cost ? `Upgrade +${cost.next}` : `+${MAX_UPGRADE}`}</button>
+        <button class="btn small" data-action="upgrade-slot" data-slot="${slot}" ${canAfford ? "" : "disabled"}>${cost ? `Upgrade +${cost.next}` : `+${MAX_UPGRADE}`}</button>
       </div>`;
     })
     .join("");
   const recipes = RECIPES.map((recipe) => {
     const materials = recipe.materials.map((material) => `${session.countItem(material.itemId)}/${material.qty} ${esc(getItem(material.itemId).name)}`).join(" · ");
-    const canCraft = session.save.gold >= recipe.gold && recipe.materials.every((material) => session.countItem(material.itemId) >= material.qty) && session.canAdd(recipe.resultItemId, 1);
+    const result = getItem(recipe.resultItemId);
+    const canCraft = session.save.gold >= recipe.gold
+      && recipe.materials.every((material) => session.countItem(material.itemId) >= material.qty)
+      && session.canAdd(recipe.resultItemId, 1)
+      && canClassUse(result, session.save.classId)
+      && (!result.requiresLevel || session.save.level >= result.requiresLevel);
     return `<div class="forge-row">
       ${itemIconHtml(getItem(recipe.resultItemId).icon, 26)}
       <div>

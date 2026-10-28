@@ -11,6 +11,9 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
     castSelf(s, ability);
     return;
   }
+  const healingOnHit = ability.effects
+    .filter((effect) => effect.kind === "heal")
+    .reduce((sum, effect) => sum + (effect.amount ?? 0) + (effect.scaling ?? 0) * s.stats.attack, 0);
   // Several arrows (like Multi-Shot) fan out in a tight spread instead of stacking.
   const count = damageEffects.length;
   const spreadStep = count > 1 ? 0.14 : 0;
@@ -34,7 +37,7 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
       dirX: aimX,
       dirY: aimY,
       speed,
-      ttl: Math.max(0.5, ability.range / speed),
+      ttl: Math.max(0, ability.range - 14) / speed,
       radius,
       damage,
       crit: crit ? 1 : 0,
@@ -42,6 +45,7 @@ export function castDirection(s: GameSession, ability: AbilityDef, dir: Vec2): v
       color: DAMAGE_COLORS[damageType],
       statuses: s.statusesFromEffects(ability.effects, damageType),
       owner: "player",
+      healingOnHit: healingOnHit > 0 ? healingOnHit : undefined,
     });
   });
 }

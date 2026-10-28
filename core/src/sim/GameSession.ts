@@ -292,7 +292,8 @@ export class GameSession {
 
   private makeMonster(spawn: { id: string; x: number; y: number }, uid?: string): MonsterInstance {
     const def = getMonster(spawn.id);
-    const elite = !def.boss && this.rng.chance(0.08 + this.save.ngPlus * 0.02)
+    const eliteChance = Math.min(0.5, 0.08 + this.save.ngPlus * 0.02);
+    const elite = !def.boss && this.rng.chance(eliteChance)
       ? this.rng.pick(["swift", "armored", "venomous", "volatile"] as const)
       : undefined;
     const maxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (elite ? 1.6 : 1)));
@@ -507,10 +508,10 @@ export class GameSession {
   }
 
   private tickStatuses(dt: number): void {
-    for (const status of this.statuses) status.remaining -= dt;
     const playerDot = this.statuses
       .filter((s) => s.kind === "poison" || s.kind === "burn")
-      .reduce((sum, s) => sum + s.value * dt, 0);
+      .reduce((sum, s) => sum + s.value * Math.min(dt, Math.max(0, s.remaining)), 0);
+    for (const status of this.statuses) status.remaining -= dt;
     if (playerDot > 0 && !this.dead) {
       this.save.hp = Math.max(0, this.save.hp - playerDot);
       if (this.save.hp <= 0) this.killPlayer("Venom");
@@ -518,10 +519,10 @@ export class GameSession {
     this.statuses = this.statuses.filter((s) => s.remaining > 0);
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
-      for (const status of monster.statuses) status.remaining -= dt;
       const damage = monster.statuses
         .filter((s) => s.kind === "burn" || s.kind === "poison")
-        .reduce((sum, s) => sum + s.value * dt, 0);
+        .reduce((sum, s) => sum + s.value * Math.min(dt, Math.max(0, s.remaining)), 0);
+      for (const status of monster.statuses) status.remaining -= dt;
       monster.statuses = monster.statuses.filter((s) => s.remaining > 0);
       if (damage > 0) {
         monster.hp -= damage;
@@ -687,7 +688,7 @@ export class GameSession {
     const shapes: Record<string, ("ring" | "line" | "cone" | "spot")[]> = {
       bone_warden: ["cone", "line", "ring"],
       miremother: ["spot", "cone", "ring"],
-      ice_revenant: ["ring", "line", "cone"],
+      frost_revenant: ["ring", "line", "cone"],
       hollow_king: ["line", "ring", "spot"],
     };
     const list = shapes[bossId] ?? ["ring", "cone"];
@@ -866,13 +867,14 @@ export class GameSession {
 
   private updateProjectiles(dt: number): void {
     for (const projectile of this.projectiles) {
-      projectile.ttl -= dt;
       const startX = projectile.x;
       const startY = projectile.y;
-      const endX = startX + projectile.dirX * projectile.speed * dt;
-      const endY = startY + projectile.dirY * projectile.speed * dt;
+      const travelTime = Math.min(dt, Math.max(0, projectile.ttl));
+      projectile.ttl = Math.max(0, projectile.ttl - dt);
+      const endX = startX + projectile.dirX * projectile.speed * travelTime;
+      const endY = startY + projectile.dirY * projectile.speed * travelTime;
       const steps = Math.max(1, Math.ceil(length(endX - startX, endY - startY) / 4));
-      for (let step = 1; step <= steps && projectile.ttl > 0; step += 1) {
+      for (let step = 1; step <= steps; step += 1) {
         const progress = step / steps;
         const previousProgress = (step - 1) / steps;
         const x = startX + (endX - startX) * progress;
@@ -891,6 +893,7 @@ export class GameSession {
             projectile.x = x;
             projectile.y = y;
             this.hitMonster(monster, projectile.damage, projectile.crit > 0, projectile.damageType, projectile.statuses);
+            if (projectile.healingOnHit) this.healPlayer(projectile.healingOnHit);
             projectile.hit = true;
             projectile.ttl = 0;
             break;
@@ -983,6 +986,13 @@ export class GameSession {
     return this.cooldowns[id] ?? 0;
   }
 
+  abilityCooldownDuration(id: string): number {
+    const ability = id === "basic" ? this.classDef.basic : this.classDef.abilities.find((entry) => entry.id === id);
+    if (!ability) return 0;
+    const abilityCooldown = this.abilityTalentModifiers[id]?.cooldownPercent ?? 0;
+    return ability.cooldown * (1 - this.modifiers.cooldown / 100) * (1 - abilityCooldown / 100);
+  }
+
   castAbility(id: string, aim: Vec2): boolean {
     if (this.dead) return false;
     const basic = id === "basic";
@@ -1002,8 +1012,7 @@ export class GameSession {
       else this.facing = dir.y > 0 ? "down" : "up";
     }
     this.save.resource -= ability.cost;
-    const abilityCooldown = this.abilityTalentModifiers[id]?.cooldownPercent ?? 0;
-    this.cooldowns[id] = ability.cooldown * (1 - this.modifiers.cooldown / 100) * (1 - abilityCooldown / 100);
+    this.cooldowns[id] = this.abilityCooldownDuration(id);
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
     const castRadius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 0);
@@ -1340,6 +1349,10 @@ export class GameSession {
       this.emit({ type: "log", text: `${this.classDef.name}s cannot use ${def.name}.`, tone: "bad" });
       return false;
     }
+    if (def.requiresLevel && this.save.level < def.requiresLevel) {
+      this.emit({ type: "log", text: `${def.name} needs level ${def.requiresLevel}.`, tone: "bad" });
+      return false;
+    }
     const type = def.type;
     if (type === "consumable" || type === "material") return false;
     const current = this.save.equipment[type];
@@ -1471,6 +1484,10 @@ export class GameSession {
       this.emit({ type: "log", text: `${this.classDef.name}s cannot use ${result.name}.`, tone: "bad" });
       return false;
     }
+    if (result.requiresLevel && this.save.level < result.requiresLevel) {
+      this.emit({ type: "log", text: `${result.name} needs level ${result.requiresLevel}.`, tone: "bad" });
+      return false;
+    }
     for (const material of recipe.materials) this.removeItem(material.itemId, material.qty);
     if (!this.canAdd(recipe.resultItemId, 1)) {
       for (const material of recipe.materials) this.addItem(material.itemId, material.qty);
@@ -1500,9 +1517,10 @@ export class GameSession {
       this.emit({ type: "log", text: `You need ${cost} gold for healing.`, tone: "bad" });
       return false;
     }
+    const healed = this.stats.maxHp - this.save.hp;
     this.save.gold -= cost;
     this.save.hp = this.stats.maxHp;
-    this.emit({ type: "heal", amount: this.stats.maxHp, x: this.save.x, y: this.save.y });
+    this.emit({ type: "heal", amount: healed, x: this.save.x, y: this.save.y });
     this.emit({ type: "log", text: `Elara restores you for ${cost} gold.`, tone: "good" });
     return true;
   }

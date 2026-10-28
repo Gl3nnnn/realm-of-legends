@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GameSession,
   INVENTORY_SIZE,
+  RECIPES,
   ZONES,
   getItem,
   getTalentTree,
@@ -50,6 +51,65 @@ describe("movement and collision", () => {
 });
 
 describe("combat", () => {
+  it("heals the necromancer only when Soul Drain's projectile hits", () => {
+    const session = forestSession("necromancer");
+    session.zone = { ...session.zone, blocked: Array(session.zone.blocked.length).fill(false) };
+    for (const monster of session.monsters) monster.state = "dead";
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    session.save.x = 300;
+    session.save.y = 300;
+    target.x = 380;
+    target.y = 300;
+    target.spawnX = target.x;
+    target.spawnY = target.y;
+    target.state = "idle";
+    target.wanderTimer = 100;
+    target.wanderX = target.x;
+    target.wanderY = target.y;
+    session.save.hp = 50;
+
+    expect(session.castAbility("soul_drain", { x: target.x, y: target.y })).toBe(true);
+    expect(session.save.hp).toBe(50);
+    for (let i = 0; i < 10 && session.projectiles.length > 0; i += 1) session.step(0.05, IDLE);
+
+    expect(target.hp).toBeLessThan(target.maxHp!);
+    expect(session.save.hp).toBeGreaterThan(50);
+  });
+
+  it("does not apply damage-over-time beyond the status's remaining duration", () => {
+    const session = forestSession();
+    for (const monster of session.monsters) monster.state = "dead";
+    session.save.hp = session.stats.maxHp;
+    session.statuses.push({ kind: "poison", remaining: 0.05, value: 10 });
+    const before = session.save.hp;
+
+    session.step(0.1, IDLE);
+
+    expect(session.save.hp).toBeCloseTo(before - 0.5);
+  });
+
+  it("limits projectile travel to the ability's configured range", () => {
+    const session = forestSession("archer");
+    session.zone = { ...session.zone, blocked: Array(session.zone.blocked.length).fill(false) };
+
+    expect(session.castAbility("basic", { x: session.save.x + 330, y: session.save.y })).toBe(true);
+
+    const projectile = session.projectiles[0]!;
+    expect((projectile.x - session.save.x) + projectile.ttl * projectile.speed).toBeCloseTo(330);
+  });
+
+  it("uses the effective cooldown duration after talent reductions", () => {
+    const save = saveIn("forest", "mage");
+    save.level = 5;
+    const session = new GameSession(save);
+    expect(session.learnTalent("mage:0:1")).toBe(true);
+
+    expect(session.castAbility("fireball", { x: session.save.x + 100, y: session.save.y })).toBe(true);
+
+    expect(session.abilityCooldown("fireball")).toBeCloseTo(session.abilityCooldownDuration("fireball"));
+    expect(session.abilityCooldownDuration("fireball")).toBeLessThan(5);
+  });
+
   it("only hits melee targets inside the aim arc", () => {
     const session = forestSession();
     const slimes = session.monsters.filter((monster) => monster.defId === "slime").slice(0, 2);
@@ -805,11 +865,13 @@ describe("quests", () => {
     session.save.level = 3;
     expect(session.acceptQuest("wider_world")).toBe(true);
     const state = session.save.quests.find((quest) => quest.id === "wider_world")!;
+    expect(state.progress[0]).toBe(1);
+    expect(state.exploredZones).toEqual(["forest"]);
     const toMarsh = session.zone.portals.find((portal) => portal.targetZone === "marsh")!;
     session.save.x = toMarsh.x + toMarsh.w / 2;
     session.save.y = toMarsh.y + toMarsh.h / 2;
     session.interact();
-    expect(state.progress[0]).toBe(1);
+    expect(state.progress[0]).toBe(2);
     const backToForest = session.zone.portals.find((portal) => portal.targetZone === "forest")!;
     session.save.x = backToForest.x + backToForest.w / 2;
     session.save.y = backToForest.y + backToForest.h / 2;
@@ -820,7 +882,7 @@ describe("quests", () => {
     session.interact();
 
     expect(state.progress[0]).toBe(2);
-    expect(state.exploredZones).toEqual(["marsh", "forest"]);
+    expect(state.exploredZones).toEqual(["forest", "marsh"]);
     expect(state.completed).toBe(false);
     expect(validateSave(session.snapshot()).ok).toBe(true);
   });
@@ -973,6 +1035,64 @@ describe("zones and persistence", () => {
 });
 
 describe("difficulty, elites and bosses", () => {
+  it("keeps New Game+ elite odds below a guaranteed spawn chance", () => {
+    let eliteCount = 0;
+    let totalCount = 0;
+    for (let seed = 1; seed <= 30; seed += 1) {
+      const save = saveIn("forest");
+      save.ngPlus = 99;
+      save.rngState = seed;
+      const session = new GameSession(save);
+      eliteCount += session.monsters.filter((monster) => monster.elite).length;
+      totalCount += session.monsters.length;
+    }
+
+    expect(eliteCount).toBeGreaterThan(0);
+    expect(eliteCount).toBeLessThan(totalCount);
+  });
+
+  it("completes a boss quest accepted after that boss was already defeated", () => {
+    const save = saveIn("village");
+    save.level = 7;
+    save.defeatedBosses.push("bone_warden");
+    save.quests.push({ id: "bone_breaker", progress: [6], completed: true, completions: 1 });
+    const session = new GameSession(save);
+
+    expect(session.acceptQuest("wardens_end")).toBe(true);
+    expect(session.save.quests.find((quest) => quest.id === "wardens_end")).toMatchObject({
+      progress: [1],
+      completed: true,
+    });
+  });
+
+  it("enforces equipment level requirements when crafting and equipping", () => {
+    const session = forestSession();
+    session.addItem("iron_ore", 10);
+    session.addItem("gemstone", 2);
+    const oreBefore = session.countItem("iron_ore");
+    const goldBefore = session.save.gold;
+
+    expect(session.craft("craft_plate_armor")).toBe(false);
+    expect(session.countItem("iron_ore")).toBe(oreBefore);
+    expect(session.save.gold).toBe(goldBefore);
+    expect(session.addItem("plate_armor", 1)).toBe(0);
+    const armorSlot = session.save.inventory.findIndex((stack) => stack?.itemId === "plate_armor");
+    expect(session.equip(armorSlot)).toBe(false);
+  });
+
+  it("uses the matching frost revenant boss attack pattern", () => {
+    const session = new GameSession(saveIn("frost"));
+    const boss = session.monsters.find((monster) => monster.defId === "frost_revenant")!;
+    expect(boss).toBeTruthy();
+    boss.state = "chase";
+    boss.attackTimer = 0;
+    boss.hp = boss.maxHp! * 0.6;
+
+    const events = session.step(0.1, IDLE);
+
+    expect(events.some((event) => event.type === "telegraph" && event.shape === "line")).toBe(true);
+  });
+
   it("scales enemies by difficulty and cycle", () => {
     const normal = saveIn("forest");
     const nightmare = saveIn("forest");
@@ -1030,6 +1150,19 @@ describe("difficulty, elites and bosses", () => {
     expect(session.save.ngPlus).toBe(1);
     expect(session.save.zone).toBe("village");
     expect(session.save.quests).toEqual([]);
+  });
+
+  it("reports the actual amount restored by NPC healing", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.hp = 100;
+
+    expect(session.healAtNpc()).toBe(true);
+
+    expect(session.drainEvents().find((event) => event.type === "heal")).toMatchObject({ amount: session.stats.maxHp - 100 });
+  });
+
+  it("points the greater health potion recipe to its ingredient area", () => {
+    expect(RECIPES.find((recipe) => recipe.id === "craft_greater_health_potion")?.zone).toBe("Whispering Forest");
   });
 });
 

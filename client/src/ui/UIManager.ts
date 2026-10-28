@@ -42,6 +42,7 @@ import {
   KEYBIND_LABELS,
   TUTORIAL_STORAGE_KEY,
   applyPreferences,
+  isReservedKeybind,
   keyNameFromEvent,
   loadPreferences,
   updatePreferences,
@@ -584,7 +585,7 @@ export class UIManager {
         return;
       }
       const key = keyNameFromEvent(event);
-      if (!key) {
+      if (!key || isReservedKeybind(key)) {
         this.toast(t("keyInvalid"), "bad");
         return;
       }
@@ -886,6 +887,12 @@ export class UIManager {
       const pad = Array.from(pads).find((entry) => entry && entry.connected);
       const index = pad ? pad.buttons.findIndex((button) => button.pressed) : -1;
       if (index >= 0) {
+        if (index === 9) {
+          this.padListening = null;
+          this.renderPanel();
+          this.toast("That button is reserved for the menu.", "bad");
+          return;
+        }
         const holder = (Object.entries(this.preferences.padBinds) as [KeybindAction, number][]).find(([other, value]) => other !== action && value === index);
         this.padListening = null;
         if (holder) {
@@ -1098,7 +1105,7 @@ export class UIManager {
       return;
     }
     const save = session.save;
-    let target: { x: number; y: number; label: string; zone?: string } | null = null;
+    let target: { x: number; y: number; label: string; zone?: string; stay?: boolean } | null = null;
     const portalToward = (zoneId: string) => {
       const direct = session.zone.portals.find((portal) => portal.targetZone === zoneId);
       const fallback = session.zone.portals[0];
@@ -1130,7 +1137,11 @@ export class UIManager {
       }
       for (let index = 0; index < quest.objectives.length; index += 1) {
         const objective = quest.objectives[index];
-        const count = "count" in objective ? objective.count : 1;
+        const count = objective.kind === "explore"
+          ? objective.zones.length
+          : "count" in objective
+            ? objective.count
+            : 1;
         if ((state.progress[index] ?? 0) >= count) continue;
         if (objective.kind === "kill" || objective.kind === "boss") {
           const alive = session.monsters
@@ -1159,6 +1170,19 @@ export class UIManager {
             target = portalToward(objective.zone);
             if (target) break;
           }
+        } else if (objective.kind === "explore") {
+          const nextZone = objective.zones.find((zoneId) => !state.exploredZones?.includes(zoneId));
+          if (nextZone) {
+            target = nextZone === session.zone.id
+              ? { x: save.x, y: save.y, label: `Explore ${session.zone.name}`, stay: true }
+              : portalToward(nextZone);
+            if (target) break;
+          }
+        } else if (objective.kind === "survive") {
+          target = objective.zone === session.zone.id
+            ? { x: save.x, y: save.y, label: `Stay in ${session.zone.name}`, stay: true }
+            : portalToward(objective.zone);
+          if (target) break;
         }
       }
       if (target) break;
@@ -1175,11 +1199,11 @@ export class UIManager {
     const angle = Math.atan2(dy, dx);
     const dirs = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"];
     const direction = dirs[(Math.round(angle / (Math.PI / 4)) + 8) % 8];
-    const signature = `${target.label}:${Math.round(distance / 4)}:${direction}`;
+    const signature = `${target.label}:${Math.round(distance / 4)}:${direction}:${target.stay ?? false}`;
     if (signature === this.compassSignature) return;
     this.compassSignature = signature;
     this.dom.compass.innerHTML = `<span class="compass-arrow" style="transform:rotate(${angle}rad)">➤</span>
-      <span class="compass-copy"><b>${esc(target.label)}</b><span>${direction} · ${Math.max(1, Math.round(distance / 10))}m${target.zone ? ` · ${esc(target.zone)}` : ""}</span></span>`;
+      <span class="compass-copy"><b>${esc(target.label)}</b><span>${target.stay ? "Objective progress advances while you remain here." : `${direction} · ${Math.max(1, Math.round(distance / 10))}m${target.zone ? ` · ${esc(target.zone)}` : ""}`}</span></span>`;
     this.dom.compass.classList.remove("hidden");
   }
 
@@ -1233,7 +1257,8 @@ export class UIManager {
       const overlay = button.querySelector<HTMLElement>(`[data-cd="${ability.id}"]`);
       if (overlay) {
         const remaining = session.abilityCooldown(ability.id);
-        const pct = ability.cooldown > 0 ? Math.min(100, (remaining / ability.cooldown) * 100) : 0;
+        const cooldownDuration = session.abilityCooldownDuration(ability.id);
+        const pct = cooldownDuration > 0 ? Math.min(100, (remaining / cooldownDuration) * 100) : 0;
         overlay.style.height = `${pct}%`;
       }
     }

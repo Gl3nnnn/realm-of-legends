@@ -711,7 +711,7 @@ export const RECIPES: CraftRecipe[] = [
   { id: "craft_chainmail", name: "Chainmail", resultItemId: "chainmail", materials: [{ itemId: "iron_ore", qty: 5 }, { itemId: "wolf_pelt", qty: 2 }], gold: 100, zone: "Whispering Forest" },
   { id: "craft_plate_armor", name: "Plate Armor", resultItemId: "plate_armor", materials: [{ itemId: "iron_ore", qty: 10 }, { itemId: "gemstone", qty: 2 }], gold: 300, zone: "Frostfell Ruins" },
   { id: "craft_ember_staff", name: "Ember Staff", resultItemId: "ember_staff", materials: [{ itemId: "iron_ore", qty: 4 }, { itemId: "gemstone", qty: 2 }], gold: 150, zone: "Ashen Marsh" },
-  { id: "craft_greater_health_potion", name: "Greater Health Potion", resultItemId: "greater_health_potion", materials: [{ itemId: "herb", qty: 3 }, { itemId: "slime_gel", qty: 1 }], gold: 15, zone: "Eldoria Village" },
+  { id: "craft_greater_health_potion", name: "Greater Health Potion", resultItemId: "greater_health_potion", materials: [{ itemId: "herb", qty: 3 }, { itemId: "slime_gel", qty: 1 }], gold: 15, zone: "Whispering Forest" },
 ];
 
 export function getRecipe(id: string): CraftRecipe | undefined {

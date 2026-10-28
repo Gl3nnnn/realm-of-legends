@@ -66,6 +66,10 @@ export const KEYBIND_LABELS: Record<KeybindAction, string> = {
   quick2: "Quick slot 2",
 };
 
+export function isReservedKeybind(key: string): boolean {
+  return key === "ESC" || key === "TAB" || ["I", "Q", "T", "1", "2", "3", "4", "5"].includes(key);
+}
+
 const STORAGE_KEY = "realm.preferences.v1";
 const VALID_KEY = /^(?:[A-Z0-9]|SPACE|SHIFT|ESC|TAB|ENTER|UP|DOWN|LEFT|RIGHT)$/;
 
@@ -86,10 +90,19 @@ const DEFAULTS: GamePreferences = {
 
 function sanitizePadBinds(value: unknown): Record<KeybindAction, number> {
   const parsed = (value && typeof value === "object" ? value : {}) as Partial<Record<KeybindAction, unknown>>;
-  const next = { ...DEFAULT_PAD_BINDS };
+  const next = {} as Record<KeybindAction, number>;
+  const used = new Set<number>();
   for (const action of Object.keys(DEFAULT_PAD_BINDS) as KeybindAction[]) {
     const button = parsed[action];
-    if (typeof button === "number" && Number.isInteger(button) && button >= 0 && button <= 16) next[action] = button;
+    const validButton = typeof button === "number" && Number.isInteger(button) && button >= 0 && button <= 16 && button !== 9
+      ? button
+      : undefined;
+    let selected = validButton !== undefined && !used.has(validButton) ? validButton : DEFAULT_PAD_BINDS[action];
+    if (selected === 9 || used.has(selected)) {
+      selected = Array.from({ length: 17 }, (_, index) => index).find((index) => index !== 9 && !used.has(index)) ?? DEFAULT_PAD_BINDS[action];
+    }
+    next[action] = selected;
+    used.add(selected);
   }
   return next;
 }
@@ -99,7 +112,7 @@ function sanitizeKeybinds(value: unknown): Keybinds {
   const next = { ...DEFAULT_KEYBINDS };
   for (const action of Object.keys(DEFAULT_KEYBINDS) as KeybindAction[]) {
     const key = parsed[action];
-    if (typeof key === "string" && VALID_KEY.test(key)) next[action] = key;
+    if (typeof key === "string" && VALID_KEY.test(key) && !isReservedKeybind(key)) next[action] = key;
   }
   return next;
 }

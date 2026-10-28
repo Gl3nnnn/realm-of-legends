@@ -72,6 +72,12 @@ describe("save validation", () => {
     badPos.x = ZONES.village.width * ZONES.village.tileWidth + 50;
     expect(validateSave(badPos).ok).toBe(false);
 
+    const blockedPos = base();
+    blockedPos.x = 5 * ZONES.village.tileWidth + 8;
+    blockedPos.y = 4 * ZONES.village.tileHeight + 8;
+    expect(ZONES.village.blocked[4 * ZONES.village.width + 5]).toBe(true);
+    expect(validateSave(blockedPos)).toMatchObject({ ok: false, error: "Player position is inside blocked terrain." });
+
     const badHp = base();
     badHp.hp = 50_000;
     expect(validateSave(badHp).ok).toBe(false);
@@ -109,6 +115,12 @@ describe("save validation", () => {
     const invalidQuickSlot = base();
     invalidQuickSlot.quickSlots[0] = "iron_sword";
     expect(validateSave(invalidQuickSlot).ok).toBe(false);
+  });
+
+  it("rejects equipment above the character's level", () => {
+    const save = base();
+    save.equipment.armor = { itemId: "plate_armor", qty: 1 };
+    expect(validateSave(save)).toMatchObject({ ok: false, error: "Plate Armor requires level 10." });
   });
 
   it("migrates v2 saves to talents and validates talent choices", () => {

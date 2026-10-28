@@ -283,6 +283,7 @@ export interface ProjectileInstance {
   hit?: boolean;
   missLogged?: boolean;
   abilityName?: string;
+  healingOnHit?: number;
 }
 
 export interface GroundLoot {

@@ -63,7 +63,7 @@ export function readGamepad(scene: InputScene): GamepadState {
   }
   const pressed = (index: number) => Boolean(pad.buttons[index]?.pressed);
   const edge = (index: number) => pressed(index) && !scene.padPrev[index];
-  state.attack = pressed(bind.attack) || pressed(7);
+  state.attack = pressed(bind.attack);
   state.dodge = edge(bind.dodge);
   state.interact = edge(bind.interact);
   state.quick1 = edge(bind.quick1);
