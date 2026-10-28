@@ -35,6 +35,7 @@ import {
 } from "./screens";
 import {
   DEFAULT_KEYBINDS,
+  DEFAULT_PAD_BINDS,
   KEYBIND_LABELS,
   TUTORIAL_STORAGE_KEY,
   applyPreferences,
@@ -85,8 +86,12 @@ export class UIManager {
   private inventoryFilter: InventoryFilter = "all";
   private inventorySort: InventorySort = "default";
   private rebinding: KeybindAction | null = null;
+  private padListening: KeybindAction | null = null;
   private touchMove = { x: 0, y: 0 };
   private touchPointer: number | null = null;
+  private touchAim = { x: 0, y: 0, active: false };
+  private touchAimPointer: number | null = null;
+  private touchAimFired = false;
   public keybindVersion = 0;
   private preferences: GamePreferences = loadPreferences();
 
@@ -166,6 +171,18 @@ export class UIManager {
 
   get touchVector(): { x: number; y: number } {
     return this.touchMove;
+  }
+
+  /** Aim direction from the touch aim stick, and whether it was just released (fire). */
+  get touchAimState(): { x: number; y: number; active: boolean } {
+    return this.touchAim;
+  }
+
+  /** True once after the aim stick is released with a real drag. Reading it clears it. */
+  takeTouchAimFire(): boolean {
+    const fired = this.touchAimFired;
+    this.touchAimFired = false;
+    return fired;
   }
 
   private async renderSelect(): Promise<void> {
@@ -429,6 +446,57 @@ export class UIManager {
     });
     stick.addEventListener("pointerup", release);
     stick.addEventListener("pointercancel", release);
+
+    // Aim stick (right side): drag to point, release to fire that way.
+    // A small drag does not fire, so a light touch still auto-aims at the nearest target.
+    const aimPad = document.getElementById("touch-aim") as HTMLElement | null;
+    const aimKnob = document.getElementById("touch-aim-knob") as HTMLElement | null;
+    if (aimPad && aimKnob) {
+      const AIM_DEAD_ZONE = 0.35;
+      const aimMove = (event: PointerEvent) => {
+        const rect = aimPad.getBoundingClientRect();
+        const radius = rect.width / 2;
+        let dx = event.clientX - (rect.left + radius);
+        let dy = event.clientY - (rect.top + radius);
+        const distance = Math.hypot(dx, dy);
+        const clamp = radius * 0.8;
+        if (distance > clamp) {
+          dx = (dx / distance) * clamp;
+          dy = (dy / distance) * clamp;
+        }
+        const x = dx / clamp;
+        const y = dy / clamp;
+        this.touchAim = { x, y, active: Math.hypot(x, y) > AIM_DEAD_ZONE };
+        aimKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        aimPad.classList.toggle("active", this.touchAim.active);
+      };
+      const aimRelease = () => {
+        if (this.touchAim.active) this.touchAimFired = true;
+        this.touchAimPointer = null;
+        this.touchAim = { x: 0, y: 0, active: false };
+        aimKnob.style.transform = "translate(0, 0)";
+        aimPad.classList.remove("active");
+      };
+      aimPad.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        this.touchAimPointer = event.pointerId;
+        aimPad.setPointerCapture(event.pointerId);
+        aimMove(event);
+      });
+      aimPad.addEventListener("pointermove", (event) => {
+        if (this.touchAimPointer !== event.pointerId) return;
+        event.preventDefault();
+        aimMove(event);
+      });
+      aimPad.addEventListener("pointerup", aimRelease);
+      aimPad.addEventListener("pointercancel", () => {
+        this.touchAim = { x: 0, y: 0, active: false };
+        this.touchAimPointer = null;
+        aimKnob.style.transform = "translate(0, 0)";
+        aimPad.classList.remove("active");
+      });
+    }
+
     for (const button of this.dom.touchControls.querySelectorAll<HTMLElement>("[data-touch]")) {
       button.addEventListener("pointerdown", (event) => {
         event.preventDefault();
@@ -467,7 +535,7 @@ export class UIManager {
       const keybinds = { ...this.preferences.keybinds, [action]: key };
       const duplicate = (Object.entries(keybinds) as [KeybindAction, string][]).find(([other, value]) => other !== action && value === key);
       if (duplicate) {
-        this.toast(`${key} is already bound to ${KEYBIND_LABELS[duplicate[0]]}.`, "bad");
+        this.toast(`${key} is already bound to ${KEYBIND_LABELS[duplicate[0]]}. That key was not changed - unbind it there first, or pick another key.`, "bad");
         return;
       }
       this.preferences = updatePreferences({ keybinds });
@@ -661,7 +729,7 @@ export class UIManager {
       body = talentsPanelHtml(this.session);
     } else if (this.panel.kind === "settings") {
       title = "Settings";
-      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted, this.sfx.currentMusicVolume, this.preferences, this.rebinding);
+      body = settingsPanelHtml(this.session, this.sfx.currentVolume, this.sfx.isMuted, this.sfx.currentMusicVolume, this.preferences, this.rebinding, this.padListening);
       narrow = true;
     } else if (this.panel.kind === "npc" && this.session) {
       const npc = NPCS[this.panel.id];
@@ -673,10 +741,43 @@ export class UIManager {
       body = this.session ? shopPanelHtml(this.session, this.panel.id) : "";
     }
     this.dom.overlay.innerHTML = `<section class="panel ${narrow ? "narrow" : ""}" role="document">
-      <header class="panel-head"><h2>${esc(title)}</h2><button class="panel-close" data-action="close-panel" aria-label="Close">X</button></header>
+      <header class="panel-head"><h2 id="overlay-title">${esc(title)}</h2><button class="panel-close" data-action="close-panel" aria-label="Close">X</button></header>
       <div class="panel-body">${body}</div>
     </section>`;
     this.dom.overlay.classList.remove("hidden");
+  }
+
+  private listenForPadButton(): void {
+    const action = this.padListening;
+    if (!action) return;
+    const started = performance.now();
+    const poll = () => {
+      if (this.padListening !== action) return;
+      if (performance.now() - started > 8000) {
+        this.padListening = null;
+        this.renderPanel();
+        this.toast("No gamepad button pressed. Try again.", "bad");
+        return;
+      }
+      const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
+      const pad = Array.from(pads).find((entry) => entry && entry.connected);
+      const index = pad ? pad.buttons.findIndex((button) => button.pressed) : -1;
+      if (index >= 0) {
+        const holder = (Object.entries(this.preferences.padBinds) as [KeybindAction, number][]).find(([other, value]) => other !== action && value === index);
+        this.padListening = null;
+        if (holder) {
+          this.renderPanel();
+          this.toast(`Button ${index} is already used by ${KEYBIND_LABELS[holder[0]]}. Pick another.`, "bad");
+          return;
+        }
+        this.preferences = updatePreferences({ padBinds: { ...this.preferences.padBinds, [action]: index } });
+        this.renderPanel();
+        this.toast(`${KEYBIND_LABELS[action]} set to gamepad button ${index}.`, "good");
+        return;
+      }
+      window.requestAnimationFrame(poll);
+    };
+    window.requestAnimationFrame(poll);
   }
 
   private async onPanelAction(action: string, target: HTMLElement): Promise<void> {
@@ -687,6 +788,18 @@ export class UIManager {
     if (action === "rebind-key") {
       this.rebinding = (target.dataset.key ?? "") as KeybindAction;
       this.renderPanel();
+      return;
+    }
+    if (action === "rebind-pad") {
+      this.padListening = (target.dataset.key ?? "") as KeybindAction;
+      this.renderPanel();
+      this.listenForPadButton();
+      return;
+    }
+    if (action === "reset-pad") {
+      this.preferences = updatePreferences({ padBinds: { ...DEFAULT_PAD_BINDS } });
+      this.renderPanel();
+      this.toast("Gamepad buttons restored to defaults.", "good");
       return;
     }
     if (action === "reset-keys") {

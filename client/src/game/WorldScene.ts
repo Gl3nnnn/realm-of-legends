@@ -420,7 +420,7 @@ export class WorldScene extends Phaser.Scene {
   private statusMarkers = new Map<string, Phaser.GameObjects.Text>();
 
   private updateStatusMarkers(uid: string, x: number, y: number, kinds: string[]): void {
-    const glyphs: Record<string, string> = { poison: "☠", burn: "🔥", slow: "❄", stun: "★" };
+    const glyphs: Record<string, string> = { poison: "☠", burn: "🔥", slow: "❄", stun: "★", elite: "◆" };
     const shown = kinds.filter((kind) => glyphs[kind]);
     const existing = this.statusMarkers.get(uid);
     if (shown.length === 0) {
@@ -548,8 +548,9 @@ export class WorldScene extends Phaser.Scene {
       return state;
     }
     const dead = (value: number) => Math.abs(value) < 0.25 ? 0 : value;
-    state.moveX = dead(pad.axes[0] ?? 0) + (pad.buttons[15]?.pressed ? 1 : 0) - (pad.buttons[14]?.pressed ? 1 : 0);
-    state.moveY = dead(pad.axes[1] ?? 0) + (pad.buttons[13]?.pressed ? 1 : 0) - (pad.buttons[12]?.pressed ? 1 : 0);
+    const bind = loadPreferences().padBinds;
+    state.moveX = dead(pad.axes[0] ?? 0) + (pad.buttons[bind.right]?.pressed ? 1 : 0) - (pad.buttons[bind.left]?.pressed ? 1 : 0);
+    state.moveY = dead(pad.axes[1] ?? 0) + (pad.buttons[bind.down]?.pressed ? 1 : 0) - (pad.buttons[bind.up]?.pressed ? 1 : 0);
     const aimX = dead(pad.axes[2] ?? 0);
     const aimY = dead(pad.axes[3] ?? 0);
     if (Math.hypot(aimX, aimY) > 0) {
@@ -558,11 +559,11 @@ export class WorldScene extends Phaser.Scene {
     }
     const pressed = (index: number) => Boolean(pad.buttons[index]?.pressed);
     const edge = (index: number) => pressed(index) && !this.padPrev[index];
-    state.attack = pressed(0) || pressed(7);
-    state.dodge = edge(1);
-    state.interact = edge(2);
-    state.quick1 = edge(3) || edge(4);
-    state.quick2 = edge(5) || edge(6);
+    state.attack = pressed(bind.attack) || pressed(7);
+    state.dodge = edge(bind.dodge);
+    state.interact = edge(bind.interact);
+    state.quick1 = edge(bind.quick1);
+    state.quick2 = edge(bind.quick2);
     state.menu = edge(9);
     this.padPrev = pad.buttons.map((button) => button.pressed);
     return state;
@@ -657,6 +658,15 @@ export class WorldScene extends Phaser.Scene {
     if (pad.aimX !== 0 || pad.aimY !== 0) {
       const len = Math.hypot(pad.aimX, pad.aimY) || 1;
       this.aim = { x: this.session.save.x + (pad.aimX / len) * 160, y: this.session.save.y + (pad.aimY / len) * 160 };
+    }
+    // Touch aim stick: while dragged, aim where it points; on release, fire that way.
+    const touchAim = this.ui.touchAimState;
+    if (touchAim.active) {
+      const len = Math.hypot(touchAim.x, touchAim.y) || 1;
+      this.aim = { x: this.session.save.x + (touchAim.x / len) * 160, y: this.session.save.y + (touchAim.y / len) * 160 };
+    }
+    if (this.ui.takeTouchAimFire()) {
+      this.cast("basic");
     }
 
     const touch = this.ui.touchVector;
@@ -827,7 +837,7 @@ export class WorldScene extends Phaser.Scene {
       else if (monster.elite === "volatile") sprite.setTint(0xff9a6a);
       else if (def?.id && MONSTER_TINTS[def.id] !== undefined) sprite.setTint(MONSTER_TINTS[def.id]);
       else sprite.clearTint();
-      this.updateStatusMarkers(monster.uid, monster.x, monster.y, monster.statuses.map((status) => status.kind));
+      this.updateStatusMarkers(monster.uid, monster.x, monster.y, [...monster.statuses.map((status) => status.kind), ...(monster.elite ? ["elite"] : [])]);
     }
     for (const [uid, sprite] of this.monsterSprites) {
       const dead = !activeMonsters.has(uid) && session.monsters.find((m) => m.uid === uid)?.state === "dead";

@@ -1984,6 +1984,24 @@ html[data-ui-scale="1.5"] .toasts {
   background: rgba(232, 192, 90, 0.22);
 }
 
+.touch-aim {
+  position: absolute;
+  right: 22px;
+  bottom: 170px;
+  width: 106px;
+  height: 106px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 160, 130, 0.5);
+  background: rgba(12, 10, 18, 0.35);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-aim.active {
+  border-style: solid;
+  border-color: rgba(255, 160, 130, 0.85);
+}
+
 .touch-actions {
   position: absolute;
   right: 18px;
@@ -2037,6 +2055,7 @@ html[data-ui-scale="1.5"] .toasts {
 
 @media (max-width: 640px) {
   .touch-stick { width: 96px; height: 96px; }
+  .touch-aim { width: 94px; height: 94px; bottom: 150px; right: 18px; }
   .touch-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
   .touch-actions { grid-template-columns: repeat(3, 50px); grid-auto-rows: 50px; }
   .touch-btn { width: 50px; height: 50px; }

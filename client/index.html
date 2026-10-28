@@ -81,7 +81,7 @@
       </div>
 
       <div id="buff-bar" class="buff-bar"></div>
-      <div id="quest-tracker" class="quest-tracker"></div>
+      <div id="quest-tracker" class="quest-tracker" aria-live="polite" aria-label="Quest tracker"></div>
       <div id="quest-compass" class="quest-compass hidden"></div>
 
       <div id="tutorial" class="tutorial hidden">
@@ -114,6 +114,7 @@
 
       <div id="touch-controls" class="touch-controls hidden">
         <div id="touch-stick" class="touch-stick" aria-label="Movement joystick"><div id="touch-knob" class="touch-knob"></div></div>
+<div id="touch-aim" class="touch-aim" aria-label="Aim stick: drag to aim, release to attack"><div id="touch-aim-knob" class="touch-knob"></div></div>
         <div class="touch-actions">
           <button class="touch-btn small" data-touch="quick1">Z</button>
           <button class="touch-btn small" data-touch="quick2">X</button>
@@ -132,7 +133,7 @@
       </div>
     </div>
 
-    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true"></div>
+    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlay-title"></div>
     <div id="toasts" class="toasts" aria-live="polite"></div>
 
     <script type="module" src="/src/main.ts"></script>

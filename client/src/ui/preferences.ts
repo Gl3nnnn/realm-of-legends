@@ -11,6 +11,10 @@ export type KeybindAction =
 
 export type Keybinds = Record<KeybindAction, string>;
 
+// Gamepad button numbers (standard layout: 0 = A, 1 = B, 2 = X, 3 = Y ...).
+// Move and aim stay on the sticks; these buttons cover the actions.
+export type PadBinds = Partial<Record<KeybindAction, number>>;
+
 export interface GamePreferences {
   uiScale: 1 | 1.25 | 1.5;
   highContrast: boolean;
@@ -21,7 +25,20 @@ export interface GamePreferences {
   cameraZoom: 1.5 | 2 | 2.5;
   effectIntensity: 0.5 | 1 | 1.5;
   keybinds: Keybinds;
+  padBinds: Record<KeybindAction, number>;
 }
+
+export const DEFAULT_PAD_BINDS: Record<KeybindAction, number> = {
+  up: 12,
+  down: 13,
+  left: 14,
+  right: 15,
+  attack: 0,
+  dodge: 1,
+  interact: 2,
+  quick1: 4,
+  quick2: 5,
+};
 
 export const DEFAULT_KEYBINDS: Keybinds = {
   up: "W",
@@ -60,7 +77,18 @@ const DEFAULTS: GamePreferences = {
   cameraZoom: 2,
   effectIntensity: 1,
   keybinds: { ...DEFAULT_KEYBINDS },
+  padBinds: { ...DEFAULT_PAD_BINDS },
 };
+
+function sanitizePadBinds(value: unknown): Record<KeybindAction, number> {
+  const parsed = (value && typeof value === "object" ? value : {}) as Partial<Record<KeybindAction, unknown>>;
+  const next = { ...DEFAULT_PAD_BINDS };
+  for (const action of Object.keys(DEFAULT_PAD_BINDS) as KeybindAction[]) {
+    const button = parsed[action];
+    if (typeof button === "number" && Number.isInteger(button) && button >= 0 && button <= 16) next[action] = button;
+  }
+  return next;
+}
 
 function sanitizeKeybinds(value: unknown): Keybinds {
   const parsed = (value && typeof value === "object" ? value : {}) as Partial<Record<KeybindAction, unknown>>;
@@ -89,7 +117,7 @@ export function keyNameFromEvent(event: KeyboardEvent): string {
 export function loadPreferences(): GamePreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS } };
+    if (!raw) return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } };
     const parsed = JSON.parse(raw) as Partial<GamePreferences>;
     const scale = parsed.uiScale === 1.25 || parsed.uiScale === 1.5 ? parsed.uiScale : 1;
     return {
@@ -102,9 +130,10 @@ export function loadPreferences(): GamePreferences {
       cameraZoom: parsed.cameraZoom === 1.5 || parsed.cameraZoom === 2.5 ? parsed.cameraZoom : 2,
       effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
       keybinds: sanitizeKeybinds(parsed.keybinds),
+      padBinds: sanitizePadBinds(parsed.padBinds),
     };
   } catch {
-    return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS } };
+    return { ...DEFAULTS, keybinds: { ...DEFAULT_KEYBINDS }, padBinds: { ...DEFAULT_PAD_BINDS } };
   }
 }
 
@@ -129,6 +158,7 @@ export function updatePreferences(patch: Partial<GamePreferences>): GamePreferen
   const current = loadPreferences();
   const next = { ...current, ...patch };
   if (patch.keybinds) next.keybinds = sanitizeKeybinds({ ...current.keybinds, ...patch.keybinds });
+  if (patch.padBinds) next.padBinds = sanitizePadBinds({ ...current.padBinds, ...patch.padBinds });
   savePreferences(next);
   applyPreferences(next);
   return next;
