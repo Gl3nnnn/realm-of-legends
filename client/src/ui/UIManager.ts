@@ -1338,10 +1338,11 @@ export class UIManager {
     this.questSignature = signature;
     const storyBossId = nextStory?.bossId ?? "";
     const storyBossName = storyBossId ? (MONSTERS[storyBossId]?.name ?? storyBossId) : "";
+    const storyBossPhrase = /^the\s/i.test(storyBossName) ? storyBossName : `the ${storyBossName}`;
     const storyBossZone = storyBossId ? Object.values(ZONES).find((zone) => zone.monsterSpawns.some((spawn) => spawn.id === storyBossId)) : undefined;
     const storyWhere = storyBossZone ? ` in ${esc(storyBossZone.name)}` : "";
     const storyLine = nextStory
-      ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat the ${esc(storyBossName)}${storyWhere} to continue the story.</div></div>`
+      ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat ${esc(storyBossPhrase)}${storyWhere} to continue the story.</div></div>`
       : "";
     this.dom.questTracker.innerHTML = storyLine + active
       .map((state) => {

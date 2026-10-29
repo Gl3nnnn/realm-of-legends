@@ -6,7 +6,8 @@ import { getTalentChoice, talentTierChosen } from "../data/talents";
 import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
-import { clampLevel } from "../progression";
+import { clampLevel, deriveStats } from "../progression";
+import { talentBonuses } from "../data/talents";
 
 const CLASS_IDS = Object.keys(CLASSES) as [ClassId, ...ClassId[]];
 const ZONE_IDS = ["village", "forest", "dungeon", "marsh", "frost", "throne"] as const;
@@ -157,6 +158,9 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
   const classDef = getClass(classId);
   const now = options.now ?? Date.now();
   const equipment = starterEquipment(classId);
+  // Start at full health and resource, counting starter gear and the class passive talent,
+  // the same way the game works out a hero's stats.
+  const startStats = deriveStats(classDef, 1, equipment, talentBonuses(classId, []));
   const inventory: (ItemStack | null)[] = new Array(INVENTORY_SIZE).fill(null);
   inventory[0] = { itemId: "health_potion", qty: 3 };
   const zone = ZONES.village;
@@ -168,8 +172,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     level: 1,
     xp: 0,
     gold: 30,
-    hp: classDef.base.maxHp,
-    resource: classDef.base.maxResource,
+    hp: startStats.maxHp,
+    resource: startStats.maxResource,
     zone: "village",
     x: zone.spawn.x,
     y: zone.spawn.y,

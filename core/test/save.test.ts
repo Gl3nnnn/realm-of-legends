@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GameSession } from "../src/sim/GameSession";
 import {
   CLASS_LIST,
   INVENTORY_SIZE,
@@ -15,6 +16,18 @@ import {
 } from "../src/index";
 
 describe("character creation", () => {
+  it("starts every new hero at full health and resource, counting starter gear and talents", () => {
+    for (const def of CLASS_LIST) {
+      const save = createCharacter("Tester", def.id);
+      const startHp = save.hp;
+      const startResource = save.resource;
+      // Read the real maximums from the game session, the same numbers the screen shows.
+      const session = new GameSession(save);
+      expect(startHp).toBe(session.stats.maxHp);
+      expect(startResource).toBe(session.stats.maxResource);
+    }
+  });
+
   it("creates a valid starter save for every class", () => {
     for (const def of CLASS_LIST) {
       const save = createCharacter(`Hero ${def.name}`.slice(0, 16), def.id);

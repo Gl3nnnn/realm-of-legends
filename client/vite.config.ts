@@ -18,7 +18,19 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     target: "es2022",
-    chunkSizeWarningLimit: 2400,
+    chunkSizeWarningLimit: 1400,
+    rollupOptions: {
+      output: {
+        // Keep the engine and the game rules in their own files. They change far
+        // less often than the UI code, so a game update only re-downloads the app.
+        manualChunks(id: string) {
+          if (id.includes("node_modules/phaser")) return "phaser";
+          if (id.includes("node_modules/idb")) return "vendor";
+          if (id.includes("core/src/")) return "realm-core";
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,
