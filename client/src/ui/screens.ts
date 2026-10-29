@@ -704,7 +704,7 @@ export function settingsPanelHtml(
         <button class="btn ghost small" data-action="export-all">${t("btnExportAll")}</button>
         <button class="btn ghost small" data-action="import-file">${t("btnImportSaves")}</button>
         <button class="btn ghost small" data-action="return-menu">${t("btnCharacterSelect")}</button>
-        <button class="btn danger small" data-action="delete-current">${t("btnDeleteHero")}</button>
+        <button class="btn danger small" data-action="delete-current" title="Asks first, then erases this hero">${t("btnDeleteHero")}</button>
       </div>
     </div>` : ""}
     <div>

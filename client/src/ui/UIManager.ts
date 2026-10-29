@@ -6,6 +6,7 @@ import {
   SHOPS,
   ZONES,
   createCharacter,
+  getClass,
   getItem,
   migrateSave,
   portraitFrame,
@@ -18,7 +19,7 @@ import {
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
-import { classColor, esc, formatNumber, questObjectiveText } from "./helpers";
+import { classColor, classPortrait, esc, formatNumber, questObjectiveText } from "./helpers";
 import { t } from "./text";
 import { STORY_CHAPTERS } from "../../../core/src/data/story";
 import {
@@ -114,6 +115,8 @@ export class UIManager {
   private lastPickupSound = 0;
   private persistTimer: number | null = null;
   private panelOpener: HTMLElement | null = null;
+  /** The hero waiting for a "yes, delete" answer, and the button that asked. */
+  private deleteTarget: { save: CharacterSave; opener: HTMLElement | null } | null = null;
   private minimapCollapsed = false;
   private storyBox: HTMLElement | null = null;
   private storyTimer: number | null = null;
@@ -159,6 +162,17 @@ export class UIManager {
     touchStick: must("touch-stick"),
     touchKnob: must("touch-knob"),
     importFile: must<HTMLInputElement>("import-file"),
+    confirm: must("confirm-layer"),
+    confirmTitle: must("confirm-title"),
+    confirmName: must("confirm-name"),
+    confirmMeta: must("confirm-meta"),
+    confirmPortrait: must("confirm-portrait"),
+    confirmDesc: must("confirm-desc"),
+    confirmGone: must("confirm-gone"),
+    confirmExported: must("confirm-exported"),
+    confirmNote: must("confirm-note"),
+    confirmKeep: must<HTMLButtonElement>("confirm-keep"),
+    confirmDelete: must<HTMLButtonElement>("confirm-delete"),
   };
 
   constructor(options: UIOptions) {
@@ -177,7 +191,12 @@ export class UIManager {
   }
 
   get modalOpen(): boolean {
-    return this.panel !== null || !this.dom.tutorial.classList.contains("hidden");
+    return this.panel !== null || this.deleteTarget !== null || !this.dom.tutorial.classList.contains("hidden");
+  }
+
+  /** True while the delete confirm modal is up, so gamepad menus wait their turn. */
+  get confirmOpen(): boolean {
+    return this.deleteTarget !== null;
   }
 
   get touchVector(): { x: number; y: number } {
@@ -214,6 +233,7 @@ export class UIManager {
     this.session = null;
     this.sfx.stopMusic();
     this.clearStoryBox();
+    this.closeDeleteConfirm(false);
     this.closePanel(false);
     this.dom.hud.classList.add("hidden");
     this.dom.boot.classList.add("hidden");
@@ -229,6 +249,7 @@ export class UIManager {
   attachSession(session: GameSession): void {
     this.session = session;
     this.panel = null;
+    this.closeDeleteConfirm(false);
     this.dom.overlay.classList.add("hidden");
     this.dom.overlay.setAttribute("aria-hidden", "true");
     this.dom.overlay.innerHTML = "";
@@ -295,6 +316,10 @@ export class UIManager {
 
   /** Opens Settings from the gamepad menu button, dismissing the tutorial first if needed. */
   openMenu(): void {
+    if (this.deleteTarget) {
+      this.closeDeleteConfirm();
+      return;
+    }
     this.dismissTutorial();
     this.openPanel("settings");
   }
@@ -340,6 +365,12 @@ export class UIManager {
 
     must("btn-import-save").addEventListener("click", () => this.dom.importFile.click());
     must("minimap-toggle").addEventListener("click", () => this.toggleMinimap());
+    this.dom.confirmKeep.addEventListener("click", () => this.closeDeleteConfirm());
+    this.dom.confirmDelete.addEventListener("click", () => void this.confirmDeleteHero());
+    // Clicking the dim backdrop behind the box cancels, like Escape does.
+    this.dom.confirm.addEventListener("click", (event) => {
+      if (event.target === this.dom.confirm) this.closeDeleteConfirm();
+    });
 
     this.dom.createPanel.addEventListener("input", (event) => {
       const target = event.target as HTMLInputElement;
@@ -561,6 +592,21 @@ export class UIManager {
 
   private onKeyDown(event: KeyboardEvent): void {
     if (event.repeat) return;
+    // The delete confirm box sits on top of everything, so it takes the keys first.
+    if (this.deleteTarget) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeDeleteConfirm();
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const onDelete = document.activeElement === this.dom.confirmDelete;
+        (onDelete ? this.dom.confirmKeep : this.dom.confirmDelete).focus();
+        return;
+      }
+      return;
+    }
     if (this.panel && event.key === "Tab") {
       const focusable = Array.from(this.dom.overlay.querySelectorAll<HTMLElement>(
         'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex]:not([tabindex="-1"])',
@@ -681,11 +727,81 @@ export class UIManager {
       downloadJson(`realm-${save.name.replace(/[^a-z0-9_-]+/gi, "-")}.json`, save);
       this.toast(t("heroExported"), "good");
     } else if (action === "delete-save") {
-      if (!window.confirm(`Delete ${save.name}? This cannot be undone.`)) return;
-      await this.repo.delete(save.id);
-      this.toast(t("saveDeleted", { name: save.name }), "info");
-      await this.renderSelect();
+      this.openDeleteConfirm(save);
     }
+  }
+
+  /** Asks before erasing a hero, instead of the browser's plain confirm box. */
+  private openDeleteConfirm(save: CharacterSave, opener: HTMLElement | null = null): void {
+    this.deleteTarget = { save, opener };
+    this.dom.confirmTitle.textContent = t("deleteHeroTitle");
+    this.dom.confirmName.textContent = save.name;
+    this.dom.confirmMeta.textContent = t("deleteHeroProgress", {
+      level: save.level,
+      className: getClass(save.classId).name,
+      zone: ZONES[save.zone]?.name ?? save.zone,
+    });
+    this.dom.confirmPortrait.innerHTML = classPortrait(save.classId, 44);
+    this.dom.confirmDesc.textContent = t("deleteHeroBody", { name: save.name });
+    this.dom.confirmGone.textContent = t("deleteHeroGone");
+    this.dom.confirmExported.textContent = t("deleteHeroExported");
+    this.dom.confirmNote.textContent = t("deleteHeroNote");
+    this.dom.confirmKeep.textContent = t("deleteHeroKeep");
+    this.dom.confirmDelete.textContent = t("deleteHeroConfirm");
+    this.dom.confirm.classList.remove("hidden");
+    this.dom.confirm.setAttribute("aria-hidden", "false");
+    this.refreshTouchVisibility();
+    this.sfx.ui();
+    // Focus the safe choice, so a held Enter cannot erase the hero.
+    requestAnimationFrame(() => this.dom.confirmKeep.focus());
+  }
+
+  /** Puts the ask-again box away. Focus returns to the button that opened it. */
+  private closeDeleteConfirm(refocus = true): void {
+    const opener = this.deleteTarget?.opener ?? null;
+    this.deleteTarget = null;
+    this.dom.confirm.classList.add("hidden");
+    this.dom.confirm.setAttribute("aria-hidden", "true");
+    this.refreshTouchVisibility();
+    if (refocus && opener?.isConnected && !opener.closest(".hidden")) opener.focus();
+  }
+
+  /** Runs only on a "yes". The save file is erased here and nowhere else. */
+  private async confirmDeleteHero(): Promise<void> {
+    const target = this.deleteTarget;
+    if (!target) return;
+    const { save } = target;
+    const wasPlaying = this.session?.save.id === save.id;
+    this.dom.confirmDelete.disabled = true;
+    this.dom.confirmKeep.disabled = true;
+    try {
+      await this.repo.delete(save.id);
+    } catch (err) {
+      this.toast(storageSummary(classifyStorageError(err)), "bad");
+      this.dom.confirmDelete.disabled = false;
+      this.dom.confirmKeep.disabled = false;
+      this.closeDeleteConfirm();
+      return;
+    }
+    this.dom.confirmDelete.disabled = false;
+    this.dom.confirmKeep.disabled = false;
+    this.closeDeleteConfirm(false);
+    this.toast(t("saveDeleted", { name: save.name }), "info");
+    if (wasPlaying) {
+      this.closePanel(false);
+      this.onExitToMenu();
+      await this.showCharacterSelect();
+      // Land on the hero list again, so the keyboard is not stranded on nothing.
+      const next = this.dom.saveList.querySelector<HTMLElement>("[data-action='play']")
+        ?? this.dom.saveList.querySelector<HTMLElement>("[data-action='new-character']");
+      next?.focus();
+      return;
+    }
+    await this.renderSelect();
+    // Stay on the hero list, with focus somewhere sensible.
+    const deleteButtons = this.dom.saveList.querySelectorAll<HTMLElement>("[data-action='delete-save']");
+    const last = deleteButtons[deleteButtons.length - 1];
+    (last ?? this.dom.saveList.querySelector<HTMLElement>("[data-action='new-character']"))?.focus();
   }
 
   /** Update only the selected card and the preview, so the grid does not re-run its entrance animation. */
@@ -1004,14 +1120,9 @@ export class UIManager {
       return;
     }
     if (action === "delete-current") {
-      if (!this.session) return;
-      const name = this.session.save.name;
-      if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
-      await this.repo.delete(this.session.save.id);
-      this.closePanel(false);
-      this.onExitToMenu();
-      this.toast(t("saveDeleted", { name }), "info");
-      await this.showCharacterSelect();
+      const current = this.session;
+      if (!current) return;
+      this.openDeleteConfirm(current.snapshot(), target);
       return;
     }
     if (!this.session) return;

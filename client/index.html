@@ -135,6 +135,35 @@
       </div>
 
     <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlay-title" aria-hidden="true"></div>
+
+    <div id="confirm-layer" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc" aria-hidden="true">
+      <section class="confirm-card" role="document">
+        <header class="confirm-head">
+          <span class="confirm-icon" aria-hidden="true">!</span>
+          <h2 id="confirm-title">Delete this hero?</h2>
+        </header>
+        <div class="confirm-body">
+          <div class="confirm-hero">
+            <span id="confirm-portrait" class="confirm-portrait" aria-hidden="true"></span>
+            <div class="confirm-hero-meta">
+              <span id="confirm-name" class="confirm-hero-name">Hero</span>
+              <span id="confirm-meta" class="muted small"></span>
+            </div>
+          </div>
+          <p id="confirm-desc" class="muted small">This cannot be undone.</p>
+          <ul class="confirm-losses">
+            <li id="confirm-gone">The hero and everything on it</li>
+            <li id="confirm-exported">Any copy you exported yourself</li>
+          </ul>
+          <p id="confirm-note" class="confirm-note"></p>
+          <div class="confirm-actions">
+            <button class="btn ghost" id="confirm-keep">Keep hero</button>
+            <button class="btn danger" id="confirm-delete">Delete forever</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div id="toasts" class="toasts" aria-live="polite"></div>
 
     <script type="module" src="/src/main.ts"></script>

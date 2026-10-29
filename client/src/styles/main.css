@@ -1096,6 +1096,151 @@ input[type="text"]:focus {
   gap: 18px;
 }
 
+/* Confirm modal: a small ask-the-player box used for deleting a hero. */
+.confirm-card {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #241d2e, #17131f);
+  border: 2px solid #6a3030;
+  border-radius: 12px;
+  box-shadow: 0 18px 0 rgba(0, 0, 0, 0.35), 0 0 0 1px #000;
+  overflow: hidden;
+  animation: confirm-in 0.16s ease-out;
+}
+
+@keyframes confirm-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-card { animation: none; }
+}
+
+.confirm-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 20px 14px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 0, rgba(217, 87, 87, 0.16), transparent 70%);
+  border-bottom: 1px solid rgba(106, 48, 48, 0.55);
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #8d3b3b;
+  background: rgba(217, 87, 87, 0.16);
+  color: #ff9fa0;
+  font-family: "Press Start 2P", monospace;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.confirm-head h2 {
+  margin: 0;
+  font-size: 12px;
+  color: #ff9fa0;
+  line-height: 1.6;
+}
+
+.confirm-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 20px 18px;
+}
+
+.confirm-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.confirm-portrait {
+  display: flex;
+  flex: none;
+}
+
+.confirm-hero-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.confirm-hero-name {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.confirm-losses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.confirm-losses li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.confirm-losses li::before {
+  content: "x";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #d95757;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  line-height: 2;
+}
+
+.confirm-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--gold);
+  background: rgba(232, 192, 90, 0.09);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.confirm-actions .btn {
+  min-width: 108px;
+}
+
+/* Narrow screens: full-width buttons, target first so it is easy to hit. */
+@media (max-width: 520px) {
+  .confirm-card { width: 100%; }
+  .confirm-actions { flex-direction: column-reverse; gap: 8px; }
+  .confirm-actions .btn { width: 100%; min-width: 0; }
+}
+
 .panel-columns {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;

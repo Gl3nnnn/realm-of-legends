@@ -72,6 +72,18 @@ export const TEXT = {
   minimapToggle: "Toggle minimap",
   minimapShow: "Show minimap",
   minimapHide: "Hide minimap",
+
+  // Delete-hero confirm modal
+  deleteHeroTitle: "Delete this hero?",
+  deleteHeroBody:
+    "{name} will be removed from this browser for good. The save file is erased the moment you confirm, and it cannot be recovered.",
+  deleteHeroProgress: "Level {level} {className}, last saved in {zone}",
+  deleteHeroGone: "The hero, its level, gold, gear, quests, and talents",
+  deleteHeroExported: "Any copy you exported to a file yourself",
+  deleteHeroNote: "Want to keep the hero? Export it first, then delete. Export saves a copy you can import later.",
+  deleteHeroKeep: "Keep hero",
+  deleteHeroConfirm: "Delete forever",
+  modalClose: "Close",
 } as const;
 
 export type TextKey = keyof typeof TEXT;
@@ -144,6 +156,18 @@ export const TEXT_TL: Record<TextKey, string> = {
   minimapToggle: "Ipakita o itago ang minimap",
   minimapShow: "Ipakita ang minimap",
   minimapHide: "Itago ang minimap",
+
+  // Delete-hero confirm modal
+  deleteHeroTitle: "Burahin ang hero na ito?",
+  deleteHeroBody:
+    "Permanenteng mawawala sa browser na ito si {name}. Mabubura ang save file agad pagkatapos mong kumpirmahin, at hindi na ito maibabalik.",
+  deleteHeroProgress: "Level {level} {className}, huling na-save sa {zone}",
+  deleteHeroGone: "Ang hero, level, gold, gamit, quest, at talento nito",
+  deleteHeroExported: "Anumang kopyang ini-export mo mismo sa file",
+  deleteHeroNote: "Gusto mong itago ang hero? I-export muna, tapos burahin. Ang export ay lumilikha ng kopyang maaari mong i-import ulit.",
+  deleteHeroKeep: "Itago ang hero",
+  deleteHeroConfirm: "Burahin nang tuluyan",
+  modalClose: "Isara",
 };
 
 // Language used for the text. "en" is the default; "tl" uses TEXT_TL.
