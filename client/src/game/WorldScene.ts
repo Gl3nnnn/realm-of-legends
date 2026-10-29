@@ -424,29 +424,29 @@ export class WorldScene extends Phaser.Scene {
       .sprite(save.x, save.y, "characters", charFrame(sprite, "down", 0))
       .setDepth(save.y)
       .setOrigin(0.5, 0.6);
-    // Row of floating icons above the hero: weapon, armor, helm, boots.
+    // Worn gear icons: weapon, armor, helm, boots. They sit on the hero's body (see updateGearIcon).
     this.gearIcons = [0, 1, 2, 3].map((i) =>
-      this.add.sprite(save.x, save.y - 40, "items", 0).setScale(2).setVisible(false).setDepth(save.y + 1).setData("slot", i),
+      this.add.sprite(save.x, save.y, "items", 0).setVisible(false).setDepth(save.y + 1).setData("slot", i),
     );
   }
 
   private updateGearIcon(): void {
     const save = this.session.save;
     const slots = [save.equipment.weapon, save.equipment.armor, save.equipment.helm, save.equipment.boots];
-    // Spread the icons out in a row, centred over the hero and raised above the head.
-    const gap = 22;
-    const startX = save.x - ((slots.length - 1) * gap) / 2;
+    // Worn gear sits on the hero's body and moves with him. Offsets are from his position, in game pixels.
+    const wornAt: ({ x: number; y: number } | null)[] = [null, { x: 0, y: -2 }, { x: 0, y: -13 }, { x: 0, y: 6 }];
     slots.forEach((item, i) => {
       const icon = this.gearIcons[i];
-      // The weapon icon is hidden: the bow still works, it just does not float over the hero.
-      if (!item || this.session.dead || i === 0) {
+      const spot = wornAt[i];
+      // The weapon icon stays hidden, so no icon floats over the hero.
+      if (!item || !spot || this.session.dead) {
         icon.setVisible(false);
         return;
       }
       const def = getItem(item.itemId);
       icon
         .setFrame(itemIcon(def.icon))
-        .setPosition(startX + i * gap, save.y - 40)
+        .setPosition(save.x + spot.x, save.y + spot.y)
         .setDepth(save.y + 1)
         .setVisible(true);
     });
