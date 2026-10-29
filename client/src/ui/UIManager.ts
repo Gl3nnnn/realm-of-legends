@@ -115,8 +115,8 @@ export class UIManager {
   private lastPickupSound = 0;
   private persistTimer: number | null = null;
   private panelOpener: HTMLElement | null = null;
-  /** The hero waiting for a "yes, delete" answer, and the button that asked. */
-  private deleteTarget: { save: CharacterSave; opener: HTMLElement | null } | null = null;
+  /** The ask waiting for a yes/no answer (erase a hero, or begin a new cycle), and the button that asked. */
+  private confirmAsk: { kind: "delete" | "ng-plus"; save: CharacterSave; opener: HTMLElement | null } | null = null;
   private minimapCollapsed = false;
   private storyBox: HTMLElement | null = null;
   private storyTimer: number | null = null;
@@ -169,7 +169,7 @@ export class UIManager {
     confirmPortrait: must("confirm-portrait"),
     confirmDesc: must("confirm-desc"),
     confirmGone: must("confirm-gone"),
-    confirmExported: must("confirm-exported"),
+    confirmKept: must("confirm-kept"),
     confirmNote: must("confirm-note"),
     confirmKeep: must<HTMLButtonElement>("confirm-keep"),
     confirmDelete: must<HTMLButtonElement>("confirm-delete"),
@@ -191,12 +191,12 @@ export class UIManager {
   }
 
   get modalOpen(): boolean {
-    return this.panel !== null || this.deleteTarget !== null || !this.dom.tutorial.classList.contains("hidden");
+    return this.panel !== null || this.confirmAsk !== null || !this.dom.tutorial.classList.contains("hidden");
   }
 
-  /** True while the delete confirm modal is up, so gamepad menus wait their turn. */
+  /** True while the ask-again modal is up, so gamepad menus wait their turn. */
   get confirmOpen(): boolean {
-    return this.deleteTarget !== null;
+    return this.confirmAsk !== null;
   }
 
   get touchVector(): { x: number; y: number } {
@@ -233,7 +233,7 @@ export class UIManager {
     this.session = null;
     this.sfx.stopMusic();
     this.clearStoryBox();
-    this.closeDeleteConfirm(false);
+    this.closeConfirm(false);
     this.closePanel(false);
     this.dom.hud.classList.add("hidden");
     this.dom.boot.classList.add("hidden");
@@ -249,7 +249,7 @@ export class UIManager {
   attachSession(session: GameSession): void {
     this.session = session;
     this.panel = null;
-    this.closeDeleteConfirm(false);
+    this.closeConfirm(false);
     this.dom.overlay.classList.add("hidden");
     this.dom.overlay.setAttribute("aria-hidden", "true");
     this.dom.overlay.innerHTML = "";
@@ -316,8 +316,8 @@ export class UIManager {
 
   /** Opens Settings from the gamepad menu button, dismissing the tutorial first if needed. */
   openMenu(): void {
-    if (this.deleteTarget) {
-      this.closeDeleteConfirm();
+    if (this.confirmAsk) {
+      this.closeConfirm();
       return;
     }
     this.dismissTutorial();
@@ -365,11 +365,11 @@ export class UIManager {
 
     must("btn-import-save").addEventListener("click", () => this.dom.importFile.click());
     must("minimap-toggle").addEventListener("click", () => this.toggleMinimap());
-    this.dom.confirmKeep.addEventListener("click", () => this.closeDeleteConfirm());
-    this.dom.confirmDelete.addEventListener("click", () => void this.confirmDeleteHero());
+    this.dom.confirmKeep.addEventListener("click", () => this.closeConfirm());
+    this.dom.confirmDelete.addEventListener("click", () => void this.acceptConfirm());
     // Clicking the dim backdrop behind the box cancels, like Escape does.
     this.dom.confirm.addEventListener("click", (event) => {
-      if (event.target === this.dom.confirm) this.closeDeleteConfirm();
+      if (event.target === this.dom.confirm) this.closeConfirm();
     });
 
     this.dom.createPanel.addEventListener("input", (event) => {
@@ -592,11 +592,11 @@ export class UIManager {
 
   private onKeyDown(event: KeyboardEvent): void {
     if (event.repeat) return;
-    // The delete confirm box sits on top of everything, so it takes the keys first.
-    if (this.deleteTarget) {
+    // The confirm box sits on top of everything, so it takes the keys first.
+    if (this.confirmAsk) {
       if (event.key === "Escape") {
         event.preventDefault();
-        this.closeDeleteConfirm();
+        this.closeConfirm();
         return;
       }
       if (event.key === "Tab") {
@@ -733,44 +733,68 @@ export class UIManager {
 
   /** Asks before erasing a hero, instead of the browser's plain confirm box. */
   private openDeleteConfirm(save: CharacterSave, opener: HTMLElement | null = null): void {
-    this.deleteTarget = { save, opener };
-    this.dom.confirmTitle.textContent = t("deleteHeroTitle");
+    this.openConfirm({ kind: "delete", save }, opener);
+  }
+
+  /** The same ask-again box, for beginning a new cycle. */
+  private openNgPlusConfirm(opener: HTMLElement | null = null): void {
+    if (!this.session) return;
+    this.openConfirm({ kind: "ng-plus", save: this.session.snapshot() }, opener);
+  }
+
+  /** Fills the ask-again box for either question and shows it. */
+  private openConfirm(ask: { kind: "delete" | "ng-plus"; save: CharacterSave }, opener: HTMLElement | null): void {
+    this.confirmAsk = { ...ask, opener };
+    const save = ask.save;
+    const ng = ask.kind === "ng-plus";
+    const className = getClass(save.classId).name;
+    this.dom.confirm.classList.toggle("ng-plus", ng);
+    this.dom.confirmTitle.textContent = ng ? t("ngPlusTitle") : t("deleteHeroTitle");
     this.dom.confirmName.textContent = save.name;
-    this.dom.confirmMeta.textContent = t("deleteHeroProgress", {
-      level: save.level,
-      className: getClass(save.classId).name,
-      zone: ZONES[save.zone]?.name ?? save.zone,
-    });
     this.dom.confirmPortrait.innerHTML = classPortrait(save.classId, 44);
-    this.dom.confirmDesc.textContent = t("deleteHeroBody", { name: save.name });
-    this.dom.confirmGone.textContent = t("deleteHeroGone");
-    this.dom.confirmExported.textContent = t("deleteHeroExported");
-    this.dom.confirmNote.textContent = t("deleteHeroNote");
-    this.dom.confirmKeep.textContent = t("deleteHeroKeep");
-    this.dom.confirmDelete.textContent = t("deleteHeroConfirm");
+    this.dom.confirmMeta.textContent = ng
+      ? t("ngPlusMeta", { level: save.level, className, cycle: save.ngPlus })
+      : t("deleteHeroProgress", { level: save.level, className, zone: ZONES[save.zone]?.name ?? save.zone });
+    this.dom.confirmDesc.textContent = ng
+      ? t("ngPlusBody", { cycle: save.ngPlus + 1 })
+      : t("deleteHeroBody", { name: save.name });
+    this.dom.confirmGone.textContent = ng ? t("ngPlusResets") : t("deleteHeroGone");
+    this.dom.confirmKept.textContent = ng ? t("ngPlusKeeps") : t("deleteHeroExported");
+    this.dom.confirmNote.textContent = ng ? t("ngPlusNote") : t("deleteHeroNote");
+    this.dom.confirmKeep.textContent = ng ? t("ngPlusKeep") : t("deleteHeroKeep");
+    this.dom.confirmDelete.textContent = ng
+      ? t("ngPlusConfirm", { cycle: save.ngPlus + 1 })
+      : t("deleteHeroConfirm");
+    // Red is only for the ask that erases something.
+    this.dom.confirmDelete.classList.toggle("danger", !ng);
     this.dom.confirm.classList.remove("hidden");
     this.dom.confirm.setAttribute("aria-hidden", "false");
     this.refreshTouchVisibility();
     this.sfx.ui();
-    // Focus the safe choice, so a held Enter cannot erase the hero.
+    // Focus the safe choice, so a held Enter cannot erase a hero or start a cycle.
     requestAnimationFrame(() => this.dom.confirmKeep.focus());
   }
 
   /** Puts the ask-again box away. Focus returns to the button that opened it. */
-  private closeDeleteConfirm(refocus = true): void {
-    const opener = this.deleteTarget?.opener ?? null;
-    this.deleteTarget = null;
+  private closeConfirm(refocus = true): void {
+    const opener = this.confirmAsk?.opener ?? null;
+    this.confirmAsk = null;
     this.dom.confirm.classList.add("hidden");
     this.dom.confirm.setAttribute("aria-hidden", "true");
     this.refreshTouchVisibility();
     if (refocus && opener?.isConnected && !opener.closest(".hidden")) opener.focus();
   }
 
-  /** Runs only on a "yes". The save file is erased here and nowhere else. */
-  private async confirmDeleteHero(): Promise<void> {
-    const target = this.deleteTarget;
-    if (!target) return;
-    const { save } = target;
+  /** Runs only on a "yes": either erases the save file, or starts the new cycle. */
+  private async acceptConfirm(): Promise<void> {
+    const ask = this.confirmAsk;
+    if (!ask) return;
+    if (ask.kind === "ng-plus") {
+      this.closeConfirm(false);
+      await this.beginNewGamePlus();
+      return;
+    }
+    const save = ask.save;
     const wasPlaying = this.session?.save.id === save.id;
     this.dom.confirmDelete.disabled = true;
     this.dom.confirmKeep.disabled = true;
@@ -780,12 +804,12 @@ export class UIManager {
       this.toast(storageSummary(classifyStorageError(err)), "bad");
       this.dom.confirmDelete.disabled = false;
       this.dom.confirmKeep.disabled = false;
-      this.closeDeleteConfirm();
+      this.closeConfirm();
       return;
     }
     this.dom.confirmDelete.disabled = false;
     this.dom.confirmKeep.disabled = false;
-    this.closeDeleteConfirm(false);
+    this.closeConfirm(false);
     this.toast(t("saveDeleted", { name: save.name }), "info");
     if (wasPlaying) {
       this.closePanel(false);
@@ -802,6 +826,15 @@ export class UIManager {
     const deleteButtons = this.dom.saveList.querySelectorAll<HTMLElement>("[data-action='delete-save']");
     const last = deleteButtons[deleteButtons.length - 1];
     (last ?? this.dom.saveList.querySelector<HTMLElement>("[data-action='new-character']"))?.focus();
+  }
+
+  /** Starts the next cycle and saves at once, so the reset is not left half-applied. */
+  private async beginNewGamePlus(): Promise<void> {
+    const session = this.session;
+    if (!session || !session.startNewGamePlus()) return;
+    await this.persist();
+    this.closePanel();
+    this.toast(t("ngPlusBegins", { cycle: session.save.ngPlus }), "good");
   }
 
   /** Update only the selected card and the preview, so the grid does not re-run its entrance animation. */
@@ -1127,12 +1160,7 @@ export class UIManager {
     }
     if (!this.session) return;
     if (action === "new-game-plus") {
-      if (!window.confirm("Begin a new cycle? Quests, bosses, and chests reset. Your level, gear, and talents remain.")) return;
-      if (this.session.startNewGamePlus()) {
-        await this.persist();
-        this.closePanel();
-        this.toast(t("ngPlusBegins", { cycle: this.session.save.ngPlus }), "good");
-      }
+      this.openNgPlusConfirm(target);
       return;
     }
     const session = this.session;

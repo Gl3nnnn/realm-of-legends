@@ -83,6 +83,17 @@ export const TEXT = {
   deleteHeroNote: "Want to keep the hero? Export it first, then delete. Export saves a copy you can import later.",
   deleteHeroKeep: "Keep hero",
   deleteHeroConfirm: "Delete forever",
+
+  // New Game+ confirm modal (same box, gentler wording)
+  ngPlusTitle: "Begin a new cycle?",
+  ngPlusBody:
+    "New Game+ {cycle} starts your hero back at the village. The world resets around them, and every enemy from here on is tougher.",
+  ngPlusMeta: "Level {level} {className}, cycle {cycle} done",
+  ngPlusResets: "Story chapters, quests, bosses, and opened chests",
+  ngPlusKeeps: "Your level, gold, gear, talents, and hero",
+  ngPlusNote: "Your save is updated the moment you begin, so the new cycle is kept even if you close the page right after.",
+  ngPlusKeep: "Not yet",
+  ngPlusConfirm: "Begin cycle {cycle}",
   modalClose: "Close",
 } as const;
 
@@ -167,6 +178,17 @@ export const TEXT_TL: Record<TextKey, string> = {
   deleteHeroNote: "Gusto mong itago ang hero? I-export muna, tapos burahin. Ang export ay lumilikha ng kopyang maaari mong i-import ulit.",
   deleteHeroKeep: "Itago ang hero",
   deleteHeroConfirm: "Burahin nang tuluyan",
+
+  // New Game+ confirm modal (same box, gentler wording)
+  ngPlusTitle: "Magsimula ng bagong cycle?",
+  ngPlusBody:
+    "Ibabalik ng New Game+ {cycle} ang hero mo sa village. Magre-reset ang mundo sa paligid niya, at mas mahihirap ang lahat ng kalaban mula ngayon.",
+  ngPlusMeta: "Level {level} {className}, tapos na ang cycle {cycle}",
+  ngPlusResets: "Mga kabanata ng story, quest, boss, at nabuksang dibdib",
+  ngPlusKeeps: "Ang level, gold, gamit, talento, at hero mo",
+  ngPlusNote: "Naka-save agad sa sandaling magsimula ka, kaya mananatili ang bagong cycle kahit isara mo agad ang pahina.",
+  ngPlusKeep: "Hindi muna",
+  ngPlusConfirm: "Simulan ang cycle {cycle}",
   modalClose: "Isara",
 };
 

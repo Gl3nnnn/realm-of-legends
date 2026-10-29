@@ -1234,6 +1234,32 @@ input[type="text"]:focus {
   min-width: 108px;
 }
 
+/* New Game+ uses the same box, but it is a choice rather than a scare:
+   gold instead of red, and the "why" list marks what you keep. */
+#confirm-layer.ng-plus .confirm-card {
+  border-color: #6d531b;
+}
+
+#confirm-layer.ng-plus .confirm-head {
+  background: radial-gradient(circle at 50% 0, rgba(232, 192, 90, 0.16), transparent 70%);
+  border-bottom-color: rgba(109, 83, 27, 0.6);
+}
+
+#confirm-layer.ng-plus .confirm-icon {
+  border-color: #8a6a22;
+  background: rgba(232, 192, 90, 0.16);
+  color: var(--gold);
+}
+
+#confirm-layer.ng-plus .confirm-head h2 {
+  color: var(--gold);
+}
+
+#confirm-layer.ng-plus .confirm-losses li::before {
+  content: "+";
+  color: var(--gold);
+}
+
 /* Narrow screens: full-width buttons, target first so it is easy to hit. */
 @media (max-width: 520px) {
   .confirm-card { width: 100%; }
