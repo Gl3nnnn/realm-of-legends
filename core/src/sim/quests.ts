@@ -146,6 +146,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
   if (!quest) return false;
   const state = session.save.quests.find((q) => q.id === questId);
   if (!state) return false;
+  if (!quest.repeatable && state.completions > 0) return false;
   if (!state.completed) {
     refreshQuestCompletion(session, state);
     if (!state.completed) return false;

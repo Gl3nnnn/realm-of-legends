@@ -917,7 +917,7 @@ export class GameSession {
     const companion = this.save.companion;
     if (!companion || !companion.hatched) return;
     this.hatchlingAttackTimer = Math.max(0, this.hatchlingAttackTimer - dt);
-    const target = this.nearestMonster(this.save.x, this.save.y, 150);
+    const target = this.nearestMonster(this.save.x, this.save.y, 150, true);
     if (!target || this.hatchlingAttackTimer > 0) return;
     this.hatchlingAttackTimer = 1.6;
     this.hatchlingHitting = true;
@@ -931,7 +931,7 @@ export class GameSession {
     for (const pet of this.pets) {
       pet.attackTimer = Math.max(0, pet.attackTimer - dt);
       const def = getMonster(pet.kind === "wolf" ? "spirit_wolf" : pet.kind === "skeleton" ? "skeleton_minion" : "familiar");
-      const target = this.nearestMonster(pet.x, pet.y, 190);
+      const target = this.nearestMonster(pet.x, pet.y, 190, true);
       if (target) {
         const d = length(target.x - pet.x, target.y - pet.y);
         const range = pet.kind === "familiar" ? 130 : def.attackRange;
@@ -1049,11 +1049,12 @@ export class GameSession {
     this.loot = this.loot.filter((l) => l.ttl > 0);
   }
 
-  nearestMonster(x: number, y: number, maxRange: number): MonsterInstance | null {
+  nearestMonster(x: number, y: number, maxRange: number, requireLineOfSight = false): MonsterInstance | null {
     let best: MonsterInstance | null = null;
     let bestD = maxRange * maxRange;
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
+      if (requireLineOfSight && !this.hasLineOfSight(x, y, monster.x, monster.y)) continue;
       const d = dist2(x, y, monster.x, monster.y);
       if (d < bestD) {
         bestD = d;

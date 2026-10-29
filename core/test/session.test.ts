@@ -299,6 +299,35 @@ describe("combat", () => {
     expect(session.pets.some((pet) => pet.uid === oldest)).toBe(false);
   });
 
+  it("keeps companions and the hatchling from attacking through walls", () => {
+    const session = forestSession("summoner");
+    session.zone.blocked.fill(false);
+    for (const monster of session.monsters) monster.state = "dead";
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    session.save.x = 100;
+    session.save.y = 360;
+    target.x = 180;
+    target.y = 360;
+    target.hp = 1000;
+    target.maxHp = 1000;
+    target.spawnX = target.x;
+    target.spawnY = target.y;
+    target.state = "idle";
+    target.wanderTimer = 100;
+    target.wanderX = target.x;
+    target.wanderY = target.y;
+    session.save.companion = { kind: "egg", name: "Forest Egg", species: "sprout", hatched: true };
+    session.summon({ kind: "summon", summonId: "familiar", summonCount: 1, summonDuration: 10 });
+    const pet = session.pets[0]!;
+    pet.x = 100;
+    pet.y = 360;
+    session.zone.blocked[22 * session.zone.width + 8] = true;
+
+    session.step(0.1, IDLE);
+
+    expect(target.hp).toBe(1000);
+  });
+
   it("applies every stat in a multi-stat buff", () => {
     const session = forestSession("priest");
     session.save.level = 3;
@@ -884,6 +913,13 @@ describe("quests", () => {
     expect(session.save.xp).not.toBe(xp);
     expect(session.countItem("health_potion")).toBeGreaterThanOrEqual(2);
     expect(session.getNpcQuestStates("guard").find((entry) => entry.questId === "slime_trouble")?.canTurnIn).toBe(false);
+    const goldAfter = session.save.gold;
+    const potionsAfter = session.countItem("health_potion");
+    const completionsAfter = state?.completions;
+    expect(session.turnInQuest("slime_trouble")).toBe(false);
+    expect(session.save.gold).toBe(goldAfter);
+    expect(session.countItem("health_potion")).toBe(potionsAfter);
+    expect(state?.completions).toBe(completionsAfter);
   });
 
   it("reports quest availability by level and giver", () => {
