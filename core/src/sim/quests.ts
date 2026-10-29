@@ -195,6 +195,7 @@ export function pickQuestReward(session: GameSession, questId: string, index: nu
     return false;
   }
   state.claimedReward = index;
+  state.completions += 1;
   session.gainGold(reward.gold);
   session.gainXp(reward.xp);
   for (const item of reward.items ?? []) {

@@ -4,6 +4,7 @@ import {
   INVENTORY_SIZE,
   MAX_GOLD,
   RECIPES,
+  Rng,
   ZONES,
   getItem,
   getTalentTree,
@@ -209,6 +210,45 @@ describe("combat", () => {
 
     expect(target.state).toBe("dead");
     expect(projectile.hit).toBe(true);
+  });
+
+  it("damages a monster only once when a projectile overlaps it across steps", () => {
+    const session = forestSession("archer");
+    session.zone.blocked.fill(false);
+    for (const monster of session.monsters) monster.state = "dead";
+    session.save.x = 100;
+    session.save.y = 360;
+    const target = session.monsters.find((monster) => monster.defId === "slime")!;
+    target.state = "idle";
+    target.x = 160;
+    target.y = 360;
+    target.spawnX = target.x;
+    target.spawnY = target.y;
+    target.hp = 100000;
+    target.maxHp = 100000;
+    session.projectiles.push({
+      uid: "test-overlap-projectile",
+      abilityId: "test",
+      x: 100,
+      y: 360,
+      dirX: 1,
+      dirY: 0,
+      speed: 800,
+      ttl: 1,
+      radius: 3,
+      damage: 10,
+      crit: 0,
+      damageType: "physical",
+      color: "#ffffff",
+      statuses: [],
+      owner: "player",
+    });
+
+    const events = session.step(0.1, IDLE);
+    const hits = events.filter((event) =>
+      event.type === "damage" && event.target === "monster" && event.uid === target.uid);
+
+    expect(hits).toHaveLength(1);
   });
 
   it("stops knockback at walls without leaving monsters embedded in terrain", () => {
@@ -903,6 +943,20 @@ describe("quests", () => {
     expect(state.completed).toBe(false);
     expect(validateSave(session.snapshot()).ok).toBe(true);
   });
+
+  it("records a choose-reward quest completion when its reward is claimed", () => {
+    const session = forestSession();
+    expect(session.acceptQuest("forest_keeper_gift")).toBe(true);
+    for (const slime of session.monsters.filter((monster) => monster.defId === "slime").slice(0, 3)) {
+      session.hitMonster(slime, 1_000_000, false, "physical", []);
+    }
+    const state = session.save.quests.find((quest) => quest.id === "forest_keeper_gift")!;
+    expect(state.completed).toBe(true);
+
+    expect(session.pickQuestReward("forest_keeper_gift", 0)).toBe(true);
+    expect(state.completions).toBe(1);
+    expect(session.pickQuestReward("forest_keeper_gift", 1)).toBe(false);
+  });
 });
 
 describe("item instances, affixes and crafting", () => {
@@ -1034,6 +1088,15 @@ describe("chests", () => {
   });
 });
 
+describe("rng", () => {
+  it("keeps its internal state within 32 bits over many draws", () => {
+    const rng = new Rng(123);
+    for (let i = 0; i < 1000; i += 1) rng.next();
+
+    expect(rng.state).toBeLessThanOrEqual(0xffffffff);
+  });
+});
+
 describe("zones and persistence", () => {
   it("travels through a portal and produces a valid snapshot", () => {
     const session = new GameSession(saveIn("village"));
@@ -1048,6 +1111,20 @@ describe("zones and persistence", () => {
     const result = validateSave(snapshot);
     expect(result.ok, result.ok ? "" : result.error).toBe(true);
     expect(snapshot.zone).toBe(portal.targetZone);
+  });
+
+  it("does not leak the unlocked dungeon wing into the shared zone data", () => {
+    const basePortals = ZONES.dungeon.portals.map((portal) => portal.id);
+    const first = new GameSession(saveIn("dungeon"));
+    const boss = first.monsters.find((monster) => monster.defId === "bone_warden")!;
+
+    first.hitMonster(boss, 1_000_000, false, "holy", []);
+
+    expect(first.zone.portals.some((portal) => portal.targetZone === "marsh")).toBe(true);
+    expect(ZONES.dungeon.portals.map((portal) => portal.id)).toEqual(basePortals);
+
+    const second = new GameSession(saveIn("dungeon"));
+    expect(second.zone.portals.some((portal) => portal.targetZone === "marsh")).toBe(false);
   });
 });
 

@@ -285,7 +285,16 @@ export class GameSession {
   loadZone(): void {
     if (this.zoneLoaded) this.zoneStates.set(this.zone.id, { monsters: this.monsters, loot: this.loot });
     const baseZone = getZone(this.save.zone);
-    const zone = { ...baseZone, blocked: [...baseZone.blocked] };
+    const zone = {
+      ...baseZone,
+      blocked: [...baseZone.blocked],
+      portals: [...baseZone.portals],
+      traps: [...baseZone.traps],
+      npcs: [...baseZone.npcs],
+      chests: [...baseZone.chests],
+      gatherNodes: [...baseZone.gatherNodes],
+      monsterSpawns: [...baseZone.monsterSpawns],
+    };
     this.zone = zone;
     if (zone.id === "dungeon" && this.save.defeatedBosses.includes("bone_warden")) {
       this.openDungeonWing(false);
@@ -952,7 +961,7 @@ export class GameSession {
       const endX = startX + projectile.dirX * projectile.speed * travelTime;
       const endY = startY + projectile.dirY * projectile.speed * travelTime;
       const steps = Math.max(1, Math.ceil(length(endX - startX, endY - startY) / 4));
-      for (let step = 1; step <= steps; step += 1) {
+      stepLoop: for (let step = 1; step <= steps; step += 1) {
         const progress = step / steps;
         const previousProgress = (step - 1) / steps;
         const x = startX + (endX - startX) * progress;
@@ -960,7 +969,7 @@ export class GameSession {
         if (this.isBlockedAt(x, y, projectile.radius)) {
           projectile.ttl = 0;
           this.logArrowMiss(projectile);
-          break;
+          break stepLoop;
         }
         for (const monster of this.monsters) {
           if (monster.state === "dead") continue;
@@ -1001,7 +1010,7 @@ export class GameSession {
             }
             projectile.hit = true;
             projectile.ttl = 0;
-            break;
+            break stepLoop;
           }
         }
       }
