@@ -2892,6 +2892,50 @@ html[data-contrast="high"] .journal-nav a {
 
 .story-box-portrait { width: 192px; height: 192px; margin: 0 auto 12px; image-rendering: pixelated; background-repeat: no-repeat; border-radius: 6px; }
 
+/* --- A story told as a conversation: two speakers facing each other, the talking one lit up. --- */
+.story-box-card.dialogue { position: relative; max-width: 580px; padding: 0; text-align: left; overflow: hidden; border-color: rgba(232,192,90,0.30); background: linear-gradient(180deg, #262019 0%, var(--panel) 46%); box-shadow: 0 26px 60px rgba(0,0,0,0.62); }
+.story-box-stage { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; padding: 20px 18px 18px; border-bottom: 1px solid rgba(232,192,90,0.20); background: radial-gradient(120% 92% at 50% 0%, rgba(232,192,90,0.12), transparent 64%); }
+/* A few faint sparks in the backdrop, so the scene reads as a place rather than a form. */
+.story-box-stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.8; background-image: radial-gradient(1px 1px at 12% 24%, rgba(255,255,255,0.5), transparent), radial-gradient(1px 1px at 82% 18%, rgba(255,255,255,0.4), transparent), radial-gradient(1px 1px at 46% 12%, rgba(255,255,255,0.3), transparent), radial-gradient(1px 1px at 66% 40%, rgba(255,255,255,0.22), transparent); }
+.story-actor { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.story-actor-plate { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 11px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 42%, transparent); background: color-mix(in srgb, currentColor 16%, rgba(0,0,0,0.55)); color: currentColor; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; transition: background 0.2s ease, box-shadow 0.2s ease; }
+.story-actor-frame { display: grid; place-items: center; width: 118px; height: 118px; border-radius: 12px; background: radial-gradient(72% 72% at 50% 28%, rgba(255,255,255,0.10), rgba(0,0,0,0.44)); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 8px 18px rgba(0,0,0,0.42); transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease; }
+/* The person talking steps forward and glows; the other waits quietly in the shade. */
+.story-actor.speaking .story-actor-frame { transform: translateY(-6px) scale(1.05); border-color: color-mix(in srgb, currentColor 72%, transparent); box-shadow: 0 0 28px color-mix(in srgb, currentColor 55%, transparent), inset 0 0 14px color-mix(in srgb, currentColor 16%, transparent); }
+.story-actor.speaking .story-actor-plate { background: color-mix(in srgb, currentColor 30%, rgba(0,0,0,0.55)); box-shadow: 0 0 14px color-mix(in srgb, currentColor 42%, transparent); }
+.story-actor.silent { filter: brightness(0.52) saturate(0.55); }
+/* A small marker dropping under whoever has the floor, the way a speaker light works in other games. */
+.story-actor.speaking::after { content: ""; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid currentColor; filter: drop-shadow(0 0 6px currentColor); animation: story-bob 1.1s ease-in-out infinite; }
+@keyframes story-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+.story-box-mid { flex: none; width: 54px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 44px; color: var(--gold); opacity: 0.6; }
+.story-box-mid-line { width: 1px; flex: 1; min-height: 14px; background: linear-gradient(180deg, transparent, rgba(232,192,90,0.55)); }
+.story-box-vs { flex: none; font-size: 12px; line-height: 1; }
+.story-box-body { text-align: left; padding: 16px 20px 18px; }
+.story-box-card.dialogue .story-box-name { margin: 0 0 8px; font-size: 13px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+.story-box-card.dialogue .story-box-text { color: var(--ink); font-size: 15px; line-height: 1.62; min-height: 68px; }
+.story-box-card.dialogue .story-box-closing { font-style: italic; color: var(--gold); margin-bottom: 12px; }
+.story-box-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.story-box-dots { display: flex; align-items: center; gap: 5px; }
+.story-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.18); transition: background 0.2s ease, box-shadow 0.2s ease; }
+.story-dot.on { background: var(--gold); box-shadow: 0 0 8px rgba(232,192,90,0.75); }
+.story-box-card.dialogue button { display: block; margin: 0; padding: 9px 20px; border-radius: 8px; background: linear-gradient(180deg, #f0d27a, #d4a83c); color: #201a10; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.35); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.story-box-card.dialogue button:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(232,192,90,0.40); }
+
+@media (prefers-reduced-motion: reduce) {
+  .story-actor-frame { transition: none; }
+  .story-actor.speaking .story-actor-frame { transform: none; }
+  .story-actor.speaking::after { animation: none; }
+}
+
+@media (max-width: 420px) {
+  .story-box-stage { gap: 4px; padding: 14px 10px 12px; }
+  .story-actor-frame { width: 88px; height: 88px; }
+  .story-actor-plate { font-size: 10px; padding: 2px 8px; }
+  .story-box-mid { width: 30px; padding-bottom: 34px; }
+  .story-box-body { padding: 12px 14px 14px; }
+  .story-box-card.dialogue .story-box-text { font-size: 14px; }
+}
+
 .class-card .card-portrait { animation: preview-bob 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .class-card .card-portrait { animation: none; } }
 

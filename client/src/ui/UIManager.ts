@@ -19,7 +19,7 @@ import {
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
-import { classColor, classPortrait, esc, formatNumber, questObjectiveText } from "./helpers";
+import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText } from "./helpers";
 import { t } from "./text";
 import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
@@ -68,6 +68,22 @@ interface UIOptions {
 
 const IMPORTS_MAX_BYTES = 2 * 1024 * 1024;
 const AUTOSAVE_MS = 30_000;
+
+// One person standing in a conversation: their picture, their name, and the colour of their name plate.
+interface StorySceneActor {
+  sprite: string;
+  label: string;
+  color: string;
+}
+
+// A story told as a scene. `active` names who is talking, or "none" when a narrator speaks.
+interface StoryScene {
+  left: StorySceneActor;
+  right: StorySceneActor;
+  active: "left" | "right" | "none";
+  // Where this page sits in the opening, drawn as dots under the words.
+  progress?: { index: number; total: number };
+}
 
 function must<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -121,6 +137,8 @@ export class UIManager {
   private storyBox: HTMLElement | null = null;
   /** True while the new-hero intro pages are up, so the game waits for them. */
   private introActive = false;
+  // Enter or Space also turns a page, the way other games let you read on.
+  private storyKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   private storyTimer: number | null = null;
 
   private readonly dom = {
@@ -910,7 +928,7 @@ export class UIManager {
       this.dom.charSelect.classList.add("hidden");
       this.introActive = true;
       await this.onPlay(save);
-      this.showIntroPages(newHeroIntro(save.classId));
+      this.showIntroPages(newHeroIntro(save.classId, save.name));
     } catch (err) {
       this.introActive = false;
       if (error) error.textContent = err instanceof Error ? err.message : "Could not create that hero.";
@@ -1645,6 +1663,10 @@ export class UIManager {
       window.clearInterval(this.storyTimer);
       this.storyTimer = null;
     }
+    if (this.storyKeyHandler) {
+      window.removeEventListener("keydown", this.storyKeyHandler);
+      this.storyKeyHandler = null;
+    }
     this.storyBox?.remove();
     this.storyBox = null;
   }
@@ -1659,27 +1681,79 @@ export class UIManager {
       return;
     }
     this.introActive = true;
+    // Both speakers stand on the card the whole way through, and the one talking lights up.
+    const save = this.session?.save;
+    const heroSprite = save ? getClass(save.classId).sprite : "warrior";
+    const scene: StoryScene = {
+      left: { sprite: "trainer", label: "Master Kael", color: "#9c86c9" },
+      right: {
+        sprite: heroSprite,
+        label: (save?.name ?? "You").trim() || "You",
+        color: save ? classColor(save.classId) : "#e8c05a"
+      },
+      active: page.speaker === "kael" ? "left" : page.speaker === "hero" ? "right" : "none",
+      progress: { index: index + 1, total: pages.length }
+    };
     this.showStoryBox(page.title, page.text, page.closing, -1, () => {
       // A click on Continue that closed the box also ends the opening, even if nothing follows.
       this.introActive = false;
       this.refreshTouchVisibility();
       this.showIntroPages(pages, index + 1);
-    });
+    }, scene);
   }
 
-  showStoryBox(title: string, text: string, closing: string, bossIndex: number, onClose?: () => void): void {
+  showStoryBox(
+    title: string,
+    text: string,
+    closing: string,
+    bossIndex: number,
+    onClose?: () => void,
+    scene?: StoryScene
+  ): void {
     this.clearStoryBox();
     const box = document.createElement("div");
     this.storyBox = box;
     box.className = "story-box";
-    box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">${esc(t("btnContinue"))}</button></div>`;
-    const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
-    if (bossIndex >= 0 && bossIndex < 4) {
-      portrait.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/boss-portraits.png)`;
-      portrait.style.backgroundPosition = `${-bossIndex * 100}% 0`;
-      portrait.style.backgroundSize = "400% 100%";
+    if (scene) {
+      // Two speakers facing each other, like a conversation rather than a page of text.
+      const actor = (side: "left" | "right", who: StorySceneActor) => {
+        const speaking = scene.active === side;
+        const silent = scene.active === "none" || !speaking;
+        return `<div class="story-actor${speaking ? " speaking" : ""}${silent ? " silent" : ""}" style="color:${esc(
+          who.color
+        )}"><span class="story-actor-plate">${esc(who.label)}</span><span class="story-actor-frame">${charIconHtml(
+          who.sprite,
+          104
+        )}</span></div>`;
+      };
+      const progress = scene.progress;
+      const dots = progress
+        ? `<div class="story-box-dots" aria-hidden="true">${Array.from(
+            { length: progress.total },
+            (_, i) => `<span class="story-dot${i + 1 === progress.index ? " on" : ""}"></span>`
+          ).join("")}</div>`
+        : "";
+      box.innerHTML = `<div class="story-box-card dialogue"><div class="story-box-stage">${actor(
+        "left",
+        scene.left
+      )}<div class="story-box-mid"><span class="story-box-mid-line"></span><span class="story-box-vs">◆</span><span class="story-box-mid-line"></span></div>${actor(
+        "right",
+        scene.right
+      )}</div><div class="story-box-body"><h3 class="story-box-name"></h3><p class="story-box-text"></p><p class="story-box-closing"></p><div class="story-box-foot">${dots}<button type="button">${esc(
+        t("btnContinue")
+      )}</button></div></div></div>`;
+      const speaking = scene.active === "left" ? scene.left : scene.active === "right" ? scene.right : null;
+      (box.querySelector(".story-box-name") as HTMLElement).style.color = speaking ? speaking.color : "#e8c05a";
     } else {
-      portrait.style.display = "none";
+      box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">${esc(t("btnContinue"))}</button></div>`;
+      const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
+      if (bossIndex >= 0 && bossIndex < 4) {
+        portrait.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/boss-portraits.png)`;
+        portrait.style.backgroundPosition = `${-bossIndex * 100}% 0`;
+        portrait.style.backgroundSize = "400% 100%";
+      } else {
+        portrait.style.display = "none";
+      }
     }
     (box.querySelector("h3") as HTMLElement).textContent = title;
     const body = box.querySelector(".story-box-text") as HTMLElement;
@@ -1712,9 +1786,29 @@ export class UIManager {
       else {
         box.remove();
         this.storyBox = null;
+        // The box is gone, so Enter and Space belong to the game again.
+        if (this.storyKeyHandler) {
+          window.removeEventListener("keydown", this.storyKeyHandler);
+          this.storyKeyHandler = null;
+        }
         onClose?.();
       }
     });
+    if (scene) {
+      // Reading on with the keyboard, since a conversation is not a form to tab through.
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
+        event.preventDefault();
+        button.click();
+      };
+      window.addEventListener("keydown", onKey);
+      this.storyKeyHandler = onKey;
+    }
+    // With reduced motion on, the words are already there: no typing to wait for.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
+    }
     timer = window.setInterval(() => {
       index += 1;
       body.textContent = text.slice(0, index);

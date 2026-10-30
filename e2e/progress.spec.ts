@@ -12,7 +12,7 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   // mid-press can wait for ever, which is what made this hang on the build machine.
   const intro = page.locator(".story-box");
   await expect(intro.first()).toBeVisible({ timeout: 20000 });
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 60; i += 1) {
     const pressed = await page.evaluate(() => {
       const button = document.querySelector<HTMLButtonElement>(".story-box button");
       if (!button) return false;

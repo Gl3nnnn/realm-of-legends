@@ -92,26 +92,49 @@ export const STORY_CHAPTERS: StoryChapter[] = [
   }
 ];
 
-// The opening a brand-new hero reads once, right after being made. Page two is the hero's own line from CLASS_INTROS.
+// The opening a brand-new hero reads once, right after being made. It is a scene between two
+// people rather than one page of text: Master Kael speaks, the hero answers, and a narrator
+// frames the beginning and the end. `speaker` decides whose picture lights up.
+export type IntroSpeaker = "kael" | "hero" | "narrator";
+
 export interface IntroPage {
+  speaker: IntroSpeaker;
+  // The name shown on the name plate: Master Kael, the hero's own name, or the narrator.
   title: string;
   text: string;
   closing: string;
 }
 
-export function newHeroIntro(classId: string): IntroPage[] {
+export function newHeroIntro(classId: string, heroName = "You"): IntroPage[] {
   const prologue = STORY_CHAPTERS[0];
+  const name = heroName.trim() || "You";
+  const classLine =
+    CLASS_INTROS[classId] ?? "Master Kael has a task for you, and he trusts you to see it through.";
+  const kael = (text: string): IntroPage => ({ speaker: "kael", title: "Master Kael", text, closing: "" });
+  const hero = (text: string): IntroPage => ({ speaker: "hero", title: name, text, closing: "" });
+  const tale = (text: string, closing = ""): IntroPage => ({
+    speaker: "narrator",
+    title: "The Tale",
+    text,
+    closing
+  });
   return [
-    { title: prologue.title, text: prologue.text, closing: "" },
-    {
-      title: "Master Kael",
-      text: CLASS_INTROS[classId] ?? "Master Kael has a task for you, and he trusts you to see it through.",
-      closing: ""
-    },
-    {
-      title: "The Road North",
-      text: "Dangers wait on the road north, from the Bone Crypt to the Hollow Throne. Each one ends with a boss.",
-      closing: prologue.closing
-    }
+    tale(prologue.text),
+    kael("You came. Good. I was beginning to think the cold had taken the north road as well."),
+    hero("Your message said it could not wait."),
+    kael(
+      "It cannot. Three nights ago the wind turned, and now it carries frost from the north. In the middle of summer."
+    ),
+    tale(classLine),
+    kael(
+      "The Bone Warden holds the crypt on the way north. He was captain of the gate guard once, and he no longer remembers why he stands there."
+    ),
+    hero("Then I will end his watch."),
+    kael(
+      "After him comes the mire, then the frozen wastes, and at the end of it a throne of ice. Each one asks something different of you."
+    ),
+    hero("And when the last one falls?"),
+    kael("Then you come home, and Eldoria is warm again. The whole village will be watching you."),
+    tale("The road north is waiting.", prologue.closing)
   ];
 }

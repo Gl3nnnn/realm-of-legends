@@ -11,7 +11,7 @@ import { expect, test } from "@playwright/test";
 async function skipIntro(page: import("@playwright/test").Page) {
   const box = page.locator(".story-box");
   await expect(box.first()).toBeVisible({ timeout: 20000 });
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 60; i += 1) {
     const pressed = await page.evaluate(() => {
       const button = document.querySelector<HTMLButtonElement>(".story-box button");
       if (!button) return false;
