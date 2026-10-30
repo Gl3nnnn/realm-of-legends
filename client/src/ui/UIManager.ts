@@ -21,7 +21,7 @@ import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
 import { classColor, classPortrait, esc, formatNumber, questObjectiveText } from "./helpers";
 import { t } from "./text";
-import { STORY_CHAPTERS } from "../../../core/src/data/story";
+import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
   abilityBarHtml,
   characterSelectHtml,
@@ -119,6 +119,8 @@ export class UIManager {
   private confirmAsk: { kind: "delete" | "ng-plus"; save: CharacterSave; opener: HTMLElement | null } | null = null;
   private minimapCollapsed = false;
   private storyBox: HTMLElement | null = null;
+  /** True while the new-hero intro pages are up, so the game waits for them. */
+  private introActive = false;
   private storyTimer: number | null = null;
 
   private readonly dom = {
@@ -191,7 +193,7 @@ export class UIManager {
   }
 
   get modalOpen(): boolean {
-    return this.panel !== null || this.confirmAsk !== null || !this.dom.tutorial.classList.contains("hidden");
+    return this.panel !== null || this.confirmAsk !== null || this.introActive || !this.dom.tutorial.classList.contains("hidden");
   }
 
   /** True while the ask-again modal is up, so gamepad menus wait their turn. */
@@ -233,6 +235,7 @@ export class UIManager {
     this.session = null;
     this.sfx.stopMusic();
     this.clearStoryBox();
+    this.introActive = false;
     this.closeConfirm(false);
     this.closePanel(false);
     this.dom.hud.classList.add("hidden");
@@ -665,6 +668,8 @@ export class UIManager {
       return;
     }
     if (!this.session) return;
+    // The new-hero intro owns the screen until its last page is closed.
+    if (this.introActive) return;
     if (event.key === "Escape") {
       event.preventDefault();
       if (!this.dom.tutorial.classList.contains("hidden")) this.dismissTutorial();
@@ -903,8 +908,11 @@ export class UIManager {
       await this.repo.put(save);
       this.sfx.quest();
       this.dom.charSelect.classList.add("hidden");
+      this.introActive = true;
       await this.onPlay(save);
+      this.showIntroPages(newHeroIntro(save.classId));
     } catch (err) {
+      this.introActive = false;
       if (error) error.textContent = err instanceof Error ? err.message : "Could not create that hero.";
     }
   }
@@ -1641,7 +1649,19 @@ export class UIManager {
     this.storyBox = null;
   }
 
-  showStoryBox(title: string, text: string, closing: string, bossIndex: number): void {
+  /** Shows the opening pages one after another, once for a brand-new hero. */
+  private showIntroPages(pages: IntroPage[], index = 0): void {
+    const page = pages[index];
+    if (!page) {
+      this.introActive = false;
+      this.refreshTouchVisibility();
+      return;
+    }
+    this.introActive = true;
+    this.showStoryBox(page.title, page.text, page.closing, -1, () => this.showIntroPages(pages, index + 1));
+  }
+
+  showStoryBox(title: string, text: string, closing: string, bossIndex: number, onClose?: () => void): void {
     this.clearStoryBox();
     const box = document.createElement("div");
     this.storyBox = box;
@@ -1652,11 +1672,14 @@ export class UIManager {
       portrait.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/boss-portraits.png)`;
       portrait.style.backgroundPosition = `${-bossIndex * 100}% 0`;
       portrait.style.backgroundSize = "400% 100%";
+    } else {
+      portrait.style.display = "none";
     }
     (box.querySelector("h3") as HTMLElement).textContent = title;
     const body = box.querySelector(".story-box-text") as HTMLElement;
     const closingLine = box.querySelector(".story-box-closing") as HTMLElement;
     closingLine.textContent = "";
+    if (!closing) closingLine.style.display = "none";
     const button = box.querySelector("button") as HTMLButtonElement;
     let index = 0;
     let timer: number | null = null;
@@ -1673,6 +1696,7 @@ export class UIManager {
       else {
         box.remove();
         this.storyBox = null;
+        onClose?.();
       }
     });
     timer = window.setInterval(() => {

@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 
+/** The new-hero intro pages cover the screen, so click through them before touching anything else. */
+async function skipIntro(page: import("@playwright/test").Page) {
+  const box = page.locator(".story-box");
+  for (let i = 0; i < 12 && (await box.count()) > 0; i += 1) {
+    await box.locator("button").click();
+  }
+  await expect(box).toHaveCount(0);
+}
+
 test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -9,6 +18,7 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("E2E Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
 
   await expect(page.locator("#hud")).toBeVisible();
   await expect(page.locator("#hud-zone")).toHaveText("Eldoria Village");
@@ -47,6 +57,7 @@ test("rebinds and restores keys from settings", async ({ page }) => {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Bind Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
   await page.locator("#tutorial-close").click();
   await page.locator('[data-panel="settings"]').click();
 
@@ -73,6 +84,7 @@ test("opens settings from a gamepad Start press", async ({ page }) => {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Pad Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
 
   await expect(page.locator("#overlay")).toBeVisible();
   await expect(page.locator("#overlay")).toContainText("Settings");
@@ -83,6 +95,7 @@ test("enables touch controls for touch-capable players", async ({ page }) => {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Touch Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
   await page.locator("#tutorial-close").click();
 
   await page.locator('[data-panel="settings"]').click();
@@ -128,6 +141,7 @@ test("minimap toggle updates its visibility and accessible state", async ({ page
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Map Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
   await page.locator("#tutorial-close").click();
 
   const toggle = page.locator("#minimap-toggle");
@@ -145,6 +159,7 @@ test("journal navigation and modal keyboard focus are accessible", async ({ page
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Focus Hero");
   await page.locator('[data-action="create-character"]').click();
+  await skipIntro(page);
   await page.locator("#tutorial-close").click();
 
   await page.locator('[data-panel="quests"]').click();

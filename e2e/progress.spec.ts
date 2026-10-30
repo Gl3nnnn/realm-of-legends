@@ -5,6 +5,10 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill(name);
   await page.locator('[data-action="create-character"]').click();
+  const intro = page.locator(".story-box");
+  for (let i = 0; i < 12 && (await intro.count()) > 0; i += 1) {
+    await intro.locator("button").click();
+  }
   await expect(page.locator("#hud")).toBeVisible();
   await page.locator("#tutorial-close").click();
 }

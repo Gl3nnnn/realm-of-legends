@@ -24,7 +24,19 @@ export const CLASS_INTROS: Partial<Record<string, string>> = {
   duelist: "Your blade is quick, your judgment quicker. Master Kael asks you to meet the northern threat on your own terms.",
   elementalist: "The elements have grown restless beneath the northern winds. You set out to learn why they have changed.",
   sentinel: "You swore to stand between danger and the people of Eldoria. Master Kael holds you to that oath.",
-  stormcaller: "A strange storm gathers beyond the forest, and its lightning answers your voice. You follow it north."
+  stormcaller: "A strange storm gathers beyond the forest, and its lightning answers your voice. You follow it north.",
+  assassin: "You strike from the shadows and leave no trace. Master Kael trusts you with the quiet work in the north.",
+  paladin: "Your oath to protect the weak has never been broken. Master Kael asks you to carry that oath north.",
+  priest: "Your healing prayers have eased many suffering villagers. Master Kael hopes your faith can keep the north's cold from spreading south.",
+  necromancer: "You have spoken with the dead and learned their secrets. Master Kael believes you can calm the restless crypt in the north.",
+  druid: "The spirits of the forest answer your call, and they have felt the cold creeping south. You set out to learn why.",
+  monk: "Years of quiet discipline have made your body a weapon. Master Kael sends you north to test that discipline against the cold.",
+  gunslinger: "Your aim is quick and your nerve is steady. Master Kael needs a marksman for the dangers in the north.",
+  berserker: "Your rage has protected Eldoria more than once. Master Kael hopes that fury can hold back the cold in the north.",
+  summoner: "Your summons answer you without hesitation, and they sense something wrong in the north. Master Kael sends you to find it.",
+  ranger: "You have tracked beasts along every road in Eldoria. Master Kael asks you to follow the cold winds north.",
+  spellblade: "You weave magic into every sword strike. Master Kael believes the strange cold will need both your blade and your spells.",
+  dragonknight: "Your sword and your oath have carried you through many fights. Master Kael asks you to ride north and face the cold."
 };
 
 // Each new cycle opens with a line that changes the story, so replaying feels different from the first run.
@@ -79,3 +91,27 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     closing: "The ice melts. Eldoria is warm again."
   }
 ];
+
+// The opening a brand-new hero reads once, right after being made. Page two is the hero's own line from CLASS_INTROS.
+export interface IntroPage {
+  title: string;
+  text: string;
+  closing: string;
+}
+
+export function newHeroIntro(classId: string): IntroPage[] {
+  const prologue = STORY_CHAPTERS[0];
+  return [
+    { title: prologue.title, text: prologue.text, closing: "" },
+    {
+      title: "Master Kael",
+      text: CLASS_INTROS[classId] ?? "Master Kael has a task for you, and he trusts you to see it through.",
+      closing: ""
+    },
+    {
+      title: "The Road North",
+      text: "Dangers wait on the road north, from the Bone Crypt to the Hollow Throne. Each one ends with a boss.",
+      closing: prologue.closing
+    }
+  ];
+}
