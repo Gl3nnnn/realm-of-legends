@@ -1,10 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-/** The new-hero intro pages cover the screen, so click through them before touching anything else. */
+/**
+ * The new-hero intro pages cover the screen, so click through them before touching anything else.
+ * Two catches: the pages appear only once the world has loaded, and one press finishes a page's
+ * typing while a second press turns the page - so this waits for each page to change.
+ */
 async function skipIntro(page: import("@playwright/test").Page) {
   const box = page.locator(".story-box");
-  for (let i = 0; i < 12 && (await box.count()) > 0; i += 1) {
-    await box.locator("button").click();
+  await expect(box.first()).toBeVisible({ timeout: 20000 });
+  const heading = async () => (await box.first().locator("h3").textContent().catch(() => null)) ?? "";
+  for (let i = 0; i < 24 && (await box.count()) > 0; i += 1) {
+    const title = await heading();
+    await box.first().locator("button").click();
+    // Stop once this page is gone or the next page has a different title.
+    await expect
+      .poll(async () => (await box.count()) === 0 || (await heading()) !== title, { timeout: 5000 })
+      .toBe(true)
+      .catch(() => undefined);
   }
   await expect(box).toHaveCount(0);
 }

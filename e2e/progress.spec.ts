@@ -5,10 +5,20 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill(name);
   await page.locator('[data-action="create-character"]').click();
+  // The intro pages appear only once the world has loaded, and one press finishes a page's
+  // typing while a second turns the page, so press until the box is gone.
   const intro = page.locator(".story-box");
-  for (let i = 0; i < 12 && (await intro.count()) > 0; i += 1) {
-    await intro.locator("button").click();
+  await expect(intro.first()).toBeVisible({ timeout: 20000 });
+  const heading = async () => (await intro.first().locator("h3").textContent().catch(() => null)) ?? "";
+  for (let i = 0; i < 24 && (await intro.count()) > 0; i += 1) {
+    const title = await heading();
+    await intro.first().locator("button").click();
+    await expect
+      .poll(async () => (await intro.count()) === 0 || (await heading()) !== title, { timeout: 5000 })
+      .toBe(true)
+      .catch(() => undefined);
   }
+  await expect(intro).toHaveCount(0);
   await expect(page.locator("#hud")).toBeVisible();
   await page.locator("#tutorial-close").click();
 }

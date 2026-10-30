@@ -1678,9 +1678,19 @@ export class UIManager {
     (box.querySelector("h3") as HTMLElement).textContent = title;
     const body = box.querySelector(".story-box-text") as HTMLElement;
     const closingLine = box.querySelector(".story-box-closing") as HTMLElement;
-    closingLine.textContent = "";
-    if (!closing) closingLine.style.display = "none";
     const button = box.querySelector("button") as HTMLButtonElement;
+    button.textContent = t("btnContinue");
+    if (!closing) closingLine.style.display = "none";
+    document.body.appendChild(box);
+    // Fill the words in once to measure them, reserve that height, then clear them again.
+    // The card and its Continue button then hold still while the words type in, instead of
+    // jumping a little on every letter and slipping away from the pointer.
+    body.textContent = text;
+    closingLine.textContent = closing;
+    body.style.minHeight = `${body.offsetHeight}px`;
+    closingLine.style.minHeight = `${closingLine.offsetHeight}px`;
+    body.textContent = "";
+    closingLine.textContent = "";
     let index = 0;
     let timer: number | null = null;
     const finish = () => {
@@ -1705,7 +1715,6 @@ export class UIManager {
       if (index >= text.length) finish();
     }, 28);
     this.storyTimer = timer;
-    document.body.appendChild(box);
   }
 
   handleEvents(events: SimEvent[]): void {
@@ -1718,6 +1727,8 @@ export class UIManager {
           this.pushLog(event.text, event.tone ?? "info");
           break;
         case "story":
+          // The opening pages belong to the player, so a boss story must not cut them short.
+          if (this.introActive) break;
           this.showStoryBox(event.title, event.text, event.closing, event.bossIndex);
           break;
         case "damage": {
