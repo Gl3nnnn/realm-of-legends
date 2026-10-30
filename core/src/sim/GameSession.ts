@@ -75,14 +75,14 @@ import type {
 } from "../types";
 
 export const DAMAGE_COLORS: Record<DamageType, string> = {
-  physical: "#e8e0d0",
-  fire: "#ff8a3c",
-  ice: "#7fd4ff",
-  arcane: "#c18aff",
-  holy: "#ffe89a",
-  shadow: "#a06ad9",
-  nature: "#7fe07f",
-  poison: "#8ae06a",
+  physical: "#ffeccb",
+  fire: "#ff7a2e",
+  ice: "#8fe6ff",
+  arcane: "#c98bff",
+  holy: "#ffe27a",
+  shadow: "#9a5cf0",
+  nature: "#6ff09a",
+  poison: "#b8f04a",
 };
 
 const RESOURCE_GAIN: Record<ClassDef["resource"], number> = { rage: 9, energy: 6, mana: 4 };

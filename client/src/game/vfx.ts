@@ -39,14 +39,14 @@ export interface VfxDescriptor {
 }
 
 const DAMAGE_COLORS: Record<DamageType, string> = {
-  physical: "#fff0cc",
-  fire: "#ff9a4a",
-  ice: "#7fd4ff",
-  arcane: "#c99aff",
-  holy: "#ffe89a",
-  shadow: "#b07ae8",
-  nature: "#8ef0a0",
-  poison: "#a6e87a",
+  physical: "#ffeccb",
+  fire: "#ff7a2e",
+  ice: "#8fe6ff",
+  arcane: "#c98bff",
+  holy: "#ffe27a",
+  shadow: "#9a5cf0",
+  nature: "#6ff09a",
+  poison: "#b8f04a",
 };
 
 const BASIC_STYLE: Record<ClassId, VfxStyle> = {

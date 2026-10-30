@@ -19,6 +19,8 @@ import {
   renderFloorEffects as renderFloorEffectsFx,
   castMotion as castMotionFx,
   floatText as floatTextFx,
+  glowBurst,
+  softGlow,
 } from "./effects";
 import { PET_SPECIES } from "@realm/core";
 
@@ -79,14 +81,14 @@ export class WorldScene extends Phaser.Scene {
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private gearIcons!: Phaser.GameObjects.Sprite[];
   private npcSprites: { id: string; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Text; baseY: number; lastMark: string }[] = [];
-  private buffGlow!: Phaser.GameObjects.Ellipse;
+  private buffGlow!: Phaser.GameObjects.Image;
   floorFx!: Phaser.GameObjects.Graphics;
   interactionFx!: Phaser.GameObjects.Graphics;
   barFx!: Phaser.GameObjects.Graphics;
   monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private monsterOutlines = new Map<string, Phaser.GameObjects.Sprite>();
   private monsterShadows = new Map<string, Phaser.GameObjects.Ellipse>();
-  private monsterGlows = new Map<string, Phaser.GameObjects.Ellipse>();
+  private monsterGlows = new Map<string, Phaser.GameObjects.Image>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -141,7 +143,6 @@ export class WorldScene extends Phaser.Scene {
           : "#141a17";
     this.cameras.main.setBackgroundColor(bg);
     const preferences = loadPreferences();
-    this.tweens.timeScale = preferences.reducedMotion ? 0 : 1;
     this.buildMap();
     this.createPortals();
     this.createChests();
@@ -264,10 +265,10 @@ export class WorldScene extends Phaser.Scene {
     decor.forEachTile((tile) => {
       if (tile.index !== torchTile) return;
       const glow = this.add
-        .circle((tile.x + 0.5) * zone.tileWidth, (tile.y + 0.5) * zone.tileHeight, 22, 0xffb347, 0.22)
+        .circle((tile.x + 0.5) * zone.tileWidth, (tile.y + 0.5) * zone.tileHeight, 22, 0xffb347, 0.16)
         .setBlendMode(Phaser.BlendModes.ADD)
         .setDepth(-6);
-      this.tweens.add({
+      this.calmTween({
         targets: glow,
         alpha: { from: 0.16, to: 0.28 },
         duration: 900 + ((tile.x * 37 + tile.y * 13) % 300),
@@ -286,9 +287,9 @@ export class WorldScene extends Phaser.Scene {
   private createPortal(portal: (typeof this.session.zone.portals)[number], highContrast = loadPreferences().highContrast): void {
     const cx = portal.x + portal.w / 2;
     const cy = portal.y + portal.h / 2;
-    const pad = this.add.rectangle(cx, cy, portal.w, portal.h, 0x7a5ac0, 0.2).setDepth(2);
+    const pad = this.add.rectangle(cx, cy, portal.w, portal.h, 0x7a5ac0, 0.2).setDepth(2).setAlpha(0.35);
     pad.setStrokeStyle(highContrast ? 3 : 2, highContrast ? 0xffffff : 0xe8c05a, 0.9);
-    this.tweens.add({ targets: pad, alpha: { from: 0.35, to: 0.9 }, duration: 1200, yoyo: true, repeat: -1 });
+    this.calmTween({ targets: pad, alpha: { from: 0.35, to: 0.9 }, duration: 1200, yoyo: true, repeat: -1 });
     this.add
       .text(cx, portal.y - 6, portal.label, {
         fontFamily: '"Press Start 2P", monospace',
@@ -331,11 +332,11 @@ export class WorldScene extends Phaser.Scene {
 
   private createGatherNode(node: (typeof this.session.zone.gatherNodes)[number]): void {
     const def = getItem(node.itemId);
-    const glow = this.add.circle(0, 4, 8, 0x8ef0a0, 0.16);
+    const glow = softGlow(this, 0, 4, 0x8ef0a0, 28, 0.1, node.y);
     const icon = this.add.sprite(0, 0, "items", itemIcon(def.icon)).setScale(1);
     const container = this.add.container(node.x, node.y, [glow, icon]).setDepth(node.y);
-    this.tweens.add({ targets: icon, y: -2, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.tweens.add({ targets: glow, alpha: { from: 0.1, to: 0.3 }, duration: 900, yoyo: true, repeat: -1 });
+    this.calmTween({ targets: icon, y: -2, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.calmTween({ targets: glow, alpha: { from: 0.1, to: 0.3 }, duration: 900, yoyo: true, repeat: -1 });
     this.gatherSprites.set(node.id, container);
   }
 
@@ -359,9 +360,9 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.add
         .sprite(spawn.x, spawn.y, "characters", charFrame(def.sprite, "down", 0))
         .setDepth(spawn.y);
-      this.tweens.add({ targets: sprite, scaleY: { from: 1, to: 1.015 }, duration: 1700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.calmTween({ targets: sprite, scaleY: { from: 1, to: 1.015 }, duration: 1700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       // Idle life: a gentle bob with a staggered start, so NPCs do not move in step.
-      this.tweens.add({
+      this.calmTween({
         targets: sprite,
         y: { from: spawn.y, to: spawn.y - 2 },
         duration: 1300 + (spawn.x % 5) * 120,
@@ -382,7 +383,7 @@ export class WorldScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setDepth(9200)
         .setVisible(false);
-      this.tweens.add({ targets: marker, y: { from: spawn.y - 34, to: spawn.y - 38 }, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.calmTween({ targets: marker, y: { from: spawn.y - 34, to: spawn.y - 38 }, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.npcSprites.push({ id: spawn.id, sprite, marker, baseY: spawn.y, lastMark: "" });
       this.add
         .text(spawn.x, spawn.y - 20, def.name, {
@@ -409,7 +410,7 @@ export class WorldScene extends Phaser.Scene {
         entry.marker.setText(mark).setVisible(mark !== "");
         if (canTurnIn) {
           // A short hop when the quest is ready, so the player notices.
-          this.tweens.add({ targets: entry.sprite, y: { from: entry.baseY, to: entry.baseY - 6 }, duration: 180, yoyo: true, repeat: 2, ease: "Quad.easeOut" });
+          this.calmTween({ targets: entry.sprite, y: { from: entry.baseY, to: entry.baseY - 6 }, duration: 180, yoyo: true, repeat: 2, ease: "Quad.easeOut" });
         }
       }
     }
@@ -419,7 +420,7 @@ export class WorldScene extends Phaser.Scene {
     const save = this.session.save;
     const sprite = this.session.classInfo.sprite;
     this.playerShadow = this.add.ellipse(save.x, save.y + 12, 20, 7, 0x000000, 0.32).setDepth(save.y - 1);
-    this.buffGlow = this.add.ellipse(save.x, save.y + 12, 34, 14, 0xffd76a, 0.28).setVisible(false).setDepth(save.y - 1);
+    this.buffGlow = softGlow(this, save.x, save.y + 12, 0xffd76a, 48, 0.28, save.y - 1).setScale(0.85, 0.3).setVisible(false);
     this.player = this.add
       .sprite(save.x, save.y, "characters", charFrame(sprite, "down", 0))
       .setDepth(save.y)
@@ -472,6 +473,12 @@ export class WorldScene extends Phaser.Scene {
     marker.setText(text).setPosition(x, y - 30).setDepth(y + 1);
   }
 
+  /** Starts a small decorative tween (idle bobs, glows, quest hops). Under Reduce motion it is skipped, so the scene stays calm. */
+  private calmTween(config: Phaser.Types.Tweens.TweenBuilderConfig): void {
+    if (loadPreferences().reducedMotion) return;
+    this.tweens.add(config);
+  }
+
   private updateBuffGlow(active: boolean): void {
     const save = this.session.save;
     this.buffGlow.setPosition(save.x, save.y + 12).setDepth(save.y - 1);
@@ -500,11 +507,9 @@ export class WorldScene extends Phaser.Scene {
     // Bosses and elites get a coloured glow behind them so they read as special.
     if (def.boss || monster.elite) {
       const glowColor = def.boss ? 0xffb347 : 0x9b6bff;
-      const glow = this.add
-        .ellipse(monster.x, monster.y, def.boss ? 60 : 40, def.boss ? 44 : 30, glowColor, def.boss ? 0.35 : 0.25)
-        .setDepth(monster.y - 2);
+      const glow = softGlow(this, monster.x, monster.y, glowColor, def.boss ? 96 : 60, def.boss ? 0.35 : 0.25, monster.y - 2);
       this.monsterGlows.set(monster.uid, glow);
-      this.tweens.add({
+      this.calmTween({
         targets: glow,
         alpha: { from: def.boss ? 0.35 : 0.25, to: def.boss ? 0.12 : 0.08 },
         duration: 900,
@@ -641,7 +646,6 @@ export class WorldScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (!this.session) return;
-    this.tweens.timeScale = loadPreferences().reducedMotion ? 0 : 1;
     this.syncGatherSprites();
     this.syncKeybinds();
     const pad = this.readGamepad();
@@ -934,10 +938,10 @@ export class WorldScene extends Phaser.Scene {
       let entry = this.lootSprites.get(drop.uid);
       if (!entry) {
         const def = getItem(drop.itemId);
-        const glow = this.add.circle(drop.x, drop.y + 3, 8, 0xffd76a, 0.18).setDepth(drop.y - 1);
+        const glow = this.add.circle(drop.x, drop.y + 3, 8, 0xffd76a, 0.1).setDepth(drop.y - 1);
         const icon = this.add.sprite(drop.x, drop.y, "items", itemIcon(def.icon)).setDepth(drop.y);
-        this.tweens.add({ targets: icon, y: drop.y - 3, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-        this.tweens.add({ targets: glow, alpha: { from: 0.1, to: 0.32 }, duration: 700, yoyo: true, repeat: -1 });
+        this.calmTween({ targets: icon, y: drop.y - 3, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        this.calmTween({ targets: glow, alpha: { from: 0.1, to: 0.32 }, duration: 700, yoyo: true, repeat: -1 });
         entry = { icon, glow };
         this.lootSprites.set(drop.uid, entry);
       }
@@ -1119,6 +1123,11 @@ export class WorldScene extends Phaser.Scene {
   private arcFx(x: number, y: number, angle: number, color: number, radius: number, width: number, spread: number, duration: number): void {
     const g = this.add.graphics().setPosition(x, y).setDepth(y + 3);
     g.rotation = angle;
+    // A wide, faint halo under the slash so it glows instead of looking like wire.
+    g.lineStyle(width * 3.2, color, 0.22);
+    g.beginPath();
+    g.arc(0, 0, radius, -spread, spread);
+    g.strokePath();
     g.lineStyle(width, color, 0.9);
     g.beginPath();
     g.arc(0, 0, radius, -spread, spread);
@@ -1140,14 +1149,17 @@ export class WorldScene extends Phaser.Scene {
 
   private lineFx(x1: number, y1: number, x2: number, y2: number, color: number, width: number, alpha: number, duration: number): void {
     const g = this.add.graphics().setDepth(Math.max(y1, y2) + 3);
+    // Soft halo first, then the bright line on top.
+    g.lineStyle(width * 3, color, alpha * 0.25);
+    g.lineBetween(x1, y1, x2, y2);
     g.lineStyle(width, color, alpha);
     g.lineBetween(x1, y1, x2, y2);
     this.tweens.add({ targets: g, alpha: 0, duration, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
   }
 
   private ringFx(x: number, y: number, radius: number, color: number, width: number, duration: number): void {
-    const ring = this.add.circle(x, y, radius, color, 0.08).setDepth(y + 3);
-    ring.setStrokeStyle(width, color, 0.9);
+    const ring = this.add.circle(x, y, radius, color, 0.12).setDepth(y + 3);
+    ring.setStrokeStyle(width * 2.6, color, 0.3);
     this.tweens.add({
       targets: ring,
       scale: 1.45,
@@ -1155,6 +1167,17 @@ export class WorldScene extends Phaser.Scene {
       duration,
       ease: "Cubic.easeOut",
       onComplete: () => ring.destroy(),
+    });
+    // A second, crisp ring a touch behind, so the edge stays sharp while it glows.
+    const edge = this.add.circle(x, y, radius, color, 0).setDepth(y + 3);
+    edge.setStrokeStyle(width, color, 0.95);
+    this.tweens.add({
+      targets: edge,
+      scale: 1.45,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => edge.destroy(),
     });
   }
 
@@ -1423,6 +1446,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private burst(x: number, y: number, color: number, count = 7, spread = 1): void {
+    // One soft bright flash under the sparks, sized by how big the burst is.
+    glowBurst(this, x, y, color, Math.min(90, 18 + count * 3 * spread), 0.5, 280 + spread * 80, 9280);
     for (let i = 0; i < count; i += 1) {
       const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
       const dot = this.burstPool.pop() ?? this.add.circle(x, y, 2, color, 0.95).setDepth(9300);
