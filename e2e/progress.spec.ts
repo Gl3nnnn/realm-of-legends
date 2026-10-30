@@ -6,13 +6,20 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   await page.locator("#char-name").fill(name);
   await page.locator('[data-action="create-character"]').click();
   // The intro pages appear only once the world has loaded, and one press finishes a page's
-  // typing while a second turns the page, so press until the box is gone.
+  // typing while a second turns the page.
+  // Both presses go straight to the button inside the page, never through a real pointer: a real
+  // click waits for the button to hold perfectly still, and one that a closing page removes
+  // mid-press can wait for ever, which is what made this hang on the build machine.
   const intro = page.locator(".story-box");
   await expect(intro.first()).toBeVisible({ timeout: 20000 });
-  for (let i = 0; i < 24 && (await intro.count()) > 0; i += 1) {
-    // Press rather than click: a press ignores the 20ms of typing that keeps nudging the column,
-    // while a click waits for the button to hold perfectly still and can wait for ever.
-    await intro.first().locator("button").press("Enter");
+  for (let i = 0; i < 30; i += 1) {
+    const pressed = await page.evaluate(() => {
+      const button = document.querySelector<HTMLButtonElement>(".story-box button");
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    if (!pressed) break;
     await page.waitForTimeout(120);
   }
   await expect(intro).toHaveCount(0);

@@ -1,17 +1,24 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * The new-hero intro pages cover the screen, so click through them before touching anything else.
+ * The new-hero intro pages cover the screen, so clear them before touching anything else.
  * Two catches: the pages appear only once the world has loaded, and one press finishes a page's
- * typing while a second press turns the page - so this waits for each page to change.
+ * typing while a second press turns the page.
+ * Both presses go straight to the button inside the page, never through a real pointer: a real
+ * click waits for the button to hold perfectly still, and one that a closing page removes mid-press
+ * can wait for ever, which is what made this hang on the build machine.
  */
 async function skipIntro(page: import("@playwright/test").Page) {
   const box = page.locator(".story-box");
   await expect(box.first()).toBeVisible({ timeout: 20000 });
-  for (let i = 0; i < 24 && (await box.count()) > 0; i += 1) {
-    // Press rather than click: a press ignores the 20ms of typing that keeps nudging the column,
-    // while a click waits for the button to hold perfectly still and can wait for ever.
-    await box.first().locator("button").press("Enter");
+  for (let i = 0; i < 30; i += 1) {
+    const pressed = await page.evaluate(() => {
+      const button = document.querySelector<HTMLButtonElement>(".story-box button");
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    if (!pressed) break;
     await page.waitForTimeout(120);
   }
   await expect(box).toHaveCount(0);
