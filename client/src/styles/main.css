@@ -1096,7 +1096,14 @@ input[type="text"]:focus {
   gap: 18px;
 }
 
-/* Confirm modal: a small ask-the-player box used for deleting a hero. */
+/* Confirm modal: a small ask-the-player box used for deleting a hero.
+   It must clear every screen it can be opened from - the hero list and the
+   character select sit at 60, and the boot screen at 100 - so it gets its own
+   layer above them instead of sharing the panel overlay's z-index of 50. */
+#confirm-layer {
+  z-index: 120;
+}
+
 .confirm-card {
   width: min(460px, 100%);
   display: flex;
@@ -1597,7 +1604,9 @@ input[type="text"]:focus {
   top: 88px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 70;
+  /* Above the confirm box (120), so a "delete failed" message is not hidden
+     behind the box that is still open. */
+  z-index: 130;
   display: grid;
   gap: 6px;
   justify-items: center;
