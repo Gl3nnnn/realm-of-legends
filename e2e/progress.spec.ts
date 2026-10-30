@@ -9,14 +9,11 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   // typing while a second turns the page, so press until the box is gone.
   const intro = page.locator(".story-box");
   await expect(intro.first()).toBeVisible({ timeout: 20000 });
-  const heading = async () => (await intro.first().locator("h3").textContent().catch(() => null)) ?? "";
   for (let i = 0; i < 24 && (await intro.count()) > 0; i += 1) {
-    const title = await heading();
-    await intro.first().locator("button").click();
-    await expect
-      .poll(async () => (await intro.count()) === 0 || (await heading()) !== title, { timeout: 5000 })
-      .toBe(true)
-      .catch(() => undefined);
+    // Press rather than click: a press ignores the 20ms of typing that keeps nudging the column,
+    // while a click waits for the button to hold perfectly still and can wait for ever.
+    await intro.first().locator("button").press("Enter");
+    await page.waitForTimeout(120);
   }
   await expect(intro).toHaveCount(0);
   await expect(page.locator("#hud")).toBeVisible();

@@ -1653,12 +1653,18 @@ export class UIManager {
   private showIntroPages(pages: IntroPage[], index = 0): void {
     const page = pages[index];
     if (!page) {
+      // The opening is over, so a story from the game is allowed to appear again.
       this.introActive = false;
       this.refreshTouchVisibility();
       return;
     }
     this.introActive = true;
-    this.showStoryBox(page.title, page.text, page.closing, -1, () => this.showIntroPages(pages, index + 1));
+    this.showStoryBox(page.title, page.text, page.closing, -1, () => {
+      // A click on Continue that closed the box also ends the opening, even if nothing follows.
+      this.introActive = false;
+      this.refreshTouchVisibility();
+      this.showIntroPages(pages, index + 1);
+    });
   }
 
   showStoryBox(title: string, text: string, closing: string, bossIndex: number, onClose?: () => void): void {

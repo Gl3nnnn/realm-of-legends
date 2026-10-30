@@ -8,15 +8,11 @@ import { expect, test } from "@playwright/test";
 async function skipIntro(page: import("@playwright/test").Page) {
   const box = page.locator(".story-box");
   await expect(box.first()).toBeVisible({ timeout: 20000 });
-  const heading = async () => (await box.first().locator("h3").textContent().catch(() => null)) ?? "";
   for (let i = 0; i < 24 && (await box.count()) > 0; i += 1) {
-    const title = await heading();
-    await box.first().locator("button").click();
-    // Stop once this page is gone or the next page has a different title.
-    await expect
-      .poll(async () => (await box.count()) === 0 || (await heading()) !== title, { timeout: 5000 })
-      .toBe(true)
-      .catch(() => undefined);
+    // Press rather than click: a press ignores the 20ms of typing that keeps nudging the column,
+    // while a click waits for the button to hold perfectly still and can wait for ever.
+    await box.first().locator("button").press("Enter");
+    await page.waitForTimeout(120);
   }
   await expect(box).toHaveCount(0);
 }
