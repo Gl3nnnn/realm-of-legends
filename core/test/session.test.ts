@@ -163,6 +163,8 @@ describe("combat", () => {
   it("prevents self-area attacks from damaging enemies behind walls", () => {
     const save = saveIn("forest");
     save.level = 3;
+    // Rage starts empty for a new hero, so give this warrior full rage to cast whirlwind.
+    save.resource = 100;
     const session = new GameSession(save);
     const target = session.monsters.find((monster) => monster.defId === "slime")!;
     session.save.x = 100;
@@ -1056,6 +1058,8 @@ describe("talents", () => {
   it("alters a selected ability's damage or cooldown", () => {
     const baseSave = saveIn("village");
     baseSave.level = 5;
+    // Rage starts empty for a new hero, so give the warrior full rage to cast whirlwind.
+    baseSave.resource = 100;
     const damageSave = { ...baseSave, talents: [getTalentTree("warrior").tiers[0].choices[0]!.id] };
     const cooldownSave = { ...baseSave, talents: [getTalentTree("warrior").tiers[0].choices[1]!.id] };
     const base = new GameSession(baseSave);

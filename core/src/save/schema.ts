@@ -158,8 +158,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
   const classDef = getClass(classId);
   const now = options.now ?? Date.now();
   const equipment = starterEquipment(classId);
-  // Start at full health and resource, counting starter gear and the class passive talent,
-  // the same way the game works out a hero's stats.
+  // Start at full health; rage starts empty, the same as after death and New Game+.
   const startStats = deriveStats(classDef, 1, equipment, talentBonuses(classId, []));
   const inventory: (ItemStack | null)[] = new Array(INVENTORY_SIZE).fill(null);
   inventory[0] = { itemId: "health_potion", qty: 3 };
@@ -173,7 +172,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     xp: 0,
     gold: 30,
     hp: startStats.maxHp,
-    resource: startStats.maxResource,
+    resource: classDef.resource === "rage" ? 0 : startStats.maxResource,
     zone: "village",
     x: zone.spawn.x,
     y: zone.spawn.y,

@@ -14,7 +14,7 @@ async function createHero(page: import("@playwright/test").Page, name: string) {
   await expect(intro.first()).toBeVisible({ timeout: 20000 });
   for (let i = 0; i < 60; i += 1) {
     const pressed = await page.evaluate(() => {
-      const button = document.querySelector<HTMLButtonElement>(".story-box button");
+      const button = document.querySelector<HTMLButtonElement>(".story-box .story-continue");
       if (!button) return false;
       button.click();
       return true;

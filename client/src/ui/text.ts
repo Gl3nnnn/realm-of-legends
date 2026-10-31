@@ -6,6 +6,8 @@
 export const TEXT = {
   // Toasts (short messages at the top of the screen)
   gameFailedToLoad: "The game failed to load. Refresh the page to try again.",
+  heroesLoaded: "Heroes loaded.",
+  heroesFailed: "Heroes could not be loaded.",
   keyInvalid: "Use a letter, number, arrow, Space, Shift, or Tab.",
   keyTaken:
     "{key} is already bound to {action}. That key was not changed - unbind it there first, or pick another key.",
@@ -37,6 +39,7 @@ export const TEXT = {
   btnLeave: "Leave",
   btnClose: "Close",
   btnContinue: "Continue",
+  btnSkip: "Skip",
   btnEnterEldoria: "Enter Eldoria",
   btnAcceptQuest: "Accept quest",
   btnTurnIn: "Turn in",
@@ -103,6 +106,8 @@ export type TextKey = keyof typeof TEXT;
 // English so t() fills them the same way.
 export const TEXT_TL: Record<TextKey, string> = {
   gameFailedToLoad: "Hindi na-load ang laro. I-refresh ang pahina para subukan ulit.",
+  heroesLoaded: "Na-load na ang mga hero.",
+  heroesFailed: "Hindi ma-load ang mga hero.",
   keyInvalid: "Gumamit ng letra, numero, arrow, Space, Shift, o Tab.",
   keyTaken:
     "Naka-bind na ang {key} sa {action}. Hindi ito nabago - i-unbind muna doon, o pumili ng ibang key.",
@@ -132,6 +137,7 @@ export const TEXT_TL: Record<TextKey, string> = {
   btnLeave: "Umalis",
   btnClose: "Isara",
   btnContinue: "Ituloy",
+  btnSkip: "Laktawan",
   btnEnterEldoria: "Pumasok sa Eldoria",
   btnAcceptQuest: "Tanggapin ang quest",
   btnTurnIn: "Ibigay",

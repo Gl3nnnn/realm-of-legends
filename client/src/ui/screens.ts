@@ -13,6 +13,7 @@ import {
   SHOPS,
   ZONES,
   canClassUse,
+  deriveStats,
   getClass,
   getItem,
   getTalentTree,
@@ -21,6 +22,8 @@ import {
   itemSellValue,
   loreBySubject,
   revealedLore,
+  starterEquipment,
+  talentBonuses,
   talentTierChosen,
   type CharacterSave,
   type ClassId,
@@ -108,11 +111,13 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
     </button>`;
   }).join("");
   const def = getClass(selectedClass);
+  // The numbers a new hero really starts with: class base plus starter gear and the passive talent.
+  const start = deriveStats(def, 1, starterEquipment(def.id), talentBonuses(def.id, []));
   const previewStats = [
-    ["Health", Math.round(def.base.maxHp)],
-    ["Attack", Math.round(def.base.attack)],
-    ["Defense", Math.round(def.base.defense)],
-    ["Crit", `${Math.round(def.base.crit * 100)}%`],
+    ["Health", Math.round(start.maxHp)],
+    ["Attack", Math.round(start.attack)],
+    ["Defense", Math.round(start.defense)],
+    ["Crit", `${Math.round(start.crit * 100)}%`],
   ]
     .map(([label, value]) => `<span class="preview-stat"><b>${esc(String(value))}</b>${esc(String(label))}</span>`)
     .join("");

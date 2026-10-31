@@ -2916,6 +2916,9 @@ html[data-contrast="high"] .journal-nav a {
 .story-box-card.dialogue .story-box-closing { font-style: italic; color: var(--gold); margin-bottom: 12px; }
 .story-box-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
 .story-box-dots { display: flex; align-items: center; gap: 5px; }
+.story-skip { background: transparent; border: 1px solid rgba(232, 192, 90, 0.45); color: #e8c05a; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+.story-skip:hover, .story-skip:focus-visible { border-color: #e8c05a; outline: none; }
+.story-box-actions { display: flex; align-items: center; gap: 8px; }
 .story-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.18); transition: background 0.2s ease, box-shadow 0.2s ease; }
 .story-dot.on { background: var(--gold); box-shadow: 0 0 8px rgba(232,192,90,0.75); }
 .story-box-card.dialogue button { display: block; margin: 0; padding: 9px 20px; border-radius: 8px; background: linear-gradient(180deg, #f0d27a, #d4a83c); color: #201a10; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.35); transition: transform 0.15s ease, box-shadow 0.15s ease; }

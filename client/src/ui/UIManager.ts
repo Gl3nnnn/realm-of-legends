@@ -83,6 +83,8 @@ interface StoryScene {
   active: "left" | "right" | "none";
   // Where this page sits in the opening, drawn as dots under the words.
   progress?: { index: number; total: number };
+  // When set, a Skip button ends the whole opening at once.
+  onSkip?: () => void;
 }
 
 function must<T extends HTMLElement>(id: string): T {
@@ -241,10 +243,10 @@ export class UIManager {
     } catch (err) {
       const advice = STORAGE_ADVICE[classifyStorageError(err)];
       this.dom.saveList.innerHTML = `<div class="empty-state storage-advice"><strong>${esc(advice.title)}</strong><ul>${advice.steps.map((step) => `<li>${esc(step)}</li>`).join("")}</ul></div>`;
-      this.setSaveStatus("Heroes could not be loaded.", "bad");
+      this.setSaveStatus(t("heroesFailed"), "bad");
       return;
     }
-    this.setSaveStatus("Heroes loaded.", "good");
+    this.setSaveStatus(t("heroesLoaded"), "good");
     this.dom.saveList.innerHTML = characterSelectHtml(this.saves);
     this.dom.saveCount.textContent = `${this.saves.length}/${MAX_CHARACTERS} heroes`;
   }
@@ -316,6 +318,11 @@ export class UIManager {
   }
 
   private showTutorialIfNeeded(): void {
+    // The first-steps box waits until the opening story is over, so the two never stack.
+    if (this.introActive) {
+      this.dom.tutorial.classList.add("hidden");
+      return;
+    }
     let seen = false;
     try {
       seen = localStorage.getItem(TUTORIAL_STORAGE_KEY) === "seen";
@@ -1676,8 +1683,7 @@ export class UIManager {
     const page = pages[index];
     if (!page) {
       // The opening is over, so a story from the game is allowed to appear again.
-      this.introActive = false;
-      this.refreshTouchVisibility();
+      this.endIntro();
       return;
     }
     this.introActive = true;
@@ -1692,7 +1698,8 @@ export class UIManager {
         color: save ? classColor(save.classId) : "#e8c05a"
       },
       active: page.speaker === "kael" ? "left" : page.speaker === "hero" ? "right" : "none",
-      progress: { index: index + 1, total: pages.length }
+      progress: { index: index + 1, total: pages.length },
+      onSkip: () => this.endIntro()
     };
     this.showStoryBox(page.title, page.text, page.closing, -1, () => {
       // A click on Continue that closed the box also ends the opening, even if nothing follows.
@@ -1700,6 +1707,14 @@ export class UIManager {
       this.refreshTouchVisibility();
       this.showIntroPages(pages, index + 1);
     }, scene);
+  }
+
+  /** Ends the opening story: removes its card and lets the first-steps box and game stories return. */
+  private endIntro(): void {
+    this.clearStoryBox();
+    this.introActive = false;
+    this.showTutorialIfNeeded();
+    this.refreshTouchVisibility();
   }
 
   showStoryBox(
@@ -1739,13 +1754,13 @@ export class UIManager {
       )}<div class="story-box-mid"><span class="story-box-mid-line"></span><span class="story-box-vs">◆</span><span class="story-box-mid-line"></span></div>${actor(
         "right",
         scene.right
-      )}</div><div class="story-box-body"><h3 class="story-box-name"></h3><p class="story-box-text"></p><p class="story-box-closing"></p><div class="story-box-foot">${dots}<button type="button">${esc(
+      )}</div><div class="story-box-body"><h3 class="story-box-name"></h3><p class="story-box-text"></p><p class="story-box-closing"></p><div class="story-box-foot">${dots}<div class="story-box-actions">${scene.onSkip ? `<button type="button" class="story-skip">${esc(t("btnSkip"))}</button>` : ""}<button type="button" class="story-continue">${esc(
         t("btnContinue")
-      )}</button></div></div></div>`;
+      )}</button></div></div></div></div>`;
       const speaking = scene.active === "left" ? scene.left : scene.active === "right" ? scene.right : null;
       (box.querySelector(".story-box-name") as HTMLElement).style.color = speaking ? speaking.color : "#e8c05a";
     } else {
-      box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button">${esc(t("btnContinue"))}</button></div>`;
+      box.innerHTML = `<div class="story-box-card"><div class="story-box-portrait"></div><h3></h3><p class="story-box-text"></p><p class="story-box-closing"></p><button type="button" class="story-continue">${esc(t("btnContinue"))}</button></div>`;
       const portrait = box.querySelector(".story-box-portrait") as HTMLElement;
       if (bossIndex >= 0 && bossIndex < 4) {
         portrait.style.backgroundImage = `url(${import.meta.env.BASE_URL}assets/boss-portraits.png)`;
@@ -1758,7 +1773,7 @@ export class UIManager {
     (box.querySelector("h3") as HTMLElement).textContent = title;
     const body = box.querySelector(".story-box-text") as HTMLElement;
     const closingLine = box.querySelector(".story-box-closing") as HTMLElement;
-    const button = box.querySelector("button") as HTMLButtonElement;
+    const button = box.querySelector(".story-continue") as HTMLButtonElement;
     button.textContent = t("btnContinue");
     if (!closing) closingLine.style.display = "none";
     document.body.appendChild(box);
@@ -1794,6 +1809,10 @@ export class UIManager {
         onClose?.();
       }
     });
+    if (scene?.onSkip) {
+      const skip = scene.onSkip;
+      box.querySelector(".story-skip")?.addEventListener("click", () => skip());
+    }
     if (scene) {
       // Reading on with the keyboard, since a conversation is not a form to tab through.
       const onKey = (event: KeyboardEvent) => {

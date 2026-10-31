@@ -4,9 +4,12 @@ const channel = process.env.PLAYWRIGHT_CHANNEL as "chrome" | "msedge" | "chromiu
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 45_000,
+  // Some tests take close to a minute, so each one gets two minutes.
+  timeout: 120_000,
   expect: { timeout: 8_000 },
   fullyParallel: false,
+  // Two browsers at once made the slow story tests hit their time limit here, so run them one at a time.
+  workers: 1,
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: "http://127.0.0.1:4174",

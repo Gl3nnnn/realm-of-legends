@@ -16,7 +16,7 @@ import {
 } from "../src/index";
 
 describe("character creation", () => {
-  it("starts every new hero at full health and resource, counting starter gear and talents", () => {
+  it("starts every new hero at full health, counting starter gear and talents", () => {
     for (const def of CLASS_LIST) {
       const save = createCharacter("Tester", def.id);
       const startHp = save.hp;
@@ -24,7 +24,9 @@ describe("character creation", () => {
       // Read the real maximums from the game session, the same numbers the screen shows.
       const session = new GameSession(save);
       expect(startHp).toBe(session.stats.maxHp);
-      expect(startResource).toBe(session.stats.maxResource);
+      // Rage starts empty, like after death; other resources start full.
+      const expectedResource = def.resource === "rage" ? 0 : session.stats.maxResource;
+      expect(startResource).toBe(expectedResource);
     }
   });
 
