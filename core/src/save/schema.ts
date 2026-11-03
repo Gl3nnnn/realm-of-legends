@@ -5,6 +5,7 @@ import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../dat
 import { getTalentChoice, talentTierChosen } from "../data/talents";
 import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
+import { getAchievement, ACHIEVEMENT_IDS, DEFAULT_TITLE } from "../data/achievements";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
 import { clampLevel, deriveStats } from "../progression";
 import { talentBonuses } from "../data/talents";
@@ -45,6 +46,24 @@ const questSchema = z.object({
   claimedReward: z.number().int().min(0).max(9).optional(),
 });
 
+const statsSchema = z.object({
+  monstersSlain: z.number().int().min(0).default(0),
+  bossesSlain: z.number().int().min(0).default(0),
+  deaths: z.number().int().min(0).default(0),
+  chestsOpened: z.number().int().min(0).default(0),
+  questsCompleted: z.number().int().min(0).default(0),
+  goldEarned: z.number().int().min(0).default(0),
+  itemsFound: z.number().int().min(0).default(0),
+  potionsUsed: z.number().int().min(0).default(0),
+  perfectDodges: z.number().int().min(0).default(0),
+  bestHit: z.number().int().min(0).default(0),
+  distanceWalked: z.number().min(0).default(0),
+  bestStreak: z.number().int().min(0).default(0),
+});
+
+const achievementIds = ACHIEVEMENT_IDS as [string, ...string[]];
+void achievementIds;
+
 export const saveSchema = z.object({
   version: z.literal(SAVE_VERSION),
   id: z.string().min(1).max(80),
@@ -77,6 +96,11 @@ export const saveSchema = z.object({
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0),
   companion: z.object({ kind: z.literal("egg"), name: z.string().min(1).max(16), hatched: z.boolean().optional(), species: z.string().max(24).optional() }).optional(),
+  stats: statsSchema.default({}),
+  achievements: z.array(z.string().min(1).max(40)).max(ACHIEVEMENT_IDS.length + 40).default([]),
+  waypoints: z.array(z.enum(ZONE_IDS)).max(8).default(["village"]),
+  petXp: z.number().int().min(0).default(0),
+  title: z.string().min(1).max(40).default(DEFAULT_TITLE),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -193,6 +217,11 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0 },
+    achievements: [],
+    waypoints: ["village"],
+    petXp: 0,
+    title: DEFAULT_TITLE,
   };
 }
 
@@ -255,6 +284,12 @@ export function validateSave(input: unknown): SaveParseResult {
     if (!canClassUse(def, save.classId)) return { ok: false, error: `${def.name} cannot be used by this class.` };
     if (def.requiresLevel && save.level < def.requiresLevel) return { ok: false, error: `${def.name} requires level ${def.requiresLevel}.` };
     if (slot !== def.type) return { ok: false, error: `${def.name} does not belong in the ${slot} slot.` };
+  }
+  if (new Set(save.achievements).size !== save.achievements.length || save.achievements.some((id) => !getAchievement(id))) {
+    return { ok: false, error: "Unknown achievement." };
+  }
+  if (new Set(save.waypoints).size !== save.waypoints.length || save.waypoints.some((zone) => !ZONE_IDS.includes(zone))) {
+    return { ok: false, error: "Unknown fast-travel point." };
   }
   const classDef = getClass(save.classId);
   if (save.level < 1 || save.level > LEVEL_CAP) return { ok: false, error: "Invalid level." };
@@ -321,6 +356,11 @@ export function migrateSave(input: unknown): CharacterSave {
   if (migrated.version === 9) {
     migrated.npcKindRewards = [];
     migrated.version = 10;
+  }
+  if (migrated.version === 10) {
+    // Older saves know nothing about lifetime counters, so they start from a clean slate.
+    migrated.waypoints = ["village"];
+    migrated.version = 11;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

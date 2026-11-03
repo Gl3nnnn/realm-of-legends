@@ -172,6 +172,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
     }
   }
   state.completions += 1;
+  session.save.stats.questsCompleted += 1;
   if (quest.repeatable) {
     state.completed = false;
     state.progress = quest.objectives.map(() => 0);
@@ -197,6 +198,7 @@ export function pickQuestReward(session: GameSession, questId: string, index: nu
   }
   state.claimedReward = index;
   state.completions += 1;
+  session.save.stats.questsCompleted += 1;
   session.gainGold(reward.gold);
   session.gainXp(reward.xp);
   for (const item of reward.items ?? []) {

@@ -11,6 +11,7 @@ import {
   getTalentTree,
   migrateSave,
   nextStep,
+  DEFAULT_TITLE,
   STATUS_DISPLAY,
   portraitFrame,
   xpToNext,
@@ -177,6 +178,7 @@ export class UIManager {
     portrait: must("hud-portrait"),
     name: must("hud-name"),
     level: must("hud-level"),
+    heroTitle: must("hud-title"),
     classLabel: must("hud-class"),
     hpFill: must("hp-fill"),
     hpText: must("hp-text"),
@@ -188,6 +190,9 @@ export class UIManager {
     safe: must("hud-safe"),
     cycle: must("hud-cycle"),
     gold: must("hud-gold"),
+    dayPart: must("hud-daypart"),
+    streakChip: must("streak-chip"),
+    petChip: must("pet-chip"),
     touchControls: must("touch-controls"),
     touchStick: must("touch-stick"),
     touchKnob: must("touch-knob"),
@@ -1052,7 +1057,7 @@ export class UIManager {
       title = "Backpack & Equipment";
       body = inventoryPanelHtml(this.session, this.selectedSlot, this.selectedEquip, this.inventoryFilter, this.inventorySort);
     } else if (this.panel.kind === "quests" && this.session) {
-      title = "Quest Journal";
+      title = "Journal";
       body = questsPanelHtml(this.session);
       narrow = true;
     } else if (this.panel.kind === "talents" && this.session) {
@@ -1238,6 +1243,10 @@ export class UIManager {
         changed = session.sortInventory();
         if (changed) this.toast("Backpack tidied.", "good");
         else this.toast("Your backpack is already tidy.", "info");
+      } else if (action === "equip-best") {
+        const pieces = session.equipBestGear();
+        changed = pieces > 0;
+        if (changed) this.toast("Changed " + pieces + " piece" + (pieces === 1 ? "" : "s") + " of gear.", "good");
       }
       if (!changed) this.selectedSlot = null;
       else {
@@ -1261,6 +1270,19 @@ export class UIManager {
         if (changed) this.toast(`Sold everything spare for ${gained} gold.`, "good");
       }
       if (changed) this.sfx.coin();
+      this.renderPanel();
+    } else if (this.panel?.kind === "quests") {
+      if (action === "fast-travel" && target.dataset.zone) {
+        const zone = target.dataset.zone as Parameters<GameSession["fastTravel"]>[0];
+        changed = session.fastTravel(zone);
+        if (changed) {
+          this.toast(`Travelled to ${session.zone.name}.`, "good");
+          this.closePanel(false);
+        }
+      } else if (action === "set-title" && target.dataset.title) {
+        changed = session.setTitle(target.dataset.title);
+        if (changed) this.toast(`You now go by ${target.dataset.title}.`, "good");
+      }
       this.renderPanel();
     } else if (this.panel?.kind === "talents") {
       if (action === "learn-talent" && target.dataset.talent) {
@@ -1493,6 +1515,12 @@ export class UIManager {
     this.dom.xpText.textContent = next <= 0 ? "Max level" : `${formatNumber(save.xp)} / ${formatNumber(next)} XP`;
     this.dom.name.textContent = save.name;
     this.dom.level.textContent = `Lv ${save.level}`;
+    this.dom.heroTitle.textContent = save.title === DEFAULT_TITLE ? "" : save.title;
+    const phase = session.dayPhase;
+    this.dom.dayPart.textContent = `${phase.icon} ${phase.label}`;
+    this.dom.dayPart.dataset.phase = phase.key;
+    this.updateStreakChip();
+    this.updatePetChip();
     this.dom.zone.textContent = session.zone.name;
     this.dom.safe.textContent = session.zone.safe ? "Safe" : "Hostile";
     this.dom.safe.classList.toggle("danger", !session.zone.safe);
@@ -1677,6 +1705,32 @@ export class UIManager {
     this.dom.prompt.classList.remove("hidden");
   }
 
+  /** The clean-kill streak, shown only once it is worth mentioning. */
+  private updateStreakChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const streak = session.killStreak;
+    const show = streak >= 3 && !session.dead;
+    this.dom.streakChip.classList.toggle("hidden", !show);
+    if (!show) return;
+    const text = `🔥 ${streak} kills without a hit`;
+    if (this.dom.streakChip.textContent !== text) this.dom.streakChip.textContent = text;
+    this.dom.streakChip.classList.toggle("hot", streak >= 10);
+  }
+
+  /** The companion's level and how close it is to the next one. */
+  private updatePetChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const hatched = Boolean(session.save.companion?.hatched);
+    this.dom.petChip.classList.toggle("hidden", !hatched || session.dead);
+    if (!hatched) return;
+    const need = session.petXpToNext;
+    const pct = need <= 0 ? 100 : Math.round(((140 - need) / 140) * 100);
+    const text = `🐣 ${session.save.companion?.name ?? "Hatchling"} · Lv ${session.petLevel}${need > 0 ? ` · ${pct}%` : " · max"}`;
+    if (this.dom.petChip.textContent !== text) this.dom.petChip.textContent = text;
+  }
+
   private drawMinimap(): void {
     const session = this.session;
     if (!session) return;
@@ -1734,6 +1788,20 @@ export class UIManager {
         ctx.lineWidth = 1;
         ctx.strokeRect(px(monster.x) - size / 2, py(monster.y) - size / 2, size, size);
       }
+    }
+    for (const node of zone.gatherNodes) {
+      if (session.isGathered(node.id)) continue;
+      ctx.fillStyle = "#8fe07a";
+      ctx.fillRect(px(node.x) - 1.5, py(node.y) - 1.5, 3, 3);
+    }
+    // The companion gets its own colour so it is never mistaken for an enemy.
+    if (session.save.companion?.hatched) {
+      const petX = px(session.save.x + 14);
+      const petY = py(session.save.y + 10);
+      ctx.fillStyle = "#6ff0c8";
+      ctx.beginPath();
+      ctx.arc(petX, petY, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
     const youX = px(session.save.x);
     const youY = py(session.save.y);
@@ -2022,6 +2090,14 @@ export class UIManager {
           this.sfx.heal();
           shouldPersist = true;
           break;
+        case "achievement": {
+          const title = event.title ? " - title unlocked: " + event.title : "";
+          this.toast("🏆 " + event.name + title, "good");
+          this.pushLog("Achievement earned: " + event.name + (event.title ? " (" + event.title + ")" : "") + ".", "good");
+          this.sfx.level();
+          shouldPersist = true;
+          break;
+        }
         case "interact":
           if (event.kind === "npc") {
             this.openPanel("npc", event.id);

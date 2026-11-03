@@ -23,9 +23,11 @@ import {
   MAX_UPGRADE,
   canClassUse,
   isEquippable,
+  itemStats,
 } from "../data/items";
 import { getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
+import { pendingAchievements, availableTitles } from "../data/achievements";
 import { CLASS_INTROS, NG_PLUS_OPENINGS } from "../data/story";
 import {
   getTalentChoice,
@@ -73,6 +75,7 @@ import type {
   TrapInstance,
   Vec2,
   ZoneData,
+  ZoneId,
 } from "../types";
 
 export const DAMAGE_COLORS: Record<DamageType, string> = {
@@ -126,6 +129,15 @@ export class GameSession {
   lastAim: Vec2 = { x: 0, y: 1 };
   dodgeDir: Vec2 = { x: 0, y: 1 };
   lastImmuneEvent = -999;
+  /** Monsters killed in a row without being hit; shown as a chip and used by achievements. */
+  killStreak = 0;
+  /** Seconds since the hero last took damage, so a streak can be judged fairly. */
+  hurtRecently = 0;
+  private achievementTimer = 0;
+  /** Seconds since the hero's feet last moved, used to count the distance walked. */
+  private walkedSinceSample = 0;
+  private lastStepX = 0;
+  private lastStepY = 0;
   private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
   private zoneLoaded = false;
 
@@ -154,6 +166,115 @@ export class GameSession {
 
   get resourceLabel(): string {
     return RESOURCE_LABELS[this.classDef.resource];
+  }
+
+  /**
+   * A slow day-and-night clock that follows play time rather than the real clock, so a session
+   * always starts in the morning and the world darkens as the hero keeps adventuring.
+   * One full day is twenty minutes of play.
+   */
+  get dayTime(): number {
+    return (0.28 + this.save.playtime / 1200) % 1;
+  }
+
+  get dayPhase(): { key: "dawn" | "day" | "dusk" | "night"; label: string; icon: string } {
+    const t = this.dayTime;
+    if (t < 0.22) return { key: "night", label: "Night", icon: "🌙" };
+    if (t < 0.34) return { key: "dawn", label: "Dawn", icon: "🌅" };
+    if (t < 0.68) return { key: "day", label: "Day", icon: "☀" };
+    if (t < 0.8) return { key: "dusk", label: "Dusk", icon: "🌇" };
+    return { key: "night", label: "Night", icon: "🌙" };
+  }
+
+  /** Level of the hatched companion, earned from the experience it shares with the hero. */
+  get petLevel(): number {
+    return Math.min(20, 1 + Math.floor(this.save.petXp / 140));
+  }
+
+  /** Experience still needed for the companion's next level, or 0 at the cap. */
+  get petXpToNext(): number {
+    if (this.petLevel >= 20) return 0;
+    return 140 - (this.save.petXp % 140);
+  }
+
+  /** How much the companion's own hits grow with its level. */
+  get petPower(): number {
+    return 1 + (this.petLevel - 1) * 0.08;
+  }
+
+  /** Standing with one villager, from -10 to 10. */
+  npcTrust(npcId: string): number {
+    return Math.max(-10, Math.min(10, this.save.relationships[npcId] ?? 0));
+  }
+
+  /**
+   * Trust turns into a real discount: every two points of standing with the villager who
+   * keeps the shop or the shrine knocks 5% off, to a maximum of 15%.
+   */
+  private trustPercent(kind: "shop" | "heal"): number {
+    let best = 0;
+    for (const [id, def] of Object.entries(NPCS)) {
+      if (kind === "heal" && !def.healer) continue;
+      if (kind === "shop" && !def.shop) continue;
+      best = Math.max(best, this.npcTrust(id));
+    }
+    return Math.min(15, Math.max(0, Math.floor(best / 2) * 5));
+  }
+
+  /** Percent off shop prices, earned by being kind to the merchant. */
+  get shopDiscountPercent(): number {
+    return this.trustPercent("shop");
+  }
+
+  /** Percent off healing at the shrine, earned by being kind to the healer. */
+  get healDiscountPercent(): number {
+    return this.trustPercent("heal");
+  }
+
+  /** Titles the hero may wear right now. */
+  get titles(): string[] {
+    return availableTitles(this.save);
+  }
+
+  /** Put on one of the earned titles, or fall back to the default one. */
+  setTitle(title: string): boolean {
+    if (!this.titles.includes(title)) return false;
+    if (this.save.title === title) return false;
+    this.save.title = title;
+    this.emit({ type: "log", text: `You now go by ${title}.`, tone: "good" });
+    return true;
+  }
+
+  /**
+   * Hand out any achievement the hero has just earned. Cheap enough to call a couple of
+   * times a second, and it never fires the same one twice.
+   */
+  checkAchievements(): boolean {
+    const earned = pendingAchievements(this.save);
+    if (earned.length === 0) return false;
+    for (const achievement of earned) {
+      this.save.achievements.push(achievement.id);
+      this.emit({ type: "achievement", id: achievement.id, name: achievement.name, title: achievement.title });
+    }
+    return true;
+  }
+
+  /** Record a kill in the streak, and remember the best one the hero ever managed. */
+  bumpKillStreak(): void {
+    this.killStreak += 1;
+    if (this.killStreak > this.save.stats.bestStreak) this.save.stats.bestStreak = this.killStreak;
+    if (this.killStreak === 5 || this.killStreak === 10 || this.killStreak % 25 === 0) {
+      this.emit({ type: "log", text: `${this.killStreak} kills in a row without a scratch!`, tone: "good" });
+    }
+  }
+
+  /** Any hit taken ends the clean streak. */
+  resetKillStreak(): void {
+    if (this.killStreak >= 5) {
+      this.emit({ type: "log", text: `Your ${this.killStreak}-kill streak ends.`, tone: "info" });
+    }
+    this.killStreak = 0;
+    this.hurtRecently = 0;
   }
 
   get modifiers(): TalentModifiers {
@@ -554,6 +675,21 @@ export class GameSession {
       this.animationTime += clamped;
     }
     this.moving = moving;
+    // Distance walked, sampled once a second so it stays cheap.
+    this.walkedSinceSample += clamped;
+    if (this.walkedSinceSample >= 1) {
+      this.walkedSinceSample = 0;
+      const step = Math.hypot(this.save.x - this.lastStepX, this.save.y - this.lastStepY) / 32;
+      if (step < 20) this.save.stats.distanceWalked += step;
+      this.lastStepX = this.save.x;
+      this.lastStepY = this.save.y;
+    }
+    // Achievements are checked a few times a second rather than every frame.
+    this.achievementTimer += clamped;
+    if (this.achievementTimer >= 0.5) {
+      this.achievementTimer = 0;
+      this.checkAchievements();
+    }
 
     if (this.classDef.resource === "rage") {
       if (this.elapsed - this.lastCombat > COMBAT_TIMEOUT) {
@@ -922,7 +1058,8 @@ export class GameSession {
     if (!target || this.hatchlingAttackTimer > 0) return;
     this.hatchlingAttackTimer = 1.6;
     this.hatchlingHitting = true;
-    this.hitMonster(target, 4 + this.save.level, false, "physical", []);
+    // The companion grows with the hero: its level raises its damage.
+    this.hitMonster(target, (4 + this.save.level) * this.petPower, false, "physical", []);
     this.hatchlingHitting = false;
   }
 
@@ -1079,6 +1216,7 @@ export class GameSession {
     const gained = Math.max(0, Math.min(MAX_GOLD - this.save.gold, Math.floor(amount)));
     if (gained > 0) {
       this.save.gold += gained;
+      this.save.stats.goldEarned += gained;
       this.emit({ type: "gold", amount: gained });
     }
     return gained;
@@ -1267,6 +1405,8 @@ export class GameSession {
   addItem(itemId: string, qty: number, instance?: ItemStack["instance"]): number {
     const def = ITEMS[itemId];
     if (!def || qty <= 0) return qty;
+    // Everything picked up is counted for the journal before it lands in the bag.
+    this.save.stats.itemsFound += qty;
     if (instance) {
       const free = this.save.inventory.findIndex((stack) => stack === null);
       if (free === -1) return qty;
@@ -1343,6 +1483,7 @@ export class GameSession {
   }
 
   rewardPerfectDodge(): void {
+    this.save.stats.perfectDodges += 1;
     this.save.resource = Math.min(this.stats.maxResource, this.save.resource + 12);
     for (const id of Object.keys(this.cooldowns)) {
       this.cooldowns[id] = Math.max(0, this.cooldowns[id] - 0.6);
@@ -1562,6 +1703,7 @@ export class GameSession {
       return false;
     }
     this.potionCooldown = POTION_COOLDOWN;
+    this.save.stats.potionsUsed += 1;
     if (def.heal) this.healPlayer(def.heal);
     if (def.restore) this.save.resource = Math.min(this.stats.maxResource, this.save.resource + def.restore);
     stack.qty -= 1;
@@ -1594,6 +1736,64 @@ export class GameSession {
     this.save.resource = Math.min(this.save.resource, before.maxResource);
     this.emit({ type: "log", text: `Equipped ${def.name}.`, tone: "good" });
     return true;
+  }
+
+  /**
+   * Wear the strongest piece in the bag for every slot at once, so a player who has just
+   * cleared a dungeon does not have to compare ten items by hand. Returns how many changed.
+   */
+  equipBestGear(): number {
+    let changed = 0;
+    for (const slot of ["weapon", "armor", "helm", "boots", "trinket"] as const) {
+      // Compare with what is already worn, so the best piece always ends up on the hero.
+      const candidates = this.save.inventory
+        .map((stack, index) => ({ stack, index }))
+        .filter((entry): entry is { stack: ItemStack; index: number } => Boolean(entry.stack))
+        .filter(({ stack }) => {
+          const def = ITEMS[stack.itemId];
+          return Boolean(def && isEquippable(def) && def.type === slot && canClassUse(def, this.save.classId));
+        })
+        .filter(({ stack }) => {
+          const def = ITEMS[stack.itemId];
+          return !def.requiresLevel || this.save.level >= def.requiresLevel;
+        });
+      if (candidates.length === 0) continue;
+      const scoreOf = (stack: ItemStack) => {
+        const bonus = itemStats(stack);
+        return (bonus.attack ?? 0) * 2 + (bonus.defense ?? 0) * 2 + (bonus.maxHp ?? 0) * 0.3
+          + (bonus.maxResource ?? 0) * 0.2 + (bonus.crit ?? 0) * 100 + (bonus.moveSpeed ?? 0) * 0.5;
+      };
+      const currentPiece = this.save.equipment[slot];
+      const best = candidates.sort((a, b) => scoreOf(b.stack) - scoreOf(a.stack))[0];
+      if (currentPiece && scoreOf(currentPiece) >= scoreOf(best.stack)) continue;
+      if (this.equip(best.index)) changed += 1;
+    }
+    if (changed === 0) {
+      this.emit({ type: "log", text: "You are already wearing your best gear.", tone: "info" });
+    } else {
+      this.emit({ type: "log", text: `Changed ${changed} piece${changed === 1 ? "" : "s"} of gear.`, tone: "good" });
+    }
+    return changed;
+  }
+
+  /** A plain-words comparison of a bag item against what is worn in the same slot. */
+  compareToEquipped(stack: ItemStack): { slot: keyof CharacterSave["equipment"]; lines: string[] } | null {
+    const def = ITEMS[stack.itemId];
+    if (!def || !isEquippable(def)) return null;
+    const slot = def.type as keyof CharacterSave["equipment"];
+    const worn = this.save.equipment[slot];
+    const next = itemStats(stack);
+    const now = worn ? itemStats(worn) : {};
+    const labels: Record<string, string> = { attack: "Attack", defense: "Defence", maxHp: "Health", maxResource: "Resource", crit: "Critical", moveSpeed: "Move speed" };
+    const lines: string[] = [];
+    for (const key of Object.keys(labels) as (keyof typeof labels)[]) {
+      const before = (now[key as keyof typeof now] ?? 0) as number;
+      const after = (next[key as keyof typeof next] ?? 0) as number;
+      const diff = Math.round((after - before) * 10) / 10;
+      if (diff === 0) continue;
+      lines.push(`${diff > 0 ? "+" : ""}${diff} ${labels[key]}`);
+    }
+    return { slot, lines };
   }
 
   unequip(slot: keyof CharacterSave["equipment"]): boolean {
@@ -1640,7 +1840,8 @@ export class GameSession {
       return false;
     }
     const amount = Math.max(1, Math.min(qty, def.stack));
-    const cost = (def.buy ?? 0) * amount;
+    const baseCost = (def.buy ?? 0) * amount;
+    const cost = Math.max(1, Math.ceil(baseCost * (1 - this.shopDiscountPercent / 100)));
     if (!def.buy) return false;
     if (def.requiresLevel && this.save.level < def.requiresLevel) {
       this.emit({ type: "log", text: `${def.name} needs level ${def.requiresLevel}.`, tone: "bad" });
@@ -1657,6 +1858,39 @@ export class GameSession {
     this.save.gold -= cost;
     this.addItem(itemId, amount);
     this.emit({ type: "log", text: `Bought ${amount}x ${def.name} for ${cost} gold.`, tone: "good" });
+    return true;
+  }
+
+  /**
+   * Walk the hero to another zone they have already unlocked. Fast travel is a small kindness
+   * for a long walk back, never a shortcut past content: only zones already visited count.
+   */
+  fastTravel(zoneId: ZoneId): boolean {
+    if (this.dead) return false;
+    if (!this.save.waypoints.includes(zoneId)) {
+      this.emit({ type: "log", text: "You have not been there yet.", tone: "bad" });
+      return false;
+    }
+    if (this.save.zone === zoneId) {
+      this.emit({ type: "log", text: "You are already here.", tone: "info" });
+      return false;
+    }
+    const target = ZONES[zoneId];
+    if (!target) return false;
+    this.save.zone = zoneId;
+    this.save.x = target.spawn.x;
+    this.save.y = target.spawn.y;
+    this.dodgeTimer = 0;
+    this.loadZone();
+    this.emit({ type: "zone", zone: zoneId });
+    this.emit({ type: "log", text: `Travelled to ${target.name}.`, tone: "good" });
+    return true;
+  }
+
+  /** Unlock a zone for fast travel the first time it is reached. */
+  unlockWaypoint(zoneId: ZoneId): boolean {
+    if (this.save.waypoints.includes(zoneId)) return false;
+    this.save.waypoints.push(zoneId);
     return true;
   }
 
@@ -1737,7 +1971,9 @@ export class GameSession {
   healCost(): number {
     const missing = Math.max(0, this.stats.maxHp - this.save.hp);
     if (missing <= 0) return 0;
-    return Math.max(HEAL_MIN_COST, Math.ceil(missing * HEAL_COST_PER_HP));
+    const base = Math.max(HEAL_MIN_COST, Math.ceil(missing * HEAL_COST_PER_HP));
+    // A healer who trusts you charges less.
+    return Math.max(HEAL_MIN_COST, Math.ceil(base * (1 - this.healDiscountPercent / 100)));
   }
 
   healAtNpc(): boolean {
@@ -1780,6 +2016,7 @@ export class GameSession {
     if (!companion || companion.hatched) return false;
     companion.hatched = true;
     this.emit({ type: "log", text: "Your egg hatched! A small hatchling now follows you.", tone: "good" });
+    this.emit({ type: "log", text: "It fights beside you and grows stronger with every monster you defeat.", tone: "info" });
     return true;
   }
 

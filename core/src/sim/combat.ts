@@ -31,6 +31,8 @@ export function damagePlayer(s: GameSession, raw: number, source: string, damage
   }
   s.save.hp = Math.max(0, s.save.hp - damage);
   s.lastCombat = s.elapsed;
+  // Any real hit breaks the clean streak, so it always means something.
+  if (damage > 0) s.resetKillStreak();
   if (damage > 0) s.emit({ type: "damage", target: "player", amount: Math.round(damage), crit: false, x: s.save.x, y: s.save.y, damageType });
   if (s.save.hp <= 0) s.killPlayer(source);
 }
@@ -66,6 +68,11 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
     if (def.id === "bone_warden") s.openDungeonWing();
   }
   if (def.boss) advanceStoryFromBoss(s);
+  // Lifetime counters, and the kill streak that a clean fight builds up.
+  s.save.stats.monstersSlain += 1;
+  if (def.boss && firstBossKill) s.save.stats.bossesSlain += 1;
+  s.save.petXp += def.boss ? 60 : 6;
+  s.bumpKillStreak();
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {
     damagePlayer(s, def.attack * s.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
     s.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
@@ -122,6 +129,7 @@ export function hitMonster(
   const defenseMultiplier = armorPiercing ? 1 : 100 / (100 + def.defense * 2.5 * eliteDefense);
   const mitigated = Math.max(1, Math.round(raw * defenseMultiplier * (marked ? 1.2 : 1) * execute));
   monster.hp -= mitigated;
+  if (mitigated > s.save.stats.bestHit) s.save.stats.bestHit = mitigated;
   if (mods.lifesteal > 0) s.healPlayer(mitigated * (mods.lifesteal / 100));
   s.lastCombat = s.elapsed;
   s.emit({

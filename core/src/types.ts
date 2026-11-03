@@ -445,6 +445,21 @@ export interface ShopDef {
   itemIds: string[];
 }
 
+export interface SaveStats {
+  monstersSlain: number;
+  bossesSlain: number;
+  deaths: number;
+  chestsOpened: number;
+  questsCompleted: number;
+  goldEarned: number;
+  itemsFound: number;
+  potionsUsed: number;
+  perfectDodges: number;
+  bestHit: number;
+  distanceWalked: number;
+  bestStreak: number;
+}
+
 export interface CharacterSave {
   version: number;
   id: string;
@@ -477,6 +492,16 @@ export interface CharacterSave {
   createdAt: number;
   updatedAt: number;
   companion?: CompanionEgg;
+  /** Lifetime counters, shown in the journal and used by achievements. */
+  stats: SaveStats;
+  /** Ids of the achievements already earned. */
+  achievements: string[];
+  /** Zones unlocked for fast travel. */
+  waypoints: ZoneId[];
+  /** Experience earned by the hatched companion. */
+  petXp: number;
+  /** The title worn by the hero, earned from achievements. */
+  title: string;
 }
 
 export interface CompanionEgg {
@@ -537,6 +562,7 @@ export type SimEvent =
   | { type: "telegraph"; x: number; y: number; radius: number; remaining: number; shape?: "ring" | "line" | "cone" | "spot"; angle?: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }
+  | { type: "achievement"; id: string; name: string; title?: string }
   | { type: "error"; message: string };
 
 export interface InteractResult {

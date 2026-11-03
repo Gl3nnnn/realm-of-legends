@@ -27,6 +27,11 @@ import {
   starterEquipment,
   talentBonuses,
   talentTierChosen,
+  achievementRows,
+  achievementProgress,
+  heroVerdict,
+  journalStats,
+  waypointRows,
   type CharacterSave,
   type ClassId,
   type GameSession,
@@ -290,6 +295,12 @@ export function inventoryPanelHtml(
     }
     actions += `<button class="btn ghost small" data-action="sell" data-slot="${selectedSlot}">Sell for ${itemSellValue(stack)}g</button>`;
   }
+  const compareLines = !selectedEquip && stack ? session.compareToEquipped(stack) : null;
+  const compareHtml = compareLines && compareLines.lines.length
+    ? `<div class="compare-box"><div class="small muted">Against your ${esc(compareLines.slot)}</div>${compareLines.lines
+        .map((line) => `<span class="compare-line ${line.startsWith("+") ? "up" : "down"}">${esc(line)}</span>`)
+        .join("")}</div>`
+    : "";
   return `<div class="panel-columns">
     <div style="display:grid;gap:16px">
       <div>
@@ -300,6 +311,7 @@ export function inventoryPanelHtml(
         </div>
         <div class="bag-tools">
           <button class="btn ghost small" data-action="quick-sort">Tidy backpack</button>
+          <button class="btn ghost small" data-action="equip-best">Wear best gear</button>
           <span class="small muted">${entries.length} of 24 squares used</span>
         </div>
         <div class="inv-grid">${grid}${fillers}</div>
@@ -312,6 +324,7 @@ export function inventoryPanelHtml(
     </div>
     <div style="display:grid;gap:12px;align-content:start">
       ${itemDetailHtml(stack, compareTo)}
+      ${compareHtml}
       <div class="detail-actions">${actions}</div>
       <div class="small muted">Consumables can be bound to Z or X. Equipment changes apply immediately; comparison lines show gains and losses against your equipped item.</div>
     </div>
@@ -321,7 +334,8 @@ export function inventoryPanelHtml(
 function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
   const stats = statLines(def.stats).slice(0, 2).join(" · ");
-  const canAfford = session.save.gold >= (def.buy ?? 0);
+  const price = Math.max(1, Math.ceil((def.buy ?? 0) * (1 - session.shopDiscountPercent / 100)));
+  const canAfford = session.save.gold >= price;
   const canUse = canClassUse(def, session.save.classId);
   const levelMet = !def.requiresLevel || session.save.level >= def.requiresLevel;
   const hasSpace = session.canAdd(itemId, 1);
@@ -333,7 +347,7 @@ function shopRow(session: GameSession, itemId: string): string {
       <div class="sub">${stats || esc(def.description.slice(0, 46))}</div>
     </div>
     <div style="display:grid;gap:5px;justify-items:end">
-      <span class="gold-line">${def.buy ?? "-"} g</span>
+      <span class="gold-line">${price} g${price < (def.buy ?? 0) ? ` <s class="small muted">${def.buy} g</s>` : ""}</span>
       <button class="btn small" data-action="buy" data-item="${def.id}" ${canBuy ? "" : "disabled"}>${!canUse ? "Not for class" : !levelMet ? `Requires level ${def.requiresLevel}` : !hasSpace ? "Inventory full" : "Buy"}</button>
     </div>
   </div>`;
@@ -400,6 +414,7 @@ export function shopPanelHtml(session: GameSession, shopId: string): string {
   return `<div class="shop-columns">
     <div>
       <div class="section-title">${esc(shop.name)} · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
+      ${session.shopDiscountPercent > 0 ? `<div class="small" style="color:var(--good)">Trust discount: ${session.shopDiscountPercent}% off everything here.</div>` : ""}
       <div class="shop-list">${buy}</div>
     </div>
     <div>
@@ -457,11 +472,13 @@ export function questsPanelHtml(session: GameSession): string {
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-travel">Travel</a></nav>`;
   if (active.length === 0) {
     return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      ${heroSection(session)}
+      ${travelSection(session)}
       ${bestiarySection()}
       ${loreSection}`;
   }
@@ -482,9 +499,68 @@ export function questsPanelHtml(session: GameSession): string {
     .join("");
   return `${nav}
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
+    ${heroSection(session)}
+    ${travelSection(session)}
     ${bestiarySection()}
     ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
+}
+
+/**
+ * Everything the hero has done, counted, plus the achievements still to earn and the
+ * titles they unlock. This is the page a player opens to see how far they have come.
+ */
+function heroSection(session: GameSession): string {
+  const save = session.save;
+  const stats = journalStats(save)
+    .map((stat) => `<div class="stat-cell">
+        <span class="stat-label">${esc(stat.label)}</span>
+        <span class="stat-value">${esc(stat.value)}</span>
+        ${stat.note ? `<span class="stat-note">${esc(stat.note)}</span>` : ""}
+      </div>`)
+    .join("");
+  const progress = achievementProgress(save);
+  const rows = achievementRows(save)
+    .map((achievement) => `<div class="achv-row ${achievement.earned ? "earned" : ""}">
+        <span class="achv-icon" aria-hidden="true">${achievement.earned ? achievement.icon : "○"}</span>
+        <span class="achv-body">
+          <span class="achv-name">${esc(achievement.name)}</span>
+          <span class="small muted">${esc(achievement.earned && achievement.title ? `Title unlocked: ${achievement.title}` : achievement.hint)}</span>
+        </span>
+      </div>`)
+    .join("");
+  const titles = session.titles
+    .map((title) => {
+      const worn = save.title === title;
+      return `<button class="title-chip ${worn ? "worn" : ""}" data-action="set-title" data-title="${esc(title)}" ${worn ? "aria-pressed=\"true\"" : ""}>${esc(title)}${worn ? " ✓" : ""}</button>`;
+    })
+    .join("");
+  return `<div class="lore-section" id="journal-hero">
+    <div class="qtitle">${esc(save.name)}, ${esc(save.title)}</div>
+    <div class="small muted">${esc(heroVerdict(save))}</div>
+    <div class="stat-grid">${stats}</div>
+    <div class="small muted" style="margin-top:12px">Titles you can wear</div>
+    <div class="title-row">${titles}</div>
+    <div class="small muted" style="margin-top:12px">Achievements · ${progress.earned} of ${progress.total}</div>
+    <div class="achv-list">${rows}</div>
+  </div>`;
+}
+
+/** Fast travel: only places the hero has already stood in, so nothing is skipped. */
+function travelSection(session: GameSession): string {
+  const rows = waypointRows(session.save)
+    .map((point) => `<button class="travel-row ${point.here ? "here" : ""}" data-action="fast-travel" data-zone="${point.id}" ${point.here ? "disabled" : ""}>
+        <span class="travel-name">${esc(point.name)}</span>
+        <span class="small muted">${point.here ? "You are here" : point.safe ? "Safe ground" : "Hostile"}</span>
+      </button>`)
+    .join("");
+  const locked = Object.values(ZONES).filter((zone) => !session.save.waypoints.includes(zone.id)).length;
+  return `<div class="lore-section" id="journal-travel">
+    <div class="qtitle">Travel</div>
+    <div class="small muted">Places you have already been. Travel is free and instant, and the road back is always open.</div>
+    <div class="travel-list">${rows}</div>
+    ${locked > 0 ? `<div class="small muted">${locked} more place${locked === 1 ? "" : "s"} to find.</div>` : ""}
+  </div>`;
 }
 
 function bestiarySection(): string {
@@ -617,7 +693,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
-    ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>` : ""}
+    ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="small" style="color:var(--good);align-self:center">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
     <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
   </div>`;
 }

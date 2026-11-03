@@ -14,6 +14,10 @@ export function travel(session: GameSession, portal: PortalDef): void {
   session.loadZone();
   session.emit({ type: "zone", zone: session.save.zone });
   session.emit({ type: "log", text: `Entered ${ZONES[session.save.zone].name}.`, tone: "info" });
+  // Reaching a zone for the first time opens it as a fast-travel point.
+  if (session.unlockWaypoint(session.save.zone)) {
+    session.emit({ type: "log", text: `${ZONES[session.save.zone].name} added to your map. You can travel back here from the journal.`, tone: "good" });
+  }
   for (const state of session.save.quests) {
     if (state.completed) continue;
     const quest = QUESTS[state.id];
@@ -37,6 +41,7 @@ export function openChest(session: GameSession, id: string): void {
   if (!chest) return;
   if (session.save.openedChests.includes(id)) return;
   session.save.openedChests.push(id);
+  session.save.stats.chestsOpened += 1;
   const gold = session.save.zone === "dungeon" ? session.rng.int(90, 170) : session.rng.int(45, 90);
   const gained = session.gainGold(gold);
   const items: ItemStack[] = session.save.zone === "dungeon"

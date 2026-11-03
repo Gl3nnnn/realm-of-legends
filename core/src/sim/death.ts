@@ -12,6 +12,8 @@ export function killPlayer(session: GameSession, _source: string): void {
   session.respawnTimer = RESPAWN_SECONDS;
   session.pets = [];
   session.projectiles = [];
+  session.save.stats.deaths += 1;
+  session.resetKillStreak();
   session.emit({ type: "death", who: "player", x: session.save.x, y: session.save.y });
   session.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
 }
@@ -22,6 +24,7 @@ export function respawn(session: GameSession): void {
   session.save.zone = "village";
   session.save.x = zone.spawn.x;
   session.save.y = zone.spawn.y;
+  session.unlockWaypoint("village");
   const stats = session.stats;
   session.save.hp = stats.maxHp;
   session.save.resource = session.classDef.resource === "rage" ? 0 : stats.maxResource;

@@ -52,6 +52,7 @@
             <span id="hud-name">Hero</span>
             <span id="hud-level" class="level-chip">Lv 1</span>
           </div>
+          <div id="hud-title" class="hud-title"></div>
           <div id="hud-class" class="muted small">Warrior</div>
           <div class="bar hp"><div id="hp-fill" class="bar-fill"></div><span id="hp-text">100 / 100</span></div>
           <div class="bar resource"><div id="res-fill" class="bar-fill"></div><span id="res-text">100 / 100</span></div>
@@ -62,7 +63,7 @@
       <div class="hud-top-right">
         <div class="hud-controls">
           <button class="icon-btn" data-panel="inventory" title="Inventory (I)">I</button>
-          <button class="icon-btn" data-panel="quests" title="Quests (Q)">Q</button>
+          <button class="icon-btn" data-panel="quests" title="Quests, story and travel (Q)">Q</button>
           <button class="icon-btn" data-panel="talents" title="Talents (T)">T</button>
           <button class="icon-btn" data-panel="settings" title="Settings (Esc)">⚙</button>
           <button class="icon-btn map-toggle" id="minimap-toggle" aria-controls="minimap" aria-expanded="true" aria-label="Hide minimap" title="Toggle minimap">M</button>
@@ -71,6 +72,7 @@
           <span id="hud-zone">Eldoria Village</span>
           <span id="hud-safe" class="zone-tag">Safe</span>
           <span id="hud-cycle" class="zone-tag hidden"></span>
+          <span id="hud-daypart" class="zone-tag time-tag" title="Time of day follows your play time"></span>
           <span id="hud-gold" class="gold">0 g</span>
         </div>
         <canvas id="minimap" width="264" height="198" aria-label="Minimap"></canvas>
@@ -86,6 +88,8 @@
       </div>
 
       <div id="buff-bar" class="buff-bar"></div>
+      <div id="streak-chip" class="streak-chip hidden" aria-live="polite"></div>
+      <div id="pet-chip" class="pet-chip hidden" aria-live="polite"></div>
       <div id="status-chips" class="status-chips" aria-live="polite" aria-label="Active effects"></div>
       <div id="danger-vignette" class="danger-vignette hidden" aria-hidden="true"></div>
       <div id="quest-tracker" class="quest-tracker" aria-live="polite" aria-label="Quest tracker"></div>

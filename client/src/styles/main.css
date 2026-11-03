@@ -733,6 +733,40 @@ input[type="text"]:focus {
   color: #ff9fa0;
 }
 
+/* Time of day: the colour carries the mood, so the label is readable at a glance. */
+.zone-tag.time-tag[data-phase="dawn"] {
+  background: #3a2c22;
+  color: #ffd0a0;
+}
+
+.zone-tag.time-tag[data-phase="day"] {
+  background: #38321c;
+  color: #ffe9a8;
+}
+
+.zone-tag.time-tag[data-phase="dusk"] {
+  background: #3a2430;
+  color: #ffb0c8;
+}
+
+.zone-tag.time-tag[data-phase="night"] {
+  background: #1f2437;
+  color: #a8c0ff;
+}
+
+/* The name plate under the hero's name, only shown once a title is worn. */
+.hud-title {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e8c05a;
+  min-height: 11px;
+}
+
+.hud-title:empty {
+  display: none;
+}
+
 #minimap {
   width: 264px;
   height: 198px;
@@ -811,6 +845,76 @@ input[type="text"]:focus {
   padding: 4px 7px;
   color: #d9c8ff;
 }
+
+/* A clean kill streak, parked under the buffs so it never covers a fight. */
+.streak-chip {
+  position: absolute;
+  top: 152px;
+  left: clamp(10px, 1.6vw, 22px);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: rgba(60, 26, 12, 0.92);
+  border: 1px solid #c9762f;
+  border-radius: 5px;
+  padding: 4px 9px;
+  color: #ffcf8f;
+  box-shadow: 0 0 12px rgba(201, 118, 47, 0.35);
+  animation: streak-pop 0.28s ease-out;
+}
+
+.streak-chip.hot {
+  border-color: #ff9a3c;
+  color: #fff0c8;
+  background: rgba(84, 30, 8, 0.95);
+  box-shadow: 0 0 18px rgba(255, 154, 60, 0.55);
+}
+
+@keyframes streak-pop {
+  from { transform: scale(0.86); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-chip { animation: none; }
+}
+
+/* Companion level, kept small and beside the streak so both read as one status line. */
+.pet-chip {
+  position: absolute;
+  top: 152px;
+  left: clamp(10px, 1.6vw, 22px);
+  margin-top: 26px;
+  font-size: 10px;
+  background: rgba(24, 32, 26, 0.9);
+  border: 1px solid #467a55;
+  border-radius: 5px;
+  padding: 3px 8px;
+  color: #b7e8c4;
+}
+
+/* The streak pushes the pet chip down when both are showing. */
+.streak-chip:not(.hidden) ~ .pet-chip {
+  margin-top: 52px;
+}
+
+/* Item comparison against the worn piece, in the bag panel. */
+.compare-box {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.compare-line {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compare-line.up { color: #7fe0a0; }
+.compare-line.down { color: #ff9fa0; }
 
 /* Effects sitting on the hero: poison, burn, slow, stun, mark. */
 .status-chips {
@@ -2425,6 +2529,161 @@ summary:focus-visible {
 
 .journal-nav a:hover {
   background: var(--panel-2);
+}
+
+/* Five links do not fit one row on a phone, so the nav wraps instead of scrolling sideways. */
+.journal-nav {
+  flex-wrap: wrap;
+}
+
+/* The hero's record: a tidy grid of counters, two to a row on a phone. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stat-cell {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stat-label {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3e3b0;
+}
+
+.stat-note {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Achievements: dim until earned, then the icon fills in. */
+.achv-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.achv-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  opacity: 0.62;
+}
+
+.achv-row.earned {
+  opacity: 1;
+  border-color: rgba(232, 192, 90, 0.5);
+  background: rgba(232, 192, 90, 0.09);
+}
+
+.achv-icon {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--muted);
+  min-width: 18px;
+  text-align: center;
+}
+
+.achv-row.earned .achv-icon {
+  color: var(--gold);
+}
+
+.achv-body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.achv-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+
+/* Titles the hero may wear. The worn one is filled in. */
+.title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.title-chip {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: #d9c8ff;
+  cursor: pointer;
+}
+
+.title-chip:hover {
+  background: var(--panel-2);
+}
+
+.title-chip.worn {
+  border-color: var(--gold);
+  background: rgba(232, 192, 90, 0.16);
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* Fast travel: one wide button per place, the current one greyed out. */
+.travel-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.travel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: #f0e6d2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.travel-row:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--gold);
+}
+
+.travel-row:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.travel-name {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 #hud.map-collapsed .hud-top-right {
