@@ -1,4 +1,5 @@
 import type { QuestDef } from "../types";
+import { SIDE_QUESTS } from "./side-quests";
 
 const defs: QuestDef[] = [
   {
@@ -215,6 +216,13 @@ const expansionQuests: QuestDef[] = [
 ];
 
 for (const quest of expansionQuests) {
+  defs.push(quest);
+  QUESTS[quest.id] = quest;
+}
+
+// Side quests from NPCs outside the village. They use the same registry as everything else,
+// so they show up in the journal, the tracker and the NPC conversation with no extra wiring.
+for (const quest of SIDE_QUESTS) {
   defs.push(quest);
   QUESTS[quest.id] = quest;
 }

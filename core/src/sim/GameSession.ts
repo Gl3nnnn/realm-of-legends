@@ -5,6 +5,7 @@ import {
   DODGE_INVULN,
   DODGE_SPEED,
   INTERACT_RANGE,
+  INVENTORY_SIZE,
   PICKUP_RANGE,
   PERFECT_DODGE_WINDOW,
   PLAYER_RADIUS,
@@ -1444,6 +1445,102 @@ export class GameSession {
 
   countItem(itemId: string): number {
     return this.save.inventory.reduce((sum, stack) => (stack && stack.itemId === itemId ? sum + stack.qty : sum), 0);
+  }
+
+  /** How many free inventory squares are left, so the HUD can warn before a bag is full. */
+  freeSlots(): number {
+    return this.save.inventory.reduce((free, stack) => (stack === null ? free + 1 : free), 0);
+  }
+
+  /** Potions and elixirs on hand, counted by what they do rather than by item id. */
+  consumableCount(kind: "heal" | "resource"): number {
+    return this.save.inventory.reduce((sum, stack) => {
+      if (!stack) return sum;
+      const def = ITEMS[stack.itemId];
+      if (!def || def.type !== "consumable") return sum;
+      if (kind === "heal" && def.heal) return sum + stack.qty;
+      if (kind === "resource" && def.restore) return sum + stack.qty;
+      return sum;
+    }, 0);
+  }
+
+  /**
+   * Sort the backpack so the bag reads neatly: gear by rarity then name, gear first,
+   * then consumables and materials. Empty squares always go last so nothing floats.
+   */
+  sortInventory(): boolean {
+    const order: Record<string, number> = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 };
+    const typeOrder: Record<string, number> = { weapon: 0, armor: 1, helm: 2, boots: 3, trinket: 4, consumable: 5, material: 6 };
+    const stacks = this.save.inventory
+      .filter((stack): stack is ItemStack => Boolean(stack))
+      .sort((a, b) => {
+        const defA = ITEMS[a.itemId];
+        const defB = ITEMS[b.itemId];
+        if (!defA || !defB) return 0;
+        const typeDiff = (typeOrder[defA.type] ?? 9) - (typeOrder[defB.type] ?? 9);
+        if (typeDiff !== 0) return typeDiff;
+        const rarityDiff = (order[defB.rarity] ?? 0) - (order[defA.rarity] ?? 0);
+        if (rarityDiff !== 0) return rarityDiff;
+        return defA.name.localeCompare(defB.name);
+      });
+    if (stacks.length === 0) return false;
+    const before = this.save.inventory.map((stack) => stack?.itemId ?? "").join(",");
+    this.save.inventory = [
+      ...stacks,
+      ...Array.from({ length: Math.max(0, INVENTORY_SIZE - stacks.length) }, () => null),
+    ];
+    const after = this.save.inventory.map((stack) => stack?.itemId ?? "").join(",");
+    if (before === after) return false;
+    this.emit({ type: "log", text: "Backpack sorted.", tone: "info" });
+    return true;
+  }
+
+  /** Sell every stack that only the shop wants: materials and spare potions, never equipped gear. */
+  sellAllMaterials(): number {
+    let gold = 0;
+    let sold = 0;
+    for (let i = 0; i < this.save.inventory.length; i += 1) {
+      const stack = this.save.inventory[i];
+      if (!stack) continue;
+      const def = ITEMS[stack.itemId];
+      if (!def || def.type !== "material") continue;
+      gold += itemSellValue(stack) * stack.qty;
+      sold += stack.qty;
+      this.save.inventory[i] = null;
+    }
+    if (sold === 0) {
+      this.emit({ type: "log", text: "You have no spare materials to sell.", tone: "info" });
+      return 0;
+    }
+    const gained = this.gainGold(gold);
+    this.emit({ type: "log", text: `Sold ${sold} materials for ${gained} gold.`, tone: "good" });
+    this.refreshCollectQuests();
+    return gained;
+  }
+
+  /** Drink the first healing potion on hand, best one first. Returns false when there is none. */
+  drinkBestPotion(kind: "heal" | "resource" = "heal"): boolean {
+    if (this.dead) return false;
+    const slots = this.save.inventory
+      .map((stack, index) => ({ stack, index }))
+      .filter((entry): entry is { stack: ItemStack; index: number } => Boolean(entry.stack))
+      .filter(({ stack }) => {
+        const def = ITEMS[stack.itemId];
+        return Boolean(def && def.type === "consumable" && (kind === "heal" ? def.heal : def.restore));
+      })
+      .sort((a, b) => {
+        const defA = ITEMS[a.stack.itemId];
+        const defB = ITEMS[b.stack.itemId];
+        const amountA = (kind === "heal" ? defA?.heal : defA?.restore) ?? 0;
+        const amountB = (kind === "heal" ? defB?.heal : defB?.restore) ?? 0;
+        return amountB - amountA;
+      });
+    const best = slots[0];
+    if (!best) {
+      this.emit({ type: "log", text: kind === "heal" ? "You have no healing potions left." : `You have no ${this.resourceLabel.toLowerCase()} potions left.`, tone: "bad" });
+      return false;
+    }
+    return this.useItem(best.index);
   }
 
   useItem(slotIndex: number): boolean {

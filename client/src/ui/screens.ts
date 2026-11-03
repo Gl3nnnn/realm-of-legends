@@ -11,6 +11,7 @@ import {
   QUESTS,
   RECIPES,
   SHOPS,
+  SIDE_QUEST_WHISPERS,
   ZONES,
   canClassUse,
   deriveStats,
@@ -21,6 +22,7 @@ import {
   itemDisplayName,
   itemSellValue,
   loreBySubject,
+  monsterGuide,
   revealedLore,
   starterEquipment,
   talentBonuses,
@@ -296,6 +298,10 @@ export function inventoryPanelHtml(
           <div class="chip-row">${filterButtons}</div>
           <div class="chip-row">${sortButtons}</div>
         </div>
+        <div class="bag-tools">
+          <button class="btn ghost small" data-action="quick-sort">Tidy backpack</button>
+          <span class="small muted">${entries.length} of 24 squares used</span>
+        </div>
         <div class="inv-grid">${grid}${fillers}</div>
         ${entries.length === 0 ? `<div class="small muted" style="margin-top:8px">No items match this filter.</div>` : ""}
       </div>
@@ -399,7 +405,11 @@ export function shopPanelHtml(session: GameSession, shopId: string): string {
     <div>
       <div class="section-title">Sell from backpack</div>
       <div class="inv-grid">${sellGrid}</div>
-      <div class="small muted" style="margin-top:10px">Click an item to sell one. Equipped gear cannot be sold here.</div>
+      <div class="bag-tools">
+        <button class="btn ghost small" data-action="sell-materials">Sell all materials</button>
+        <span class="small muted">Click an item to sell one</span>
+      </div>
+      <div class="small muted" style="margin-top:6px">Equipped gear cannot be sold here, and quest items stay in your pack.</div>
     </div>
   </div>
   ${shopId === "forge" ? forgeSectionHtml(session) : ""}`;
@@ -447,10 +457,12 @@ export function questsPanelHtml(session: GameSession): string {
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>`;
   if (active.length === 0) {
-    return `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>
+    return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      ${bestiarySection()}
       ${loreSection}`;
   }
   const rows = active
@@ -468,10 +480,36 @@ export function questsPanelHtml(session: GameSession): string {
       </div>`;
     })
     .join("");
-  return `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a></nav>
+  return `${nav}
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
+    ${bestiarySection()}
     ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
+}
+
+function bestiarySection(): string {
+  const rows = monsterGuide()
+    .map((entry) => {
+      const role = entry.kind === "ranged" ? "Attacks from range" : entry.kind === "support" ? "Supports other monsters" : "Melee fighter";
+      return `<details class="beast-row">
+        <summary>
+          <span class="beast-name">${esc(entry.monster.name)}${entry.monster.boss ? " · Boss" : ""}</span>
+          <span class="beast-level">Lv ${entry.monster.level}</span>
+        </summary>
+        <div class="beast-body">
+          <div class="small muted">${esc(entry.zoneName)} · ${esc(role)}</div>
+          <div class="small">${Math.round(entry.monster.maxHp)} health · ${Math.round(entry.monster.attack)} attack · ${Math.round(entry.monster.speed)} speed</div>
+          ${entry.drops.length ? `<div class="small muted">Drops: ${esc(entry.drops.join(", "))}</div>` : ""}
+          ${entry.quests.length ? `<div class="small" style="color:var(--gold)">Wanted by: ${esc(entry.quests.join(", "))}</div>` : ""}
+        </div>
+      </details>`;
+    })
+    .join("");
+  return `<div class="lore-section" id="journal-bestiary">
+    <div class="qtitle">Bestiary</div>
+    <div class="small muted">Every creature in the realm, where it lives, and what wants it dead.</div>
+    <div class="beast-list">${rows}</div>
+  </div>`;
 }
 
 /** Pick an NPC line that fits the player's level, accepted quests and beaten bosses. */
@@ -493,6 +531,15 @@ function npcDialogueFor(session: GameSession, npcId: string): string {
   const relationship = save.relationships[npcId] ?? 0;
   if (relationship >= 3) return `${dialogue} I have come to trust you.`;
   if (relationship <= -3) return `${dialogue} I will not forget your words.`;
+  // A giver with side work to offer always mentions it, so a new quest is never missed.
+  const whisper = SIDE_QUEST_WHISPERS[npcId];
+  if (whisper) {
+    const offered = (npc.quests ?? []).some((id) => {
+      const state = save.quests.find((entry) => entry.id === id);
+      return !state && (QUESTS[id]?.requiresLevel ?? 1) <= save.level;
+    });
+    if (offered) return `${dialogue} ${whisper}`;
+  }
   return dialogue;
 }
 

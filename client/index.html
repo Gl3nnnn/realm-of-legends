@@ -74,15 +74,20 @@
           <span id="hud-gold" class="gold">0 g</span>
         </div>
         <canvas id="minimap" width="264" height="198" aria-label="Minimap"></canvas>
-        <div class="minimap-key" aria-hidden="true"><span><i class="key-you"></i>You</span><span><i class="key-enemy"></i>Enemy</span><span><i class="key-boss"></i>Boss</span><span><i class="key-npc"></i>NPC</span><span><i class="key-chest"></i>Chest</span></div>
+        <div class="minimap-key" aria-hidden="true"><span><i class="key-you"></i>You</span><span><i class="key-enemy"></i>Enemy</span><span><i class="key-boss"></i>Boss</span><span><i class="key-npc"></i>NPC</span><span><i class="key-chest"></i>Chest</span><span><i class="key-quest"></i>Quest</span></div>
       </div>
 
       <div id="boss-bar" class="boss-bar hidden">
-        <div class="boss-name" id="boss-name">The Bone Warden</div>
+        <div class="boss-head">
+          <span class="boss-name" id="boss-name">The Bone Warden</span>
+          <span class="boss-hp" id="boss-hp">0 / 0</span>
+        </div>
         <div class="bar boss"><div id="boss-fill" class="bar-fill"></div></div>
       </div>
 
       <div id="buff-bar" class="buff-bar"></div>
+      <div id="status-chips" class="status-chips" aria-live="polite" aria-label="Active effects"></div>
+      <div id="danger-vignette" class="danger-vignette hidden" aria-hidden="true"></div>
       <div id="quest-tracker" class="quest-tracker" aria-live="polite" aria-label="Quest tracker"></div>
       <div id="quest-compass" class="quest-compass hidden"></div>
 

@@ -1,4 +1,4 @@
-import type { ResourceKind } from "./types";
+import type { ResourceKind, StatusInstance } from "./types";
 
 export const TICK_RATE = 60;
 export const FIXED_DT = 1 / TICK_RATE;
@@ -42,3 +42,12 @@ export const RARITY_COLORS = {
   epic: "#b05ce8",
   legendary: "#ef9c3a",
 } as const;
+
+/** Plain-words names and colours for the effects that can sit on the hero. */
+export const STATUS_DISPLAY: Record<StatusInstance["kind"], { label: string; icon: string; color: string; hint: string }> = {
+  poison: { label: "Poisoned", icon: "☠", color: "#b8f04a", hint: "Losing health over time" },
+  burn: { label: "Burning", icon: "🔥", color: "#ff7a2e", hint: "Fire damage over time" },
+  slow: { label: "Slowed", icon: "🐌", color: "#7fb3d5", hint: "Moving slower" },
+  stun: { label: "Stunned", icon: "💫", color: "#ffe27a", hint: "Cannot move or act" },
+  mark: { label: "Marked", icon: "🎯", color: "#c98bff", hint: "Taking extra damage" },
+};

@@ -1,5 +1,11 @@
 import type { NpcDef, ShopDef } from "../types";
 import { CLASS_STARTER_WEAPON_IDS, EXPANSION_GEAR_IDS, EXPANSION_SUPPLY_IDS, EXPANSION_WEAPON_IDS } from "./items";
+import { SIDE_QUESTS } from "./side-quests";
+
+/** Quest ids for one giver, taken from the side-quest list so the two never drift apart. */
+function sideQuestsFor(npcId: string): string[] {
+  return SIDE_QUESTS.filter((quest) => quest.giverNpc === npcId).map((quest) => quest.id);
+}
 
 export const NPCS: Record<string, NpcDef> = {
   guard: {
@@ -78,6 +84,7 @@ export const NPCS: Record<string, NpcDef> = {
       "You look like you can handle yourself. If you see Wade, tell him the stew is getting cold.",
       "Wade is out there somewhere. Thank you for not giving up on him.",
     ],
+    quests: sideQuestsFor("tobin"),
   },
   wenna: {
     id: "wenna",
@@ -90,6 +97,7 @@ export const NPCS: Record<string, NpcDef> = {
       "The Miremother was a mother once. Her grief rotted into something hungry.",
       "You have seen the bog's true face and walked on anyway. The marsh will hear of it.",
     ],
+    quests: sideQuestsFor("wenna"),
   },
   ysolde: {
     id: "ysolde",
@@ -102,6 +110,7 @@ export const NPCS: Record<string, NpcDef> = {
       "The Frost Revenant came out of the ice the night the watchtower fell. I still hear its call.",
       "You stood against the ice when no one else would. I will tell the others the wastes can be crossed.",
     ],
+    quests: sideQuestsFor("ysolde"),
   },
   aldric: {
     id: "aldric",
@@ -114,6 +123,7 @@ export const NPCS: Record<string, NpcDef> = {
       "The Hollow King spoke to me in his own voice. I wish I had not listened.",
       "Mercy at last. Go, and tell the living that the throne is empty.",
     ],
+    quests: sideQuestsFor("aldric"),
   },
 };
 

@@ -8,7 +8,10 @@ import {
   createCharacter,
   getClass,
   getItem,
+  getTalentTree,
   migrateSave,
+  nextStep,
+  STATUS_DISPLAY,
   portraitFrame,
   xpToNext,
   type CharacterSave,
@@ -123,6 +126,8 @@ export class UIManager {
   private quickbarSignature = "";
   private questSignature = "";
   private buffSignature = "";
+  private statusSignature = "";
+  private lowHealthShown = false;
   private compassSignature = "";
   private minimapZone: string | null = null;
   private minimapBase: HTMLCanvasElement | null = null;
@@ -160,8 +165,11 @@ export class UIManager {
     compass: must("quest-compass"),
     tutorial: must("tutorial"),
     buffBar: must("buff-bar"),
+    statusChips: must("status-chips"),
+    dangerVignette: must("danger-vignette"),
     bossBar: must("boss-bar"),
     bossName: must("boss-name"),
+    bossHp: must("boss-hp"),
     bossFill: must("boss-fill"),
     death: must("death-overlay"),
     deathTimer: must("death-timer"),
@@ -359,7 +367,7 @@ export class UIManager {
       if (!target || !this.session) return;
       const index = Number(target.dataset.quickslot);
       if (!Number.isInteger(index)) return;
-      this.session.useQuickSlot(index);
+      this.useQuickSlotOrBest(index);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
     });
@@ -718,10 +726,23 @@ export class UIManager {
       this.toggleMinimap();
     } else if (keyNameFromEvent(event) === this.preferences.keybinds.quick1 || keyNameFromEvent(event) === this.preferences.keybinds.quick2) {
       event.preventDefault();
-      this.session.useQuickSlot(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
+      this.useQuickSlotOrBest(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
     }
+  }
+
+  /**
+   * Use the potion bound to a quick slot. When that slot is empty or the bottle is gone,
+   * drink the best matching potion in the bag instead, so a fight is never lost to bookkeeping.
+   */
+  private useQuickSlotOrBest(index: number): void {
+    const session = this.session;
+    if (!session) return;
+    if (session.save.quickSlots[index]) {
+      if (session.useQuickSlot(index)) return;
+    }
+    session.drinkBestPotion(index === 0 ? "heal" : "resource");
   }
 
   private async onSelectAction(action: string, id: string, classId?: ClassId): Promise<void> {
@@ -1213,6 +1234,10 @@ export class UIManager {
         }
       } else if (action === "unequip" && target.dataset.slot) {
         changed = session.unequip(target.dataset.slot as keyof CharacterSave["equipment"]);
+      } else if (action === "quick-sort") {
+        changed = session.sortInventory();
+        if (changed) this.toast("Backpack tidied.", "good");
+        else this.toast("Your backpack is already tidy.", "info");
       }
       if (!changed) this.selectedSlot = null;
       else {
@@ -1230,6 +1255,10 @@ export class UIManager {
         changed = session.upgradeEquipped(target.dataset.slot as keyof CharacterSave["equipment"]);
       } else if (action === "craft" && target.dataset.recipe) {
         changed = session.craft(target.dataset.recipe);
+      } else if (action === "sell-materials") {
+        const gained = session.sellAllMaterials();
+        changed = gained > 0;
+        if (changed) this.toast(`Sold everything spare for ${gained} gold.`, "good");
       }
       if (changed) this.sfx.coin();
       this.renderPanel();
@@ -1491,9 +1520,40 @@ export class UIManager {
     this.updateQuestTracker();
     this.updateCompass();
     this.updateBuffs();
+    this.updateStatuses();
+    this.updateDangerVignette(hpPct);
     this.updateBoss();
     this.updatePrompt();
     this.dom.death.classList.toggle("hidden", !session.dead);
+  }
+
+  /** Show the effects sitting on the hero as small chips, so a poison or a stun is never a mystery. */
+  private updateStatuses(): void {
+    if (!this.session) return;
+    const statuses = this.session.statuses;
+    const signature = statuses.map((status) => `${status.kind}:${Math.ceil(status.remaining)}`).join("|");
+    if (signature === this.statusSignature) return;
+    this.statusSignature = signature;
+    this.dom.statusChips.innerHTML = statuses
+      .map((status) => {
+        const display = STATUS_DISPLAY[status.kind];
+        return `<span class="status-chip" style="--status-color:${display.color}" title="${esc(display.label)}: ${esc(display.hint)}">
+          <span class="status-icon" aria-hidden="true">${display.icon}</span>
+          <span>${esc(display.label)}</span>
+          <span class="status-time">${Math.ceil(status.remaining)}s</span>
+        </span>`;
+      })
+      .join("");
+  }
+
+  /** A red edge around the screen once health is low, so the danger is felt before the bar is read. */
+  private updateDangerVignette(hpPct: number): void {
+    if (!this.session) return;
+    const low = !this.session.dead && hpPct <= 30;
+    if (low === this.lowHealthShown) return;
+    this.lowHealthShown = low;
+    this.dom.dangerVignette.classList.toggle("hidden", !low);
+    this.dom.dangerVignette.classList.toggle("critical", hpPct <= 15);
   }
 
   private updateQuestTracker(): void {
@@ -1505,7 +1565,9 @@ export class UIManager {
     const storyIndex = this.session.save.storyChapter + 1;
     const nextStory = storyIndex < STORY_CHAPTERS.length ? STORY_CHAPTERS[storyIndex] : null;
     const storyKey = nextStory ? `story:${storyIndex}` : "story:done";
-    const signature = `${storyKey}|` + active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|");
+    const step = nextStep(this.session.save);
+    const stepSignature = step ? `${step.title}:${step.zone}:${step.level}` : "none";
+    const signature = `${storyKey}|${stepSignature}|` + active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|");
     if (signature === this.questSignature) return;
     this.questSignature = signature;
     const storyBossId = nextStory?.bossId ?? "";
@@ -1516,7 +1578,19 @@ export class UIManager {
     const storyLine = nextStory
       ? `<div class="quest-chip"><div class="qname">Story: ${esc(nextStory.title)}</div><div>Defeat ${esc(storyBossPhrase)}${storyWhere} to continue the story.</div></div>`
       : "";
-    this.dom.questTracker.innerHTML = storyLine + active
+    const stepCard = step
+      ? `<div class="next-step">
+          <div class="next-step-label">Do this next</div>
+          <div class="next-step-title">${esc(step.title)}</div>
+          <div class="next-step-detail">${esc(step.detail)}</div>
+          <div class="next-step-where">${esc(step.zoneName)}${this.session.save.level < step.level - 1 ? ` · aimed at level ${step.level}` : ""}</div>
+        </div>`
+      : "";
+    const warnings = this.hudWarnings();
+    const warningCard = warnings.length
+      ? `<div class="hud-warning">${warnings.map((line) => `<div>${esc(line)}</div>`).join("")}</div>`
+      : "";
+    this.dom.questTracker.innerHTML = stepCard + warningCard + storyLine + active
       .map((state) => {
         const quest = QUESTS[state.id];
         const lines = quest.objectives
@@ -1534,6 +1608,28 @@ export class UIManager {
         return `<div class="quest-chip"><div class="qname">${esc(quest.name)}</div>${lines}${ready ? `<div class="qready">Ready to turn in</div>` : ""}</div>`;
       })
       .join("");
+  }
+
+  /**
+   * Short warnings about the state of the hero, written the way a friend would say them:
+   * mention it before it becomes a problem, and never more than two at a time.
+   */
+  private hudWarnings(): string[] {
+    const session = this.session;
+    if (!session || session.dead) return [];
+    const save = session.save;
+    const stats = session.stats;
+    const warnings: string[] = [];
+    const hpPct = stats.maxHp > 0 ? save.hp / stats.maxHp : 1;
+    if (hpPct <= 0.35 && session.consumableCount("heal") === 0) {
+      warnings.push("No healing potions left. Visit Elara in the village.");
+    } else if (hpPct <= 0.2) {
+      warnings.push("Health is low. Drink a potion or fall back.");
+    }
+    const free = session.freeSlots();
+    if (free === 0) warnings.push("Backpack is full. Sell something before you loot.");
+    else if (free <= 2) warnings.push(`Only ${free} empty backpack squares left.`);
+    return warnings.slice(0, 2);
   }
 
   private updateBuffs(): void {
@@ -1562,6 +1658,7 @@ export class UIManager {
     const def = MONSTERS[boss.defId];
     const maxHp = boss.maxHp ?? def.maxHp;
     this.dom.bossName.textContent = `${def.name}${boss.phase ? ` · Phase ${boss.phase + 1}` : ""}`;
+    this.dom.bossHp.textContent = `${formatNumber(boss.hp)} / ${formatNumber(maxHp)}`;
     this.dom.bossFill.style.width = `${Math.max(0, (boss.hp / maxHp) * 100)}%`;
     this.dom.bossBar.classList.remove("hidden");
   }
@@ -1878,6 +1975,7 @@ export class UIManager {
         case "levelup":
           this.pushLog(`Level up! You are now level ${event.level}.`, "good");
           this.toast(t("levelUp", { level: event.level }), "good");
+          this.announceUnlocks(event.level);
           this.sfx.level();
           this.abilitySignature = "";
           shouldPersist = true;
@@ -1946,6 +2044,29 @@ export class UIManager {
   }
 
   private logLines: { text: string; tone: string }[] = [];
+
+  /**
+   * On a level-up, say what the player actually gained: a new skill, a new talent tier, or both.
+   * Otherwise a level-up is just a number and the new button goes unnoticed.
+   */
+  private announceUnlocks(level: number): void {
+    const session = this.session;
+    if (!session) return;
+    const skills = session.classInfo.abilities.filter((ability) => ability.unlockLevel === level);
+    for (const skill of skills) {
+      this.toast(`New skill: ${skill.name}. Press ${session.classInfo.abilities.indexOf(skill) + 1}.`, "good");
+      this.pushLog(`New skill unlocked: ${skill.name} - ${skill.description}`, "good");
+    }
+    const tree = getTalentTree(session.save.classId);
+    const tier = tree.tiers.find((entry) => entry.choices[0]?.level === level);
+    if (tier) {
+      this.toast("A new talent is ready. Press T to choose one.", "quest");
+      this.pushLog("A new talent tier is available. Open Talents with T.", "good");
+    }
+    if (level % 10 === 0) {
+      this.pushLog(`Level ${level}. Master Kael will have something to say about that.`, "info");
+    }
+  }
 
   pushLog(text: string, tone = "info"): void {
     this.logLines.push({ text, tone });
