@@ -21,6 +21,24 @@
       </div>
     </div>
 
+    <div id="update-board" class="screen hidden" role="dialog" aria-modal="true" aria-labelledby="update-title">
+      <div class="update-shell">
+        <header class="update-header">
+          <div>
+            <div class="eyebrow">A pixel adventure</div>
+            <h1 id="update-title">Update board</h1>
+            <p class="muted">What changed since you last set out. Read it before you choose a hero.</p>
+          </div>
+          <span id="update-latest" class="update-version-chip">v1.0.0</span>
+        </header>
+        <section id="update-list" class="update-list" aria-label="Game updates"></section>
+        <footer class="update-footer">
+          <span id="update-note" class="muted small"></span>
+          <button class="btn" id="update-continue">Enter Eldoria</button>
+        </footer>
+      </div>
+    </div>
+
     <div id="char-select" class="screen hidden" aria-live="polite">
       <div class="select-shell">
         <header class="select-header">
@@ -30,6 +48,7 @@
             <p class="muted">Choose a hero, or forge a new legend. Everything is saved in this browser.</p>
           </div>
           <div class="select-actions">
+            <button class="btn ghost" id="btn-update-board">Update board<span id="update-badge" class="update-badge hidden"></span></button>
             <button class="btn ghost" id="btn-import-save">Import save</button>
             <input type="file" id="import-file" accept="application/json,.json" hidden />
           </div>

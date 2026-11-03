@@ -8,6 +8,21 @@ import { expect, test } from "@playwright/test";
  * click waits for the button to hold perfectly still, and one that a closing page removes mid-press
  * can wait for ever, which is what made this hang on the build machine.
  */
+/**
+ * A new browser profile sees the update board before the hero list. Read past it when it is
+ * there, and go straight on when it is not (a profile that has already read the notes).
+ */
+async function openHeroSelect(page: import("@playwright/test").Page) {
+  const boardButton = page.locator("#update-continue");
+  const importButton = page.locator("#btn-import-save");
+  await Promise.race([
+    boardButton.waitFor({ state: "visible" }),
+    importButton.waitFor({ state: "visible" }),
+  ]);
+  if (await boardButton.isVisible()) await boardButton.click();
+  await expect(importButton).toBeVisible();
+}
+
 async function skipIntro(page: import("@playwright/test").Page) {
   const box = page.locator(".story-box");
   await expect(box.first()).toBeVisible({ timeout: 20000 });
@@ -24,11 +39,29 @@ async function skipIntro(page: import("@playwright/test").Page) {
   await expect(box).toHaveCount(0);
 }
 
+test("reads the update board before choosing a hero, and can reopen it", async ({ page }) => {
+  await page.goto("/");
+  const board = page.locator("#update-board");
+  await expect(board).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Update board" })).toBeVisible();
+  await expect(board).toContainText("The Chronicler's Update");
+
+  await page.locator("#update-continue").click();
+  await expect(board).toBeHidden();
+  await expect(page.locator("#btn-import-save")).toBeVisible();
+
+  await page.locator("#btn-update-board").click();
+  await expect(board).toBeVisible();
+  await page.locator("#update-continue").click();
+  await expect(board).toBeHidden();
+});
+
 test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.goto("/");
+  await openHeroSelect(page);
   await expect(page.getByRole("heading", { name: "Realm of Legends" })).toBeVisible();
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("E2E Hero");
@@ -69,6 +102,7 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
 
 test("rebinds and restores keys from settings", async ({ page }) => {
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Bind Hero");
   await page.locator('[data-action="create-character"]').click();
@@ -96,6 +130,7 @@ test("opens settings from a gamepad Start press", async ({ page }) => {
   });
 
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Pad Hero");
   await page.locator('[data-action="create-character"]').click();
@@ -107,6 +142,7 @@ test("opens settings from a gamepad Start press", async ({ page }) => {
 
 test("enables touch controls for touch-capable players", async ({ page }) => {
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Touch Hero");
   await page.locator('[data-action="create-character"]').click();
@@ -124,6 +160,7 @@ test("enables touch controls for touch-capable players", async ({ page }) => {
 test("class browsing filters correctly and stays within a phone viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
 
   const search = page.locator("[data-class-search]");
@@ -153,6 +190,7 @@ test("class browsing filters correctly and stays within a phone viewport", async
 
 test("minimap toggle updates its visibility and accessible state", async ({ page }) => {
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Map Hero");
   await page.locator('[data-action="create-character"]').click();
@@ -171,6 +209,7 @@ test("minimap toggle updates its visibility and accessible state", async ({ page
 
 test("journal navigation and modal keyboard focus are accessible", async ({ page }) => {
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill("Focus Hero");
   await page.locator('[data-action="create-character"]').click();

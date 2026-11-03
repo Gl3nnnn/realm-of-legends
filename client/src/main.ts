@@ -27,7 +27,7 @@ const ui = new UIManager({
 
 game.events.once("boot-ready", () => {
   game.scene.stop("boot");
-  void ui.showCharacterSelect();
+  void ui.startup();
 });
 
 game.events.once("boot-error", () => {

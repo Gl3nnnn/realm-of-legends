@@ -24,6 +24,7 @@ import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
 import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText, bountyLabel } from "./helpers";
+import { LATEST_UPDATE, hasUnreadUpdates, markUpdatesSeen, unreadUpdateCount, updateBoardHtml } from "./changelog";
 import { t } from "./text";
 import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
@@ -156,10 +157,17 @@ export class UIManager {
   // Enter or Space also turns a page, the way other games let you read on.
   private storyKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   private storyTimer: number | null = null;
+  private updateBoardClose: (() => void) | null = null;
 
   private readonly dom = {
     boot: must("boot-screen"),
     charSelect: must("char-select"),
+    updateBoard: must("update-board"),
+    updateList: must("update-list"),
+    updateLatest: must("update-latest"),
+    updateNote: must("update-note"),
+    updateContinue: must<HTMLButtonElement>("update-continue"),
+    updateBadge: must("update-badge"),
     saveList: must("save-list"),
     createPanel: must("create-panel"),
     saveCount: must("save-count"),
@@ -235,10 +243,50 @@ export class UIManager {
     setLanguage(this.preferences.language);
     this.updateMinimapLabel();
     this.bindEvents();
+    this.updateBoardBadge();
 
     window.setInterval(() => {
       if (this.session && !this.session.dead) void this.persist();
     }, AUTOSAVE_MS);
+  }
+
+  /** Boot hand-off: a new patch is read on the update board before the hero list appears. */
+  async startup(): Promise<void> {
+    if (hasUnreadUpdates()) {
+      this.showUpdateBoard(() => void this.showCharacterSelect());
+    } else {
+      await this.showCharacterSelect();
+    }
+  }
+
+  /** The update board, either on launch or reopened from the hero list. */
+  private showUpdateBoard(onClose?: () => void): void {
+    this.updateBoardClose = onClose ?? null;
+    this.dom.updateList.innerHTML = updateBoardHtml();
+    this.dom.updateLatest.textContent = `v${LATEST_UPDATE.version}`;
+    const unread = unreadUpdateCount();
+    this.dom.updateNote.textContent = unread > 0
+      ? `${unread} new update${unread === 1 ? "" : "s"} since your last visit.`
+      : "You are all caught up. Older notes are kept below.";
+    this.dom.updateBoard.classList.remove("hidden");
+    this.sfx.ui();
+    requestAnimationFrame(() => this.dom.updateContinue.focus());
+  }
+
+  private closeUpdateBoard(): void {
+    if (this.dom.updateBoard.classList.contains("hidden")) return;
+    this.dom.updateBoard.classList.add("hidden");
+    markUpdatesSeen();
+    this.updateBoardBadge();
+    const done = this.updateBoardClose;
+    this.updateBoardClose = null;
+    done?.();
+  }
+
+  private updateBoardBadge(): void {
+    const unread = unreadUpdateCount();
+    this.dom.updateBadge.classList.toggle("hidden", unread === 0);
+    this.dom.updateBadge.textContent = unread > 9 ? "9+" : String(unread);
   }
 
   get modalOpen(): boolean {
@@ -296,6 +344,7 @@ export class UIManager {
     this.dom.touchControls.classList.add("hidden");
     this.dom.log.innerHTML = "";
     await this.renderSelect();
+    this.updateBoardBadge();
   }
 
   attachSession(session: GameSession): void {
@@ -382,6 +431,8 @@ export class UIManager {
   }
 
   private bindEvents(): void {
+    must("btn-update-board").addEventListener("click", () => this.showUpdateBoard());
+    this.dom.updateContinue.addEventListener("click", () => this.closeUpdateBoard());
     must("tutorial-close").addEventListener("click", () => this.dismissTutorial());
     this.dom.quickbar.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-quickslot]");
@@ -683,6 +734,13 @@ export class UIManager {
         const onDelete = document.activeElement === this.dom.confirmDelete;
         (onDelete ? this.dom.confirmKeep : this.dom.confirmDelete).focus();
         return;
+      }
+      return;
+    }
+    if (!this.dom.updateBoard.classList.contains("hidden")) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeUpdateBoard();
       }
       return;
     }

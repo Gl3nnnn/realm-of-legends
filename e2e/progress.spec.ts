@@ -1,7 +1,19 @@
 import { expect, test } from "@playwright/test";
 
+async function openHeroSelect(page: import("@playwright/test").Page) {
+  const boardButton = page.locator("#update-continue");
+  const importButton = page.locator("#btn-import-save");
+  await Promise.race([
+    boardButton.waitFor({ state: "visible" }),
+    importButton.waitFor({ state: "visible" }),
+  ]);
+  if (await boardButton.isVisible()) await boardButton.click();
+  await expect(importButton).toBeVisible();
+}
+
 async function createHero(page: import("@playwright/test").Page, name: string) {
   await page.goto("/");
+  await openHeroSelect(page);
   await page.locator('[data-action="new-character"]').click();
   await page.locator("#char-name").fill(name);
   await page.locator('[data-action="create-character"]').click();
