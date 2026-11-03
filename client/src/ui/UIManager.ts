@@ -158,6 +158,7 @@ export class UIManager {
   private storyKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   private storyTimer: number | null = null;
   private updateBoardClose: (() => void) | null = null;
+  private updateBoardOpener: HTMLElement | null = null;
 
   private readonly dom = {
     boot: must("boot-screen"),
@@ -168,6 +169,7 @@ export class UIManager {
     updateNote: must("update-note"),
     updateContinue: must<HTMLButtonElement>("update-continue"),
     updateBadge: must("update-badge"),
+    hudUpdate: must("hud-update-board"),
     saveList: must("save-list"),
     createPanel: must("create-panel"),
     saveCount: must("save-count"),
@@ -259,9 +261,10 @@ export class UIManager {
     }
   }
 
-  /** The update board, either on launch or reopened from the hero list. */
+  /** The update board, either on launch, from the hero list, or from inside the game. */
   private showUpdateBoard(onClose?: () => void): void {
     this.updateBoardClose = onClose ?? null;
+    this.updateBoardOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.dom.updateList.innerHTML = updateBoardHtml();
     this.dom.updateLatest.textContent = `v${LATEST_UPDATE.version}`;
     const unread = unreadUpdateCount();
@@ -269,6 +272,7 @@ export class UIManager {
       ? `${unread} new update${unread === 1 ? "" : "s"} since your last visit.`
       : "You are all caught up. Older notes are kept below.";
     this.dom.updateBoard.classList.remove("hidden");
+    this.refreshTouchVisibility();
     this.sfx.ui();
     requestAnimationFrame(() => this.dom.updateContinue.focus());
   }
@@ -278,6 +282,10 @@ export class UIManager {
     this.dom.updateBoard.classList.add("hidden");
     markUpdatesSeen();
     this.updateBoardBadge();
+    this.refreshTouchVisibility();
+    const opener = this.updateBoardOpener;
+    this.updateBoardOpener = null;
+    if (opener?.isConnected && !opener.closest(".hidden")) opener.focus();
     const done = this.updateBoardClose;
     this.updateBoardClose = null;
     done?.();
@@ -290,7 +298,11 @@ export class UIManager {
   }
 
   get modalOpen(): boolean {
-    return this.panel !== null || this.confirmAsk !== null || this.introActive || !this.dom.tutorial.classList.contains("hidden");
+    return this.panel !== null
+      || this.confirmAsk !== null
+      || this.introActive
+      || !this.dom.updateBoard.classList.contains("hidden")
+      || !this.dom.tutorial.classList.contains("hidden");
   }
 
   /** True while the ask-again modal is up, so gamepad menus wait their turn. */
@@ -432,6 +444,7 @@ export class UIManager {
 
   private bindEvents(): void {
     must("btn-update-board").addEventListener("click", () => this.showUpdateBoard());
+    this.dom.hudUpdate.addEventListener("click", () => this.showUpdateBoard());
     this.dom.updateContinue.addEventListener("click", () => this.closeUpdateBoard());
     must("tutorial-close").addEventListener("click", () => this.dismissTutorial());
     this.dom.quickbar.addEventListener("click", (event) => {
@@ -1293,6 +1306,10 @@ export class UIManager {
     }
     if (action === "open-controls") {
       this.openPanel("controls");
+      return;
+    }
+    if (action === "open-update-board") {
+      this.showUpdateBoard();
       return;
     }
     if (action === "reset-tutorial") {

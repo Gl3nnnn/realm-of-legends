@@ -75,7 +75,17 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   await page.locator("#tutorial-close").click();
   await expect(page.locator("#tutorial")).toBeHidden();
 
+  await page.locator("#hud-update-board").click();
+  await expect(page.locator("#update-board")).toBeVisible();
+  await page.locator("#update-continue").click();
+  await expect(page.locator("#update-board")).toBeHidden();
+
   await page.locator('[data-panel="settings"]').click();
+  await expect(page.locator("#difficulty-select")).toBeVisible();
+  await page.locator('[data-action="open-update-board"]').click();
+  await expect(page.locator("#update-board")).toBeVisible();
+  await page.locator("#update-continue").click();
+  await expect(page.locator("#update-board")).toBeHidden();
   await expect(page.locator("#difficulty-select")).toBeVisible();
   await page.locator("#difficulty-select").selectOption("nightmare");
   await expect(page.locator("#hud-cycle")).toHaveText("Nightmare");

@@ -1067,6 +1067,7 @@ export function settingsPanelHtml(
         </label>
         <button class="btn ghost small" data-action="reset-tutorial">${t("btnShowTutorial")}</button>
         <button class="btn ghost small" data-action="open-controls">Controls sheet (?)</button>
+        <button class="btn ghost small" data-action="open-update-board">Update board</button>
       </div>
     </div>
     <div class="setting-row">
