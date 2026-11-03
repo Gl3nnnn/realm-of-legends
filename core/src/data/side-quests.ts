@@ -95,6 +95,57 @@ export const SIDE_QUESTS: QuestDef[] = [
     requiresLevel: 24,
     requires: ["the_silent_guard"],
   },
+  {
+    id: "frost_in_the_bones",
+    name: "Frost in the Bones",
+    giverNpc: "ysolde",
+    description:
+      "Ysolde says the wraiths on the ice road freeze before they bite. Break their cold with fire and they come apart. She wants to see it done, not hear about it.",
+    objectives: [{ kind: "kill", monsterId: "frost_wraith", count: 5 }],
+    rewards: { xp: 2400, gold: 420, items: [{ itemId: "greater_health_potion", qty: 2 }] },
+    requiresLevel: 16,
+    requires: ["watchtower_light"],
+  },
+  {
+    id: "elaras_quiet_ward",
+    name: "A Quiet Ward",
+    giverNpc: "healer",
+    description:
+      "Elara can mend a body, but not a habit. She asks you to bring her eight sprigs of silverleaf so she can teach the village children which green things bite back.",
+    objectives: [{ kind: "collect", itemId: "herb", count: 8 }],
+    rewards: { xp: 320, gold: 90, items: [{ itemId: "health_potion", qty: 3 }] },
+    requiresLevel: 3,
+  },
+  {
+    id: "mira_owes_nobody",
+    name: "Mira Owes Nobody",
+    giverNpc: "merchant",
+    description:
+      "A cart went over on the marsh road and Mira will not send her own people after it. Clear the spiders from the stretch where it fell, and she will call the debt settled.",
+    objectives: [{ kind: "kill", monsterId: "venom_spider", count: 4 }],
+    rewards: { xp: 900, gold: 260, items: [{ itemId: "traveler_boots", qty: 1 }] },
+    requiresLevel: 11,
+  },
+  {
+    id: "borin_hears_the_forge",
+    name: "Borin Hears the Forge",
+    giverNpc: "blacksmith",
+    description:
+      "Borin swears the anvil rings wrong since the mire woke up. Bring him five iron ore dug from ground the marsh has not touched, and he will set the forge right.",
+    objectives: [{ kind: "collect", itemId: "iron_ore", count: 5 }],
+    rewards: { xp: 1100, gold: 200, items: [{ itemId: "chainmail", qty: 1 }] },
+    requiresLevel: 9,
+  },
+  {
+    id: "kaels_last_lesson",
+    name: "Master Kael's Last Lesson",
+    giverNpc: "trainer",
+    description:
+      "Master Kael has taught every stance he knows. The last one he cannot teach: bring him proof that you have stood in every kind of ground the realm offers.",
+    objectives: [{ kind: "explore", zones: ["village", "forest", "dungeon", "marsh"] }],
+    rewards: { xp: 2200, gold: 340, items: [{ itemId: "gemstone", qty: 1 }] },
+    requiresLevel: 13,
+  },
 ];
 
 /** Extra lore lines that name the side quests, so the journal and the NPC always agree. */
@@ -103,4 +154,8 @@ export const SIDE_QUEST_WHISPERS: Record<string, string> = {
   wenna: "The marsh keeps count of what it swallows. So do I. Bring me proof and I will teach you where it hides.",
   ysolde: "The watchtower light is what told us the road was clear. Now there is no light, and no one to light it.",
   aldric: "I will not be the one who lets the throne stay empty. Not again. Not after everything that came through it.",
+  merchant: "A cart went over on the marsh road last week. I have not sent anyone after it. I would rather owe you than lose someone.",
+  blacksmith: "Listen to that anvil. It rings flat, like the steel is remembering something. I need clean ore and I need it before I lose the knack.",
+  healer: "Silverleaf grows where the light falls clean. Bring me a handful and I will teach the children which green things bite back.",
+  trainer: "There is nothing left I can show you on a training yard. Go and stand where the ground itself is trying to kill you.",
 };

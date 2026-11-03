@@ -2,6 +2,7 @@ import { ITEMS, createItemInstance, isEquippable } from "../data/items";
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { STORY_CHAPTERS, NG_PLUS_HOLLOW_ENDING } from "../data/story";
 import { length } from "./geometry";
+import { writeDiary } from "./diary";
 import type { DamageType, ItemStack, MonsterInstance, StatusInstance } from "../types";
 import type { GameSession } from "./GameSession";
 
@@ -67,6 +68,7 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   const firstBossKill = def.boss && !s.save.defeatedBosses.includes(def.id);
   if (firstBossKill) {
     s.save.defeatedBosses.push(def.id);
+    writeDiary(s.save, "boss", `Defeated ${def.name} in ${s.zone.name}.`);
     if (def.id === "bone_warden") s.openDungeonWing();
   }
   if (def.boss) advanceStoryFromBoss(s);
@@ -134,6 +136,22 @@ export function hitMonster(
   const defenseMultiplier = armorPiercing ? 1 : 100 / (100 + def.defense * 2.5 * eliteDefense);
   const mitigated = Math.max(1, Math.round(raw * defenseMultiplier * (marked ? 1.2 : 1) * execute));
   monster.hp -= mitigated;
+  // Hitting a burning or frozen thing with a different element wakes a reaction for a little extra.
+  const reactionBonus = s.wakeReaction(monster, damageType);
+  if (reactionBonus > 0) {
+    const bonus = Math.max(1, Math.round(mitigated * reactionBonus));
+    monster.hp -= bonus;
+    s.emit({
+      type: "damage",
+      target: "monster",
+      uid: monster.uid,
+      amount: bonus,
+      crit: false,
+      x: monster.x,
+      y: monster.y,
+      damageType,
+    });
+  }
   if (mitigated > s.save.stats.bestHit) s.save.stats.bestHit = mitigated;
   if (mods.lifesteal > 0) s.healPlayer(mitigated * (mods.lifesteal / 100));
   s.lastCombat = s.elapsed;

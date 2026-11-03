@@ -145,6 +145,52 @@ export const LORE_ENTRIES: LoreEntry[] = [
     requiresBoss: "frost_revenant",
     about: "frost_revenant",
   },
+  // The Hollow King: the last chapter, told as a warning rather than a legend.
+  {
+    id: "king_1",
+    title: "The King Who Listened",
+    text:
+      "There was a king in Eldoria who held court every morning and heard every complaint, down to the price of bread. The records are clear on this. The records are also clear that he stopped.",
+    chapter: 2,
+    requiresBoss: "frost_revenant",
+    about: "hollow_king",
+  },
+  {
+    id: "king_2",
+    title: "The Cold Court",
+    text:
+      "The first thing to go was the fire in the great hall. He said a king should not need warming. The second was the garden. The third was the sound of anyone speaking out of turn, and after that nobody spoke at all.",
+    chapter: 2,
+    requiresBoss: "frost_revenant",
+    about: "hollow_king",
+  },
+  {
+    id: "king_3",
+    title: "What the Throne Wanted",
+    text:
+      "Court scholars wrote of a seat cut from the floor of the world, warm as a living thing. It gave the king stillness, and asked for warmth in return. He gave it the hearths of the village first, then the fields, then the season itself.",
+    chapter: 2,
+    requiresBoss: "frost_revenant",
+    about: "hollow_king",
+  },
+  {
+    id: "king_4",
+    title: "The Hollowing",
+    text:
+      "By the last winter there was nothing left inside the crown but the shape of a man who used to listen. The hollow acolytes kept the hall. They still chant the old morning greetings, over and over, to a seat that answers with cold.",
+    chapter: 3,
+    requiresBoss: "frost_revenant",
+    about: "hollow_king",
+  },
+  {
+    id: "king_5",
+    title: "The Warmth Returns",
+    text:
+      "The throne cannot be broken, only emptied and left. Those who have stood in that hall since say it is warm again the moment nobody sits in it, and that the first sound back is somebody laughing in the road outside.",
+    chapter: 4,
+    requiresBoss: "hollow_king",
+    about: "hollow_king",
+  },
 ];
 
 /** The entries the player has earned so far. */
@@ -162,6 +208,7 @@ export function loreBySubject(save: CharacterSave): { subject: string; title: st
     bone_warden: "The Bone Warden",
     miremother: "The Miremother",
     frost_revenant: "The Frost Revenant",
+    hollow_king: "The Hollow King",
   };
   const groups = new Map<string, LoreEntry[]>();
   for (const entry of revealedLore(save)) {

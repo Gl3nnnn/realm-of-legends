@@ -5,6 +5,7 @@ import { getQuest, QUESTS } from "../data/quests";
 import { getItem } from "../data/items";
 import { NPCS } from "../data/npcs";
 import { PET_SPECIES } from "../data/pets";
+import { writeDiary } from "./diary";
 import type { GameSession } from "./GameSession";
 import type { QuestDef, QuestObjective, QuestState } from "../types";
 
@@ -173,6 +174,9 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
   }
   state.completions += 1;
   session.save.stats.questsCompleted += 1;
+  writeDiary(session.save, "quest", `Turned in ${quest.name} for ${gold} gold.`);
+  // A finished quest clears the pin, so the tracker always points at live work.
+  if (session.save.pinnedQuest === questId) session.save.pinnedQuest = null;
   if (quest.repeatable) {
     state.completed = false;
     state.progress = quest.objectives.map(() => 0);

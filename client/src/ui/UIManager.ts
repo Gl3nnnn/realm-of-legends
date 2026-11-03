@@ -34,6 +34,7 @@ import {
   npcPanelHtml,
   quickbarHtml,
   questsPanelHtml,
+  bestiarySectionHtml,
   settingsPanelHtml,
   controlsPanelHtml,
   shopPanelHtml,
@@ -111,6 +112,7 @@ export class UIManager {
   private selectedClass: ClassId = "warrior";
   private classRoleFilter = "all";
   private classSearch = "";
+  private bestiarySearch = "";
   private selectedSlot: number | null = null;
   private selectedEquip: string | null = null;
   private inventoryFilter: InventoryFilter = "all";
@@ -481,6 +483,20 @@ export class UIManager {
       const input = event.target as HTMLInputElement;
       if (input.id === "volume-range") this.sfx.setVolume(Number(input.value) / 100);
       if (input.id === "music-range") this.sfx.setMusicVolume(Number(input.value) / 100);
+      if (input.matches("[data-bestiary-search]")) {
+        this.bestiarySearch = input.value;
+        const section = this.dom.overlay.querySelector("#journal-bestiary");
+        if (section && this.session) {
+          // Redraw only the list, so the field keeps focus and the caret stays put.
+          const caret = input.selectionStart ?? input.value.length;
+          section.outerHTML = bestiarySectionHtml(this.session, this.bestiarySearch);
+          const again = this.dom.overlay.querySelector<HTMLInputElement>("[data-bestiary-search]");
+          if (again) {
+            again.focus();
+            again.setSelectionRange(caret, caret);
+          }
+        }
+      }
     });
     this.dom.overlay.addEventListener("change", (event) => {
       const input = event.target as HTMLInputElement;
@@ -1106,7 +1122,7 @@ export class UIManager {
       body = inventoryPanelHtml(this.session, this.selectedSlot, this.selectedEquip, this.inventoryFilter, this.inventorySort);
     } else if (this.panel.kind === "quests" && this.session) {
       title = "Journal";
-      body = questsPanelHtml(this.session);
+      body = questsPanelHtml(this.session, this.bestiarySearch);
       narrow = true;
     } else if (this.panel.kind === "talents" && this.session) {
       title = "Talents";
@@ -1334,6 +1350,9 @@ export class UIManager {
           this.sfx.coin();
           this.bountySignature = "";
         }
+      } else if (action === "pin-quest" && target.dataset.quest) {
+        changed = session.pinQuest(target.dataset.quest);
+        if (changed) this.toast(session.save.pinnedQuest ? "Quest pinned to the tracker." : "Pin cleared.", "good");
       } else if (action === "fast-travel" && target.dataset.zone) {
         const zone = target.dataset.zone as Parameters<GameSession["fastTravel"]>[0];
         changed = session.fastTravel(zone);
@@ -1732,13 +1751,15 @@ export class UIManager {
     const active = this.session.save.quests
       .filter((state) => QUESTS[state.id] && (!state.completed || (QUESTS[state.id].repeatable && state.completions >= 0)))
       .filter((state) => !(state.completed && !QUESTS[state.id].repeatable && state.completions > 0))
+      // A pinned quest always sits at the top of the tracker, whatever the rest are doing.
+      .sort((a, b) => (b.id === this.session!.save.pinnedQuest ? 1 : 0) - (a.id === this.session!.save.pinnedQuest ? 1 : 0))
       .slice(0, 5);
     const storyIndex = this.session.save.storyChapter + 1;
     const nextStory = storyIndex < STORY_CHAPTERS.length ? STORY_CHAPTERS[storyIndex] : null;
     const storyKey = nextStory ? `story:${storyIndex}` : "story:done";
     const step = nextStep(this.session.save);
     const stepSignature = step ? `${step.title}:${step.zone}:${step.level}` : "none";
-    const signature = `${storyKey}|${stepSignature}|` + active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|");
+    const signature = `${storyKey}|${stepSignature}|` + active.map((state) => `${state.id}:${state.progress.join(",")}:${state.completed}:${state.completions}`).join("|") + `|pin:${this.session.save.pinnedQuest ?? ""}`;
     if (signature === this.questSignature) return;
     this.questSignature = signature;
     const storyBossId = nextStory?.bossId ?? "";
@@ -1948,6 +1969,20 @@ export class UIManager {
     }
     const youX = px(session.save.x);
     const youY = py(session.save.y);
+    // The zone a pinned quest or the next step lives in gets a ring, so the map answers "where to go".
+    const goalZone = nextStep(session.save)?.zone ?? null;
+    if (goalZone && goalZone !== zone.id) {
+      const portal = zone.portals.find((entry) => entry.targetZone === goalZone);
+      if (portal) {
+        const gx = px(portal.x + portal.w / 2);
+        const gy = py(portal.y + portal.h / 2);
+        ctx.strokeStyle = "#ffd76a";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
     ctx.strokeStyle = "rgba(255, 244, 207, 0.9)";
     ctx.lineWidth = 1;
     ctx.beginPath();

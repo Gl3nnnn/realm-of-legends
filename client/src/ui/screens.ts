@@ -33,6 +33,9 @@ import {
   journalStats,
   waypointRows,
   BLESSINGS,
+  MAX_MASTERY,
+  diaryRows,
+  masteredCount,
   type CharacterSave,
   type ClassId,
   type GameSession,
@@ -446,7 +449,7 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
   return `<div class="objective ${done ? "done" : ""}">${done ? "✓" : "•"} ${esc(text)}</div>`;
 }
 
-export function questsPanelHtml(session: GameSession): string {
+export function questsPanelHtml(session: GameSession, bestiarySearch = ""): string {
   const active = session.save.quests.filter((state) => QUESTS[state.id]);
   const lore = revealedLore(session.save);
   const loreGroups = loreBySubject(session.save);
@@ -473,15 +476,18 @@ export function questsPanelHtml(session: GameSession): string {
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-travel">Travel</a></nav>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
   if (active.length === 0) {
     return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
       ${bountySection(session)}
       ${heroSection(session)}
+      ${masterySection(session)}
+      ${reactionSection(session)}
+      ${diarySection(session)}
       ${travelSection(session)}
-      ${bestiarySection()}
+      ${bestiarySection(session, bestiarySearch)}
       ${loreSection}`;
   }
   const rows = active
@@ -490,11 +496,15 @@ export function questsPanelHtml(session: GameSession): string {
       const giver = NPCS[quest.giverNpc]?.name ?? quest.giverNpc;
       const objectives = quest.objectives.map((_, i) => objectiveRow(state.id, state.progress[i] ?? 0, i)).join("");
       const finished = state.completed && (quest.repeatable || state.completions === 0);
-      return `<div class="quest-row ${finished ? "ready" : ""} ${state.completions > 0 ? "done" : ""}">
-        <div class="qtitle">${esc(quest.name)}</div>
+      const pinned = session.save.pinnedQuest === state.id;
+      return `<div class="quest-row ${finished ? "ready" : ""} ${state.completions > 0 ? "done" : ""} ${pinned ? "pinned" : ""}">
+        <div class="qtitle">${pinned ? "📌 " : ""}${esc(quest.name)}</div>
         <div class="qdesc">${esc(quest.description)}</div>
         ${objectives}
         <div class="small muted">Giver: ${esc(giver)} · ${quest.rewards.xp} XP · ${quest.rewards.gold} gold${state.completions > 0 ? ` · completed x${state.completions}` : ""}</div>
+        <div class="quest-row-tools">
+          <button class="btn ghost small" data-action="pin-quest" data-quest="${esc(state.id)}">${pinned ? "Unpin" : "Pin to tracker"}</button>
+        </div>
         ${finished ? `<div class="qready">Ready to turn in.</div>` : ""}
       </div>`;
     })
@@ -503,8 +513,11 @@ export function questsPanelHtml(session: GameSession): string {
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
     ${bountySection(session)}
     ${heroSection(session)}
+    ${masterySection(session)}
+    ${reactionSection(session)}
+    ${diarySection(session)}
     ${travelSection(session)}
-    ${bestiarySection()}
+    ${bestiarySection(session, bestiarySearch)}
     ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
 }
@@ -588,6 +601,7 @@ function heroSection(session: GameSession): string {
   return `<div class="lore-section" id="journal-hero">
     <div class="qtitle">${esc(save.name)}, ${esc(save.title)}</div>
     <div class="small muted">${esc(heroVerdict(save))}</div>
+    ${characterSheet(session)}
     <div class="stat-grid">${stats}</div>
     <div class="small muted" style="margin-top:12px">Titles you can wear</div>
     <div class="title-row">${titles}</div>
@@ -613,14 +627,32 @@ function travelSection(session: GameSession): string {
   </div>`;
 }
 
-function bestiarySection(): string {
-  const rows = monsterGuide()
+export function bestiarySectionHtml(session: GameSession, search = ""): string {
+  return bestiarySection(session, search);
+}
+
+function bestiarySection(session: GameSession, search = ""): string {
+  const query = search.trim().toLocaleLowerCase();
+  const all = monsterGuide();
+  const rows = all
+    .filter((entry) => !query || `${entry.monster.name} ${entry.zoneName} ${entry.drops.join(" ")}`.toLocaleLowerCase().includes(query))
     .map((entry) => {
       const role = entry.kind === "ranged" ? "Attacks from range" : entry.kind === "support" ? "Supports other monsters" : "Melee fighter";
+      const met = session.hasMet(entry.monster.id);
+      const kills = session.killCount(entry.monster.id);
+      if (!met) {
+        return `<details class="beast-row unknown">
+        <summary>
+          <span class="beast-name">Something in ${esc(entry.zoneName)}</span>
+          <span class="beast-level">Lv ${entry.monster.level}</span>
+        </summary>
+        <div class="beast-body"><div class="small muted">Not yet met. Walk ${esc(entry.zoneName)} and it will fill itself in.</div></div>
+      </details>`;
+      }
       return `<details class="beast-row">
         <summary>
           <span class="beast-name">${esc(entry.monster.name)}${entry.monster.boss ? " · Boss" : ""}</span>
-          <span class="beast-level">Lv ${entry.monster.level}</span>
+          <span class="beast-level">Lv ${entry.monster.level}${kills > 0 ? ` · ${kills} slain` : ""}</span>
         </summary>
         <div class="beast-body">
           <div class="small muted">${esc(entry.zoneName)} · ${esc(role)}</div>
@@ -631,10 +663,117 @@ function bestiarySection(): string {
       </details>`;
     })
     .join("");
+  const met = all.filter((entry) => session.hasMet(entry.monster.id)).length;
   return `<div class="lore-section" id="journal-bestiary">
     <div class="qtitle">Bestiary</div>
-    <div class="small muted">Every creature in the realm, where it lives, and what wants it dead.</div>
-    <div class="beast-list">${rows}</div>
+    <div class="small muted">${met} of ${all.length} species met. A page fills itself in the first time a creature notices you.</div>
+    <label class="class-search" style="margin:8px 0"><span>Search</span><input type="search" data-bestiary-search value="${esc(search)}" placeholder="Name, zone or drop" aria-label="Search the bestiary" /></label>
+    <div class="beast-list">${rows || `<div class="small muted">Nothing matches that search.</div>`}</div>
+  </div>`;
+}
+
+/**
+ * The character sheet: every derived number the hero actually fights with, side by side.
+ * Talents and gear have been quietly changing these all game, so this is where a player can
+ * finally see them and judge whether the next level should go into damage or into health.
+ */
+function characterSheet(session: GameSession): string {
+  const save = session.save;
+  const stats = session.stats;
+  const def = session.classInfo;
+  const equipped = (["weapon", "armor", "helm", "boots", "trinket"] as const)
+    .map((slot) => save.equipment[slot])
+    .filter((stack): stack is ItemStack => Boolean(stack))
+    .map((stack) => `<span class="gear-chip rarity-${getItem(stack.itemId).rarity}">${esc(itemDisplayName(stack))}</span>`)
+    .join("");
+  const cells: [string, string, string?][] = [
+    ["Health", `${Math.round(save.hp)} / ${Math.round(stats.maxHp)}`],
+    [session.resourceLabel, `${Math.round(save.resource)} / ${Math.round(stats.maxResource)}`],
+    ["Attack", `${Math.round(stats.attack)}`],
+    ["Defence", `${Math.round(stats.defense)}`],
+    ["Crit chance", `${Math.round(stats.crit * 100)}%`],
+    ["Move speed", `${Math.round(stats.moveSpeed)}`],
+    ["Gold", `${formatNumber(save.gold)}`],
+    ["Difficulty", save.difficulty === "story" ? "Story" : save.difficulty === "nightmare" ? "Nightmare" : "Normal", save.ngPlus > 0 ? `Cycle ${save.ngPlus + 1}` : undefined],
+    ["Talents", `${save.talents.length} of 5`],
+    ["Class", def.name, def.role],
+  ];
+  const grid = cells
+    .map(([label, value, note]) => `<div class="sheet-cell">
+        <span class="sheet-label">${esc(label)}</span>
+        <span class="sheet-value">${esc(value)}</span>
+        ${note ? `<span class="sheet-note">${esc(note)}</span>` : ""}
+      </div>`)
+    .join("");
+  return `<div class="character-sheet">
+    <div class="sheet-grid">${grid}</div>
+    <div class="small muted" style="margin-top:10px">Wearing</div>
+    <div class="gear-row">${equipped || `<span class="small muted">Nothing equipped but what you started with.</span>`}</div>
+  </div>`;
+}
+
+/**
+ * Ability mastery: how often each skill of the class has been used, and what that has earned.
+ * It is the page that shows a hero's habits rather than their gear.
+ */
+function masterySection(session: GameSession): string {
+  const rows = session.mastery
+    .map((row) => `<div class="mastery-row rank-${row.rank}">
+        <span class="mastery-icon" aria-hidden="true">${row.icon.length <= 2 ? esc(row.icon) : "✦"}</span>
+        <span class="mastery-body">
+          <span class="mastery-name">${esc(row.name)} <span class="mastery-rank">Rank ${row.rank}${row.rank >= MAX_MASTERY ? " · max" : ""}</span></span>
+          <span class="mastery-bar"><span style="width:${row.percent}%"></span></span>
+          <span class="small muted">${row.uses} casts${row.toNext > 0 ? ` · ${row.toNext} to rank ${row.rank + 1}` : ""}${row.rank > 0 ? ` · −${row.costCut}% cost, −${row.cooldownCut}% cooldown` : ""}</span>
+        </span>
+      </div>`)
+    .join("");
+  const mastered = masteredCount(session.mastery);
+  return `<div class="lore-section" id="journal-mastery">
+    <div class="qtitle">Ability Mastery</div>
+    <div class="small muted">Every cast counts. Practice makes a skill cheaper and quicker to come back. ${mastered > 0 ? `${mastered} skill${mastered === 1 ? "" : "s"} at rank 3 or better.` : "No skill has reached rank 3 yet."}</div>
+    <div class="mastery-list">${rows}</div>
+  </div>`;
+}
+
+/** The elemental reactions this hero has found, and the ones still waiting to be discovered. */
+function reactionSection(session: GameSession): string {
+  const book = session.reactionBook;
+  const found = book.filter((entry) => entry.found).length;
+  const rows = book
+    .map((entry) => `<div class="reaction-row ${entry.found ? "found" : ""}">
+        <span class="reaction-icon" aria-hidden="true">${entry.found ? entry.icon : "?"}</span>
+        <span>
+          <span class="reaction-name">${entry.found ? esc(entry.name) : "Undiscovered"}</span>
+          <span class="small muted">${entry.found ? esc(entry.text) : "Hit a creature carrying one element with a different one."}</span>
+        </span>
+      </div>`)
+    .join("");
+  return `<div class="lore-section" id="journal-reactions">
+    <div class="qtitle">Elemental Reactions</div>
+    <div class="small muted">${found} of ${book.length} found. Fire on a frozen creature, ice on a burning one, and so on.</div>
+    <div class="reaction-list">${rows}</div>
+  </div>`;
+}
+
+/** The hero's diary: the last few things worth remembering, newest first. */
+function diarySection(session: GameSession): string {
+  const rows = diaryRows(session.save);
+  if (rows.length === 0) {
+    return `<div class="lore-section" id="journal-diary">
+      <div class="qtitle">Diary</div>
+      <div class="small muted">Nothing written yet. The first kill, the first quest and the first fall all go here.</div>
+    </div>`;
+  }
+  return `<div class="lore-section" id="journal-diary">
+    <div class="qtitle">Diary</div>
+    <div class="small muted">The last ${rows.length} things worth remembering.</div>
+    <div class="diary-list">
+      ${rows.map((row) => `<div class="diary-row kind-${row.kind}">
+        <span class="diary-icon" aria-hidden="true">${row.icon}</span>
+        <span class="diary-text">${esc(row.text)}</span>
+        <span class="diary-when">${esc(row.when)}</span>
+      </div>`).join("")}
+    </div>
   </div>`;
 }
 

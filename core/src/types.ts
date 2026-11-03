@@ -519,6 +519,30 @@ export interface CharacterSave {
   blessingDay: number;
   /** The bounty streak: bounties turned in without a death in between. */
   bountyStreak: number;
+  /** Casts per ability id, so mastery is earned by using a skill, not by reading about it. */
+  abilityUses: Record<string, number>;
+  /** Elements woken by hitting a burning, soaked, chilled or shocked monster with another. */
+  reactionsSeen: string[];
+  /** The quest the hero pinned above all others. Cleared when it is finished. */
+  pinnedQuest: string | null;
+  /** Ids of monsters the hero has actually met, so the bestiary fills in as it is played. */
+  metMonsters: string[];
+  /** Kills per monster id, the "have I killed this one yet" column of the bestiary. */
+  monsterKills: Record<string, number>;
+  /** The last few things that happened, newest first, for the "what did I just do" page. */
+  diary: DiaryEntry[];
+}
+
+/**
+ * A single line in the hero's diary, written when something worth remembering happens.
+ * It is small on purpose: a stamp, a kind and one short line.
+ */
+export interface DiaryEntry {
+  /** Play time, in seconds, when the line was written. */
+  t: number;
+  /** Which sort of line this is, used for the icon and the colour. */
+  kind: "kill" | "quest" | "boss" | "level" | "loot" | "death" | "zone" | "achievement";
+  text: string;
 }
 
 export interface CompanionEgg {

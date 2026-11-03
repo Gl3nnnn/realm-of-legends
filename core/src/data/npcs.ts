@@ -32,6 +32,7 @@ export const NPCS: Record<string, NpcDef> = {
       "I buy anything that isn't nailed down. Well, mostly.",
     ],
     shop: "general",
+    quests: sideQuestsFor("merchant"),
   },
   blacksmith: {
     id: "blacksmith",
@@ -44,6 +45,7 @@ export const NPCS: Record<string, NpcDef> = {
       "That blade's seen better days. Let me show you something better.",
     ],
     shop: "forge",
+    quests: sideQuestsFor("blacksmith"),
   },
   healer: {
     id: "healer",
@@ -55,7 +57,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Sit. Breathe. The light will do the rest.",
       "Silverleaf grows deep in the forest. I could use a handful, if you're heading that way.",
     ],
-    quests: ["herbal_remedy", "wisp_light", "revenant_ice"],
+    quests: ["herbal_remedy", "wisp_light", "revenant_ice", "elaras_quiet_ward"],
     shop: "healer",
     healer: true,
   },
@@ -70,7 +72,7 @@ export const NPCS: Record<string, NpcDef> = {
       "Your skills awaken as you gain experience. Return when you're stronger.",
       "The Bone Warden in the dungeon guards something old and angry. End it.",
     ],
-    quests: ["wardens_end", "miremother_fall", "frost_revenant_end", "kings_end"],
+    quests: ["wardens_end", "miremother_fall", "frost_revenant_end", "kings_end", ...sideQuestsFor("trainer")],
     trainer: true,
   },
   tobin: {

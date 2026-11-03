@@ -112,6 +112,16 @@ export const saveSchema = z.object({
   bounties: z.array(bountySchema).max(16).default([]),
   blessingDay: z.number().int().min(-1).default(-1),
   bountyStreak: z.number().int().min(0).default(0),
+  abilityUses: z.record(z.string().min(1).max(40), z.number().int().min(0).max(1_000_000)).default({}),
+  reactionsSeen: z.array(z.string().min(1).max(24)).max(64).default([]),
+  pinnedQuest: z.string().min(1).max(60).nullable().default(null),
+  metMonsters: z.array(z.string().min(1).max(60)).max(400).default([]),
+  monsterKills: z.record(z.string().min(1).max(60), z.number().int().min(0).max(1_000_000)).default({}),
+  diary: z.array(z.object({
+    t: z.number().finite().min(0),
+    kind: z.enum(["kill", "quest", "boss", "level", "loot", "death", "zone", "achievement"]),
+    text: z.string().min(1).max(160),
+  })).max(60).default([]),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -236,6 +246,12 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     bounties: [],
     blessingDay: -1,
     bountyStreak: 0,
+    abilityUses: {},
+    reactionsSeen: [],
+    pinnedQuest: null,
+    metMonsters: [],
+    monsterKills: {},
+    diary: [],
   };
 }
 
@@ -382,6 +398,16 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.blessingDay = -1;
     migrated.bountyStreak = 0;
     migrated.version = 12;
+  }
+  if (migrated.version === 12) {
+    // Mastery, elemental reactions, the pin, the bestiary and the diary all arrived together.
+    migrated.abilityUses = {};
+    migrated.reactionsSeen = [];
+    migrated.pinnedQuest = null;
+    migrated.metMonsters = [];
+    migrated.monsterKills = {};
+    migrated.diary = [];
+    migrated.version = 13;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

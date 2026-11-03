@@ -1,6 +1,7 @@
 import { ZONES } from "../generated/world-data";
 import { getMonster } from "../data/monsters";
 import { RESPAWN_SECONDS } from "../constants";
+import { writeDiary } from "./diary";
 import type { GameSession } from "./GameSession";
 import type { MonsterInstance } from "../types";
 
@@ -16,6 +17,7 @@ export function killPlayer(session: GameSession, _source: string): void {
   session.resetKillStreak();
   // A bounty streak only counts while the hero keeps their feet, so falling resets it.
   session.save.bountyStreak = 0;
+  writeDiary(session.save, "death", `Fell in ${session.zone.name} to ${_source || "the dark"}.`);
   session.emit({ type: "death", who: "player", x: session.save.x, y: session.save.y });
   session.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
 }

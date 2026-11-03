@@ -4,6 +4,7 @@
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { ZONES } from "../generated/world-data";
+import { writeDiary } from "./diary";
 import type { GameSession } from "./GameSession";
 import type { ItemStack, PortalDef } from "../types";
 
@@ -14,6 +15,7 @@ export function travel(session: GameSession, portal: PortalDef): void {
   session.loadZone();
   session.emit({ type: "zone", zone: session.save.zone });
   session.emit({ type: "log", text: `Entered ${ZONES[session.save.zone].name}.`, tone: "info" });
+  writeDiary(session.save, "zone", `Travelled to ${ZONES[session.save.zone].name}.`);
   // Reaching a zone for the first time opens it as a fast-travel point.
   if (session.unlockWaypoint(session.save.zone)) {
     session.emit({ type: "log", text: `${ZONES[session.save.zone].name} added to your map. You can travel back here from the journal.`, tone: "good" });

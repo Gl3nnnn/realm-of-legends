@@ -1097,6 +1097,11 @@ input[type="text"]:focus {
 .minimap-key .key-quest {
   background: #ffd76a;
 }
+.minimap-key .key-goal {
+  background: transparent;
+  border: 1.5px solid #ffd76a;
+  border-radius: 50%;
+}
 
 /* Tidy-controls under the backpack grid and the shop sell grid. */
 .bag-tools {
@@ -3777,3 +3782,41 @@ html[data-contrast="high"] .journal-nav a {
 
 .lore-group { margin-top: 8px; }
 .lore-group > .small { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; opacity: .75; margin: 6px 0 2px; }
+
+/* ---- Character sheet, mastery, reactions and the diary (journal pages) ---- */
+.character-sheet { margin-top: 10px; display: grid; gap: 8px; }
+.sheet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 8px; }
+.sheet-cell { display: grid; gap: 2px; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); }
+.sheet-label { font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.sheet-value { font-family: var(--font-pixel), monospace; font-size: 13px; }
+.sheet-note { font-size: 10px; color: var(--muted); }
+.gear-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.gear-chip { padding: 3px 8px; border-radius: 999px; font-size: 11px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); }
+
+.mastery-list, .reaction-list, .diary-list { display: grid; gap: 8px; margin-top: 6px; }
+.mastery-row { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); }
+.mastery-icon { font-size: 18px; text-align: center; opacity: .85; }
+.mastery-body { display: grid; gap: 4px; }
+.mastery-name { font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.mastery-rank { font-size: 10px; color: var(--gold); letter-spacing: .04em; text-transform: uppercase; }
+.mastery-bar { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.10); overflow: hidden; }
+.mastery-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #6fb1ff, #b98cff); transition: width .25s ease; }
+.mastery-row.rank-3 .mastery-bar > span, .mastery-row.rank-4 .mastery-bar > span, .mastery-row.rank-5 .mastery-bar > span { background: linear-gradient(90deg, var(--gold), #ffd479); }
+
+.reaction-row { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.12); opacity: .75; }
+.reaction-row.found { background: rgba(255,255,255,0.06); border-style: solid; border-color: rgba(255,214,102,0.35); opacity: 1; }
+.reaction-icon { font-size: 16px; text-align: center; color: var(--gold); }
+.reaction-name { display: block; font-weight: 600; }
+.reaction-row:not(.found) .reaction-name { color: var(--muted); font-weight: 500; }
+
+.diary-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 5px; background: rgba(255,255,255,0.04); }
+.diary-icon { text-align: center; font-size: 13px; }
+.diary-text { font-size: 12px; line-height: 1.4; }
+.diary-when { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.diary-row.kind-death { background: rgba(255,90,90,0.10); }
+.diary-row.kind-boss, .diary-row.kind-achievement { background: rgba(255,214,102,0.10); }
+.diary-row.kind-quest { background: rgba(120,190,255,0.08); }
+
+.quest-row.pinned { border-color: rgba(255,214,102,0.55); box-shadow: 0 0 0 1px rgba(255,214,102,0.25) inset; }
+.quest-row-tools { display: flex; gap: 6px; margin-top: 6px; }
+.beast-row.unknown summary { opacity: .65; font-style: italic; }

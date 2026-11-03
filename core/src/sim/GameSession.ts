@@ -29,6 +29,9 @@ import {
 import { getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { pendingAchievements, availableTitles } from "../data/achievements";
+import { findReaction, REACTIONS, statusElement } from "../data/reactions";
+import { masteryCostCut, masteryCooldownCut, masteryRows, rankFor, type MasteryState } from "../data/mastery";
+import { writeDiary } from "./diary";
 import { CLASS_INTROS, NG_PLUS_OPENINGS } from "../data/story";
 import {
   getTalentChoice,
@@ -154,6 +157,8 @@ export class GameSession {
   private walkedSinceSample = 0;
   private lastStepX = 0;
   private lastStepY = 0;
+  /** Set by combat when a reaction just fired, so the next hit does not pay for it twice. */
+  private lastReactionAt = -999;
   private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
   private zoneLoaded = false;
 
@@ -402,6 +407,7 @@ export class GameSession {
     for (const achievement of earned) {
       this.save.achievements.push(achievement.id);
       this.emit({ type: "achievement", id: achievement.id, name: achievement.name, title: achievement.title });
+      writeDiary(this.save, "achievement", `Earned ${achievement.name}.`);
     }
     return true;
   }
@@ -936,6 +942,8 @@ export class GameSession {
         monster.state = "return";
       } else if (monster.state === "idle" && playerDist <= def.aggroRadius && !this.dead) {
         monster.state = "chase";
+        // Meeting a creature is enough to fill its bestiary page, before the first kill.
+        this.noteEncounter(def.id);
       }
 
       if (stunned) continue;
@@ -1392,6 +1400,7 @@ export class GameSession {
       this.save.resource = Math.min(after.maxResource, this.save.resource + (after.maxResource - before.maxResource));
       this.emit({ type: "levelup", level: this.save.level });
       this.emit({ type: "log", text: `Level up! You are now level ${this.save.level}.`, tone: "good" });
+      writeDiary(this.save, "level", `Reached level ${this.save.level}.`);
       for (const ability of this.classDef.abilities) {
         if (ability.unlockLevel === this.save.level) this.emit({ type: "log", text: `New ability unlocked: ${ability.name}.`, tone: "good" });
       }
@@ -1415,7 +1424,32 @@ export class GameSession {
     const ability = id === "basic" ? this.classDef.basic : this.classDef.abilities.find((entry) => entry.id === id);
     if (!ability) return 0;
     const abilityCooldown = this.abilityTalentModifiers[id]?.cooldownPercent ?? 0;
-    return ability.cooldown * (1 - this.modifiers.cooldown / 100) * (1 - abilityCooldown / 100);
+    const masteryCut = masteryCooldownCut(rankFor(this.save.abilityUses[id] ?? 0)) / 100;
+    return ability.cooldown * (1 - this.modifiers.cooldown / 100) * (1 - abilityCooldown / 100) * (1 - masteryCut);
+  }
+
+  /** Every ability of this class with the mastery the hero has earned on it. */
+  get mastery(): MasteryState[] {
+    return masteryRows(this.classDef, this.save.abilityUses);
+  }
+
+  /** The resource an ability costs once mastery is taken off, never below one point. */
+  abilityCost(id: string): number {
+    const ability = id === "basic" ? this.classDef.basic : this.classDef.abilities.find((entry) => entry.id === id);
+    if (!ability) return 0;
+    const cut = masteryCostCut(rankFor(this.save.abilityUses[id] ?? 0)) / 100;
+    return Math.max(ability.cost > 0 ? 1 : 0, Math.round(ability.cost * (1 - cut)));
+  }
+
+  /**
+   * Mastery is earned by using a skill, so every cast is counted here and the rank-up is
+   * announced the moment it happens. Returns the new rank when the cast pushed it up.
+   */
+  private recordCast(abilityId: string): number {
+    const before = rankFor(this.save.abilityUses[abilityId] ?? 0);
+    this.save.abilityUses[abilityId] = (this.save.abilityUses[abilityId] ?? 0) + 1;
+    const after = rankFor(this.save.abilityUses[abilityId] ?? 0);
+    return after > before ? after : 0;
   }
 
   castAbility(id: string, aim: Vec2): boolean {
@@ -1425,7 +1459,8 @@ export class GameSession {
     if (!ability) return false;
     if (!basic && !isAbilityUnlocked(this.classDef, this.save.level, id)) return false;
     if ((this.cooldowns[id] ?? 0) > 0) return false;
-    if (ability.cost > this.save.resource) {
+    const cost = this.abilityCost(id);
+    if (cost > this.save.resource) {
       this.emit({ type: "log", text: `Not enough ${this.resourceLabel.toLowerCase()}.`, tone: "bad" });
       return false;
     }
@@ -1436,8 +1471,13 @@ export class GameSession {
       if (Math.abs(dir.x) > Math.abs(dir.y)) this.facing = dir.x > 0 ? "right" : "left";
       else this.facing = dir.y > 0 ? "down" : "up";
     }
-    this.save.resource -= ability.cost;
+    this.save.resource -= cost;
     this.cooldowns[id] = this.abilityCooldownDuration(id);
+    const newRank = this.recordCast(id);
+    if (newRank > 0) {
+      this.emit({ type: "log", text: `${ability.name} reaches mastery rank ${newRank}: cheaper to cast and quicker to return.`, tone: "good" });
+      writeDiary(this.save, "level", `${ability.name} reached mastery rank ${newRank}.`);
+    }
     if (basic) this.resourceGain(RESOURCE_GAIN[this.classDef.resource]);
     this.lastCombat = this.elapsed;
     const origin = { x: this.save.x, y: this.save.y };
@@ -1547,6 +1587,77 @@ export class GameSession {
 
   recordKill(monsterId: string): void {
     quests.recordKill(this, monsterId);
+    // The bestiary fills in by playing: every id killed gets a tally, and a first kill is a diary line.
+    const tally = (this.save.monsterKills[monsterId] ?? 0) + 1;
+    this.save.monsterKills[monsterId] = tally;
+    if (!this.save.metMonsters.includes(monsterId)) this.save.metMonsters.push(monsterId);
+    const def = getMonster(monsterId);
+    if (def && tally === 1 && !def.boss) writeDiary(this.save, "kill", `First ${def.name} brought down in ${this.zone.name}.`);
+  }
+
+  /** How many times this hero has killed one species, for the bestiary column. */
+  killCount(monsterId: string): number {
+    return this.save.monsterKills[monsterId] ?? 0;
+  }
+
+  /** True once the hero has met this species, whether by killing it or by being seen by it. */
+  hasMet(monsterId: string): boolean {
+    return this.save.metMonsters.includes(monsterId) || this.killCount(monsterId) > 0;
+  }
+
+  /** Remember a monster the hero has come near, so the bestiary fills in before the first kill. */
+  noteEncounter(monsterId: string): void {
+    if (this.save.metMonsters.includes(monsterId)) return;
+    this.save.metMonsters.push(monsterId);
+  }
+
+  /** Pin one quest above the others. Passing null clears the pin. */
+  pinQuest(questId: string | null): boolean {
+    if (questId === null) {
+      this.save.pinnedQuest = null;
+      return true;
+    }
+    const state = this.save.quests.find((entry) => entry.id === questId);
+    if (!state) return false;
+    this.save.pinnedQuest = this.save.pinnedQuest === questId ? null : questId;
+    return true;
+  }
+
+  /**
+   * Wake an elemental reaction: the monster is already carrying an element and a different
+   * one just landed. Pays a little extra damage and remembers the combo for the journal.
+   * Returns the extra damage as a fraction of the hit (0 when nothing happened).
+   */
+  wakeReaction(monster: MonsterInstance, incoming: DamageType): number {
+    if (this.elapsed - this.lastReactionAt < 0.08) return 0;
+    const carried: DamageType[] = [];
+    for (const status of monster.statuses) {
+      const element = statusElement(status.kind);
+      if (element) carried.push(element);
+    }
+    if (carried.length === 0) return 0;
+    const reaction = findReaction(carried, incoming);
+    if (!reaction) return 0;
+    this.lastReactionAt = this.elapsed;
+    if (!this.save.reactionsSeen.includes(reaction.id)) {
+      this.save.reactionsSeen.push(reaction.id);
+      this.emit({ type: "log", text: `${reaction.name}! ${reaction.text}`, tone: "good" });
+      writeDiary(this.save, "kill", `Discovered ${reaction.name} in ${this.zone.name}.`);
+    } else {
+      this.emit({ type: "log", text: `${reaction.name}!`, tone: "info" });
+    }
+    return reaction.bonus;
+  }
+
+  /** Every reaction in the game with whether this hero has found it. */
+  get reactionBook(): { id: string; name: string; text: string; icon: string; found: boolean }[] {
+    return REACTIONS.map((reaction) => ({
+      id: reaction.id,
+      name: reaction.name,
+      text: reaction.text,
+      icon: reaction.icon,
+      found: this.save.reactionsSeen.includes(reaction.id),
+    }));
   }
 
   /** Count a kill toward the bounty board, and say so when one is finished. */

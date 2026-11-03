@@ -127,6 +127,30 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Beast Friend",
     check: (save) => Boolean(save.companion?.hatched),
   },
+  {
+    id: "elementalist",
+    name: "Elementalist",
+    hint: "Find five elemental reactions.",
+    icon: "✸",
+    title: "the Elemental",
+    check: (save) => new Set(save.reactionsSeen).size >= 5,
+  },
+  {
+    id: "diligent",
+    name: "Diligent",
+    hint: "Take one ability to mastery rank 4.",
+    icon: "✦",
+    title: "the Diligent",
+    check: (save) => Object.values(save.abilityUses).some((uses) => uses >= 90),
+  },
+  {
+    id: "naturalist",
+    name: "Naturalist",
+    hint: "Meet twenty different species.",
+    icon: "📖",
+    title: "the Naturalist",
+    check: (save) => new Set(save.metMonsters).size >= 20,
+  },
 ];
 
 const BY_ID = new Map(ACHIEVEMENTS.map((achievement) => [achievement.id, achievement]));
