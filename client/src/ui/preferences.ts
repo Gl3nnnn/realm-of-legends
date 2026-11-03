@@ -26,6 +26,11 @@ export interface GamePreferences {
   effectIntensity: 0.5 | 1 | 1.5;
   brightness: 1 | 1.2 | 1.4;
   language: "en" | "tl";
+  /** "normal" keeps the lore colours; "protan" and "deutan" swap in palettes the two
+   *  common kinds of colour blindness can tell apart. */
+  colorBlind: "normal" | "protan" | "deutan";
+  /** Extra size for the small reading text in panels and the log. */
+  textSize: 1 | 1.15 | 1.3;
   keybinds: Keybinds;
   padBinds: Record<KeybindAction, number>;
 }
@@ -84,6 +89,8 @@ const DEFAULTS: GamePreferences = {
   effectIntensity: 1,
   brightness: 1,
   language: "en",
+  colorBlind: "normal",
+  textSize: 1,
   keybinds: { ...DEFAULT_KEYBINDS },
   padBinds: { ...DEFAULT_PAD_BINDS },
 };
@@ -151,6 +158,8 @@ export function loadPreferences(): GamePreferences {
       effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
       brightness: parsed.brightness === 1.2 || parsed.brightness === 1.4 ? parsed.brightness : 1,
       language: parsed.language === "tl" ? "tl" : "en",
+      colorBlind: parsed.colorBlind === "protan" || parsed.colorBlind === "deutan" ? parsed.colorBlind : "normal",
+      textSize: parsed.textSize === 1.15 || parsed.textSize === 1.3 ? parsed.textSize : 1,
       keybinds: sanitizeKeybinds(parsed.keybinds),
       padBinds: sanitizePadBinds(parsed.padBinds),
     });
@@ -173,8 +182,11 @@ export function applyPreferences(preferences: GamePreferences): void {
   root.dataset.uiScale = String(preferences.uiScale);
   root.dataset.contrast = preferences.highContrast ? "high" : "normal";
   root.dataset.motion = preferences.reducedMotion ? "reduced" : "full";
+  root.dataset.colorBlind = preferences.colorBlind;
+  root.dataset.textSize = String(preferences.textSize);
   root.dataset.touch = preferences.touchControls ? "on" : "auto";
   root.style.setProperty("--ui-scale", String(preferences.uiScale));
+  root.style.setProperty("--text-scale", String(preferences.textSize));
   root.style.setProperty("--world-brightness", String(preferences.brightness));
 }
 

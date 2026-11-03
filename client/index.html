@@ -73,6 +73,7 @@
           <span id="hud-safe" class="zone-tag">Safe</span>
           <span id="hud-cycle" class="zone-tag hidden"></span>
           <span id="hud-daypart" class="zone-tag time-tag" title="Time of day follows your play time"></span>
+          <span id="hud-weather" class="zone-tag weather-tag" title="Weather changes every few minutes"></span>
           <span id="hud-gold" class="gold">0 g</span>
         </div>
         <canvas id="minimap" width="264" height="198" aria-label="Minimap"></canvas>
@@ -88,9 +89,12 @@
       </div>
 
       <div id="buff-bar" class="buff-bar"></div>
-      <div id="streak-chip" class="streak-chip hidden" aria-live="polite"></div>
-      <div id="pet-chip" class="pet-chip hidden" aria-live="polite"></div>
-      <div id="status-chips" class="status-chips" aria-live="polite" aria-label="Active effects"></div>
+      <div class="chip-stack">
+        <div id="streak-chip" class="streak-chip hidden" aria-live="polite"></div>
+        <div id="bounty-chip" class="bounty-chip hidden" aria-live="polite"></div>
+        <div id="pet-chip" class="pet-chip hidden" aria-live="polite"></div>
+        <div id="status-chips" class="status-chips" aria-live="polite" aria-label="Active effects"></div>
+      </div>
       <div id="danger-vignette" class="danger-vignette hidden" aria-hidden="true"></div>
       <div id="quest-tracker" class="quest-tracker" aria-live="polite" aria-label="Quest tracker"></div>
       <div id="quest-compass" class="quest-compass hidden"></div>
@@ -105,6 +109,8 @@
           <span><b>Shift</b> Dodge through danger with brief invulnerability.</span>
           <span><b>Z / X</b> Use bound potions.</span>
           <span><b>E</b> Talk, loot, and travel.</span>
+          <span><b>H</b> Go home to the village at any time.</span>
+          <span><b>?</b> Open the full controls sheet.</span>
         </div>
         <p>Talk to Captain Rowan near the village gate. Your quest compass points the way.</p>
         <button class="btn small" id="tutorial-close">Begin the hunt</button>
@@ -118,7 +124,7 @@
             <div id="quickbar" class="quickbar"></div>
             <div id="ability-bar" class="ability-bar"></div>
           </div>
-          <div class="hint-line">WASD move · LMB/Space attack · 1-5 skills · Shift dodge · Z/X potions · E interact · I inventory · Q quests</div>
+          <div class="hint-line">WASD move · LMB/Space attack · 1-5 skills · Shift dodge · Z/X potions · E interact · I inventory · Q quests · H go home · ? controls</div>
         </div>
       </div>
       </div>
@@ -139,7 +145,17 @@
         <div class="death-card">
           <h2>You have fallen</h2>
           <p>Elara's light is pulling you back.</p>
+          <div class="death-recap" id="death-recap"></div>
           <div id="death-timer" class="death-timer">4</div>
+        </div>
+      </div>
+
+      <div id="boss-intro" class="boss-intro hidden" aria-live="assertive">
+        <div class="boss-intro-card">
+          <div class="boss-intro-kicker" id="boss-intro-kicker">A great enemy</div>
+          <h2 id="boss-intro-name">The Bone Warden</h2>
+          <p class="boss-intro-text" id="boss-intro-text"></p>
+          <p class="boss-intro-warning" id="boss-intro-warning"></p>
         </div>
       </div>
 

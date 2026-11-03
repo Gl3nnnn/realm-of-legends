@@ -32,6 +32,7 @@ import {
   heroVerdict,
   journalStats,
   waypointRows,
+  BLESSINGS,
   type CharacterSave,
   type ClassId,
   type GameSession,
@@ -472,11 +473,12 @@ export function questsPanelHtml(session: GameSession): string {
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-travel">Travel</a></nav>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-travel">Travel</a></nav>`;
   if (active.length === 0) {
     return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      ${bountySection(session)}
       ${heroSection(session)}
       ${travelSection(session)}
       ${bestiarySection()}
@@ -499,11 +501,59 @@ export function questsPanelHtml(session: GameSession): string {
     .join("");
   return `${nav}
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
+    ${bountySection(session)}
     ${heroSection(session)}
     ${travelSection(session)}
     ${bestiarySection()}
     ${loreSection}
     <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
+}
+
+/**
+ * The bounty board: three rotating jobs with a purse attached. It is deliberately above
+ * the achievements, because it is the page a player opens when they want work now.
+ */
+function bountySection(session: GameSession): string {
+  const bounties = session.bounties;
+  if (bounties.length === 0) {
+    return `<div class="lore-section" id="journal-bounties">
+      <div class="qtitle">Bounties</div>
+      <div class="small muted">No bounties posted yet. Fight a little and they will arrive.</div>
+    </div>`;
+  }
+  const streak = session.save.bountyStreak;
+  const rows = bounties
+    .map((bounty) => {
+      const done = session.bountyProgress(bounty.key);
+      const complete = done >= bounty.need;
+      const claimed = session.save.bounties.find((entry) => entry.key === bounty.key)?.claimed ?? false;
+      const pct = Math.min(100, Math.round((done / bounty.need) * 100));
+      return `<div class="bounty-row ${complete && !claimed ? "ready" : ""} ${claimed ? "paid" : ""}">
+        <div class="bounty-head">
+          <span class="bounty-name">${esc(bounty.monsterName)}</span>
+          <span class="bounty-purse">${formatNumber(bounty.gold)} g · ${formatNumber(bounty.xp)} XP</span>
+        </div>
+        <div class="small muted">${esc(bounty.zoneName)} · Level ${bounty.level}</div>
+        <div class="bounty-bar"><div class="bounty-bar-fill" style="width:${pct}%"></div></div>
+        <div class="bounty-foot">
+          <span class="small muted">${done} / ${bounty.need} killed</span>
+          ${claimed
+            ? `<span class="bounty-paid">Paid ✓</span>`
+            : complete
+              ? `<button class="btn small" data-action="claim-bounty" data-bounty="${esc(bounty.key)}">Collect</button>`
+              : `<span class="small muted">Keep hunting</span>`}
+        </div>
+      </div>`;
+    })
+    .join("");
+  const streakNote = streak > 0
+    ? `Bounty streak: ${streak} in a row without falling (+${Math.min(50, streak * 10)}% purse).`
+    : "Turning bounties in without dying grows the purse. Falling resets it.";
+  return `<div class="lore-section" id="journal-bounties">
+    <div class="qtitle">Bounties</div>
+    <div class="small muted">${esc(streakNote)} A fresh board is posted every ten minutes of play.</div>
+    <div class="bounty-list">${rows}</div>
+  </div>`;
 }
 
 /**
@@ -695,6 +745,73 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
     ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
     ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="small" style="color:var(--good);align-self:center">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
     <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
+  </div>
+  ${npc.healer ? blessingSection(session) : ""}`;
+}
+
+/**
+ * Shrine blessings: the small, cheap buff a hero can buy once an in-game day. They sit
+ * under the healer's buttons because that is where a struggling player already goes.
+ */
+function blessingSection(session: GameSession): string {
+  const status = session.blessingStatus();
+  const rows = BLESSINGS.map((blessing) => {
+    const cost = session.blessingCost(blessing.cost);
+    const affordable = session.save.gold >= cost;
+    const can = status.available && affordable;
+    return `<button class="blessing-row" data-action="buy-blessing" data-blessing="${esc(blessing.id)}" ${can ? "" : "disabled"}>
+        <span class="blessing-icon" aria-hidden="true">${blessing.icon}</span>
+        <span class="blessing-body">
+          <span class="blessing-name">${esc(blessing.name)}</span>
+          <span class="small muted">${esc(blessing.description)}</span>
+        </span>
+        <span class="blessing-cost">${status.available ? `${cost} g` : "Today's done"}</span>
+      </button>`;
+  }).join("");
+  const note = status.available
+    ? "One blessing each per day. The buff lasts ten minutes of play, and it survives travel."
+    : status.reason;
+  return `<div class="blessing-section">
+    <div class="section-title">Shrine blessings</div>
+    <div class="small muted">${esc(note)}</div>
+    <div class="blessing-list">${rows}</div>
+  </div>`;
+}
+
+/**
+ * One page with every control on it, opened with the ? key or the button in Settings.
+ * It reads the live keybinds, so a rebound key shows up here too instead of lying.
+ */
+export function controlsPanelHtml(preferences: GamePreferences): string {
+  const keys = preferences.keybinds;
+  const rows: [string, string, string][] = [
+    ["Move", "Arrow keys", "Walk in any direction"],
+    ["Move", `W A S D (or ${keys.up} ${keys.left} ${keys.down} ${keys.right})`, "Aim follows the mouse"],
+    ["Basic attack", `${keys.attack} / Left mouse`, "Hold to keep swinging"],
+    ["Skills", "1 2 3 4 5", "Unlock as you level"],
+    ["Dodge", keys.dodge, "Brief invulnerability mid-roll"],
+    ["Potion 1", keys.quick1, "Drinks the best healing potion if empty"],
+    ["Potion 2", keys.quick2, "Drinks the best resource potion"],
+    ["Interact", keys.interact, "Talk, loot, gather, travel"],
+    ["Go home", "H", "Recall to the village. Not in a boss fight"],
+    ["Inventory", "I", "Bag, gear and quick slots"],
+    ["Journal", "Q", "Quests, bounties, bestiary, travel"],
+    ["Talents", "T", "Spend talent points"],
+    ["Map", "M", "Show or hide the minimap"],
+    ["Settings", "Esc", "Sound, interface, keybinds"],
+    ["This sheet", "?", "Every control, at any time"],
+  ];
+  const list = rows
+    .map(([what, key, note]) => `<div class="control-row">
+        <span class="control-what">${esc(what)}</span>
+        <span class="control-key">${esc(key)}</span>
+        <span class="small muted">${esc(note)}</span>
+      </div>`)
+    .join("");
+  return `<div class="controls-sheet">
+    <div class="small muted">Everything you can press, in one place. Change keys in Settings.</div>
+    <div class="control-list">${list}</div>
+    <div class="small muted">A gamepad works too: left stick moves, right stick aims, A attacks, B dodges, X interacts. Rebind the buttons in Settings.</div>
   </div>`;
 }
 
@@ -764,6 +881,20 @@ export function settingsPanelHtml(
           </select>
         </label>
         <label class="small"><input type="checkbox" id="contrast-toggle" ${preferences.highContrast ? "checked" : ""} /> High contrast</label>
+        <label class="small">Reading text
+          <select id="text-size-select">
+            <option value="1" ${preferences.textSize === 1 ? "selected" : ""}>Normal</option>
+            <option value="1.15" ${preferences.textSize === 1.15 ? "selected" : ""}>Large</option>
+            <option value="1.3" ${preferences.textSize === 1.3 ? "selected" : ""}>Larger</option>
+          </select>
+        </label>
+        <label class="small">Colours
+          <select id="color-blind-select">
+            <option value="normal" ${preferences.colorBlind === "normal" ? "selected" : ""}>Default</option>
+            <option value="protan" ${preferences.colorBlind === "protan" ? "selected" : ""}>Red-weak friendly</option>
+            <option value="deutan" ${preferences.colorBlind === "deutan" ? "selected" : ""}>Green-weak friendly</option>
+          </select>
+        </label>
         <label class="small"><input type="checkbox" id="motion-toggle" ${preferences.reducedMotion ? "checked" : ""} /> Reduce motion</label>
         <label class="small"><input type="checkbox" id="damage-toggle" ${preferences.showDamage ? "checked" : ""} /> Floating damage</label>
         <label class="small"><input type="checkbox" id="shake-toggle" ${preferences.screenShake ? "checked" : ""} /> Screen shake</label>
@@ -796,6 +927,7 @@ export function settingsPanelHtml(
           </select>
         </label>
         <button class="btn ghost small" data-action="reset-tutorial">${t("btnShowTutorial")}</button>
+        <button class="btn ghost small" data-action="open-controls">Controls sheet (?)</button>
       </div>
     </div>
     <div class="setting-row">

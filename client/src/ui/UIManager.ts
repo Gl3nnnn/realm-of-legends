@@ -23,7 +23,7 @@ import {
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
-import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText } from "./helpers";
+import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText, bountyLabel } from "./helpers";
 import { t } from "./text";
 import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
@@ -35,6 +35,7 @@ import {
   quickbarHtml,
   questsPanelHtml,
   settingsPanelHtml,
+  controlsPanelHtml,
   shopPanelHtml,
   talentsPanelHtml,
   type InventoryFilter,
@@ -60,6 +61,7 @@ type PanelState =
   | { kind: "quests" }
   | { kind: "talents" }
   | { kind: "settings" }
+  | { kind: "controls" }
   | { kind: "npc"; id: string }
   | { kind: "shop"; id: string };
 
@@ -128,6 +130,10 @@ export class UIManager {
   private questSignature = "";
   private buffSignature = "";
   private statusSignature = "";
+  private weatherSignature = "";
+  private bountySignature = "";
+  private deathSignature = "";
+  private bossIntroTimer = 0;
   private lowHealthShown = false;
   private compassSignature = "";
   private minimapZone: string | null = null;
@@ -191,8 +197,16 @@ export class UIManager {
     cycle: must("hud-cycle"),
     gold: must("hud-gold"),
     dayPart: must("hud-daypart"),
+    weatherTag: must("hud-weather"),
     streakChip: must("streak-chip"),
+    bountyChip: must("bounty-chip"),
     petChip: must("pet-chip"),
+    deathRecap: must("death-recap"),
+    bossIntro: must("boss-intro"),
+    bossIntroKicker: must("boss-intro-kicker"),
+    bossIntroName: must("boss-intro-name"),
+    bossIntroText: must("boss-intro-text"),
+    bossIntroWarning: must("boss-intro-warning"),
     touchControls: must("touch-controls"),
     touchStick: must("touch-stick"),
     touchKnob: must("touch-knob"),
@@ -476,6 +490,14 @@ export class UIManager {
         this.preferences = updatePreferences({ uiScale: scale });
       }
       if (input.id === "contrast-toggle") this.preferences = updatePreferences({ highContrast: input.checked });
+      if (input.id === "text-size-select") {
+        const size = Number(input.value) === 1.15 ? 1.15 : Number(input.value) === 1.3 ? 1.3 : 1;
+        this.preferences = updatePreferences({ textSize: size });
+      }
+      if (input.id === "color-blind-select") {
+        const mode = input.value === "protan" || input.value === "deutan" ? input.value : "normal";
+        this.preferences = updatePreferences({ colorBlind: mode });
+      }
       if (input.id === "motion-toggle") this.preferences = updatePreferences({ reducedMotion: input.checked });
       if (input.id === "damage-toggle") this.preferences = updatePreferences({ showDamage: input.checked });
       if (input.id === "shake-toggle") this.preferences = updatePreferences({ screenShake: input.checked });
@@ -729,12 +751,37 @@ export class UIManager {
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       this.toggleMinimap();
+    } else if (event.key === "h" || event.key === "H") {
+      event.preventDefault();
+      this.recallHome();
+    } else if (event.key === "?") {
+      event.preventDefault();
+      this.openControlsSheet();
     } else if (keyNameFromEvent(event) === this.preferences.keybinds.quick1 || keyNameFromEvent(event) === this.preferences.keybinds.quick2) {
       event.preventDefault();
       this.useQuickSlotOrBest(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
     }
+  }
+
+  /**
+   * Ask to go home. The hero walks back to the village shrine, dropping nothing. Blocked
+   * during a boss fight, so it is never a way out of the fight you started.
+   */
+  private recallHome(): void {
+    const session = this.session;
+    if (!session || this.panel || session.dead) return;
+    const moved = session.recallHome();
+    this.updateHud(true);
+    this.handleEvents(session.drainEvents());
+    if (moved) void this.persist();
+  }
+
+  /** A one-page sheet of every control, so nobody has to guess what a key does. */
+  private openControlsSheet(): void {
+    if (this.panel) return;
+    this.openPanel("controls");
   }
 
   /**
@@ -1012,13 +1059,14 @@ export class UIManager {
   }
 
   openPanel(kind: PanelState["kind"], id?: string): void {
-    if (!this.session && kind !== "settings") return;
+    if (!this.session && kind !== "settings" && kind !== "controls") return;
     if (!this.panel) this.panelOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (kind === "npc" && id) this.panel = { kind, id };
     else if (kind === "shop" && id) this.panel = { kind, id };
     else if (kind === "inventory") this.panel = { kind };
     else if (kind === "quests") this.panel = { kind };
     else if (kind === "talents") this.panel = { kind };
+    else if (kind === "controls") this.panel = { kind: "controls" };
     else this.panel = { kind: "settings" };
     this.selectedSlot = null;
     this.selectedEquip = null;
@@ -1075,6 +1123,10 @@ export class UIManager {
     } else if (this.panel.kind === "shop") {
       title = SHOPS[this.panel.id]?.name ?? "Shop";
       body = this.session ? shopPanelHtml(this.session, this.panel.id) : "";
+    } else if (this.panel.kind === "controls") {
+      title = "Controls";
+      body = controlsPanelHtml(this.preferences);
+      narrow = true;
     }
     this.dom.overlay.innerHTML = `<section class="panel ${narrow ? "narrow" : ""}" role="document">
       <header class="panel-head"><h2 id="overlay-title">${esc(title)}</h2><button class="panel-close" data-action="close-panel" aria-label="Close">X</button></header>
@@ -1163,6 +1215,10 @@ export class UIManager {
       this.keybindVersion += 1;
       this.renderPanel();
       this.toast(t("keybindsReset"), "good");
+      return;
+    }
+    if (action === "open-controls") {
+      this.openPanel("controls");
       return;
     }
     if (action === "reset-tutorial") {
@@ -1272,7 +1328,13 @@ export class UIManager {
       if (changed) this.sfx.coin();
       this.renderPanel();
     } else if (this.panel?.kind === "quests") {
-      if (action === "fast-travel" && target.dataset.zone) {
+      if (action === "claim-bounty" && target.dataset.bounty) {
+        changed = session.claimBounty(target.dataset.bounty);
+        if (changed) {
+          this.sfx.coin();
+          this.bountySignature = "";
+        }
+      } else if (action === "fast-travel" && target.dataset.zone) {
         const zone = target.dataset.zone as Parameters<GameSession["fastTravel"]>[0];
         changed = session.fastTravel(zone);
         if (changed) {
@@ -1306,6 +1368,12 @@ export class UIManager {
       } else if (action === "heal") {
         changed = session.healAtNpc();
         if (changed) this.sfx.heal();
+      } else if (action === "buy-blessing" && target.dataset.blessing) {
+        changed = session.buyBlessing(target.dataset.blessing);
+        if (changed) {
+          this.sfx.heal();
+          this.buffSignature = "";
+        }
       } else if (action === "respec-talents") {
         changed = session.respecTalents();
         if (changed) this.sfx.level();
@@ -1519,7 +1587,16 @@ export class UIManager {
     const phase = session.dayPhase;
     this.dom.dayPart.textContent = `${phase.icon} ${phase.label}`;
     this.dom.dayPart.dataset.phase = phase.key;
+    const weather = session.weather;
+    const weatherSignature = `${weather.kind}:${weather.label}`;
+    if (weatherSignature !== this.weatherSignature) {
+      this.weatherSignature = weatherSignature;
+      this.dom.weatherTag.textContent = `${weather.icon} ${weather.label}`;
+      this.dom.weatherTag.title = weather.detail;
+      this.dom.weatherTag.dataset.weather = weather.kind;
+    }
     this.updateStreakChip();
+    this.updateBountyChip();
     this.updatePetChip();
     this.dom.zone.textContent = session.zone.name;
     this.dom.safe.textContent = session.zone.safe ? "Safe" : "Hostile";
@@ -1553,6 +1630,72 @@ export class UIManager {
     this.updateBoss();
     this.updatePrompt();
     this.dom.death.classList.toggle("hidden", !session.dead);
+  }
+
+  /**
+   * A small chip that follows the bounty board: how many jobs are waiting, and how the
+   * one closest to finishing is going. Hidden when the board is empty or all paid.
+   */
+  private updateBountyChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const bounties = session.bounties;
+    const ready = session.readyBountyCount;
+    const open = bounties.filter((bounty) => session.bountyProgress(bounty.key) < bounty.need);
+    if (bounties.length === 0) {
+      this.dom.bountyChip.classList.add("hidden");
+      this.bountySignature = "";
+      return;
+    }
+    const signature = `${ready}:${open.map((bounty) => `${bounty.key}=${session.bountyProgress(bounty.key)}`).join(",")}`;
+    if (signature === this.bountySignature) return;
+    this.bountySignature = signature;
+    this.dom.bountyChip.classList.remove("hidden");
+    if (ready > 0) {
+      this.dom.bountyChip.innerHTML = `<span class="chip-icon">📜</span> ${ready} bounty${ready === 1 ? "" : "ies"} ready to collect`;
+      this.dom.bountyChip.classList.add("ready");
+      return;
+    }
+    this.dom.bountyChip.classList.remove("ready");
+    const next = open[0];
+    if (!next) {
+      this.dom.bountyChip.classList.add("hidden");
+      return;
+    }
+    const done = session.bountyProgress(next.key);
+    this.dom.bountyChip.innerHTML = `<span class="chip-icon">📜</span> Bounty: ${esc(bountyLabel(next.monsterName))} ${done}/${next.need}`;
+  }
+
+  /** Show the boss card for a moment when a new boss notices the hero. */
+  private showBossIntro(name: string, text: string, warning: string, level: number): void {
+    this.dom.bossIntroKicker.textContent = `Level ${level} · A great enemy`;
+    this.dom.bossIntroName.textContent = name;
+    this.dom.bossIntroText.textContent = text;
+    this.dom.bossIntroWarning.textContent = warning;
+    this.dom.bossIntro.classList.remove("hidden");
+    this.dom.bossIntro.classList.remove("leaving");
+    window.clearTimeout(this.bossIntroTimer);
+    this.bossIntroTimer = window.setTimeout(() => {
+      this.dom.bossIntro.classList.add("leaving");
+      window.setTimeout(() => {
+        this.dom.bossIntro.classList.add("hidden");
+        this.dom.bossIntro.classList.remove("leaving");
+      }, 420);
+    }, 4200);
+  }
+
+  /** Fill the death card with what killed the hero and one thing to try next time. */
+  private updateDeathRecap(): void {
+    const session = this.session;
+    if (!session) return;
+    const recap = session.deathRecap;
+    const signature = `${recap.source}:${recap.damage}:${recap.tip}`;
+    if (signature === this.deathSignature) return;
+    this.deathSignature = signature;
+    this.dom.deathRecap.innerHTML = `
+      <div class="death-stat"><span class="death-label">Killed by</span><span class="death-value">${esc(recap.source)}</span></div>
+      <div class="death-stat"><span class="death-label">Biggest hit</span><span class="death-value">${formatNumber(recap.damage)}</span></div>
+      <p class="death-tip">${esc(recap.tip)}</p>`;
   }
 
   /** Show the effects sitting on the hero as small chips, so a poison or a stun is never a mystery. */
@@ -2034,11 +2177,17 @@ export class UIManager {
           if (event.who === "player") {
             this.sfx.death();
             this.toast(t("fallen"), "bad");
+            this.deathSignature = "";
+            this.updateDeathRecap();
           } else if (event.defId && MONSTERS[event.defId]?.boss) {
             this.pushLog(`${MONSTERS[event.defId].name} has been defeated!`, "quest");
             this.sfx.level();
             shouldPersist = true;
           }
+          break;
+        case "boss-intro":
+          this.showBossIntro(event.name, event.text, event.warning, event.level);
+          this.pushLog(`${event.name} notices you.`, "bad");
           break;
         case "levelup":
           this.pushLog(`Level up! You are now level ${event.level}.`, "good");

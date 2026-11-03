@@ -458,6 +458,17 @@ export interface SaveStats {
   bestHit: number;
   distanceWalked: number;
   bestStreak: number;
+  /** Gold earned from the bounty board. */
+  bountyGold: number;
+  /** Monsters defeated while the winner was the last one standing in a fight. */
+  flawlessFights: number;
+}
+
+export interface BountyProgress {
+  /** Which rolled bounty this counts toward (see sim/bounties.ts). */
+  key: string;
+  progress: number;
+  claimed: boolean;
 }
 
 export interface CharacterSave {
@@ -502,6 +513,12 @@ export interface CharacterSave {
   petXp: number;
   /** The title worn by the hero, earned from achievements. */
   title: string;
+  /** Progress on the rotating bounty board. */
+  bounties: BountyProgress[];
+  /** The last in-game day a shrine blessing was bought on. */
+  blessingDay: number;
+  /** The bounty streak: bounties turned in without a death in between. */
+  bountyStreak: number;
 }
 
 export interface CompanionEgg {
@@ -563,6 +580,7 @@ export type SimEvent =
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }
   | { type: "achievement"; id: string; name: string; title?: string }
+  | { type: "boss-intro"; monsterId: string; name: string; text: string; warning: string; level: number }
   | { type: "error"; message: string };
 
 export interface InteractResult {

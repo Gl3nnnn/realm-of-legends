@@ -1,5 +1,6 @@
 import {
   COMBAT_TIMEOUT,
+  AUTOLOOT_RADIUS,
   DODGE_COOLDOWN,
   DODGE_DURATION,
   DODGE_INVULN,
@@ -46,6 +47,11 @@ import { killPlayer, respawn, respawnMonster } from "./death";
 import * as combat from "./combat";
 import * as abilities from "./abilities";
 import * as quests from "./quests";
+import { weatherFor, type WeatherState } from "./weather";
+import * as bountyBoard from "./bounties";
+import type { BountyDef } from "./bounties";
+import { blessingDay as blessingDayOf, getBlessing } from "../data/blessings";
+import { bossLore } from "../data/boss-lore";
 import { cloneSave } from "../save/schema";
 import { LEVEL_CAP } from "../constants";
 import type {
@@ -134,6 +140,16 @@ export class GameSession {
   /** Seconds since the hero last took damage, so a streak can be judged fairly. */
   hurtRecently = 0;
   private achievementTimer = 0;
+  /** Weather is re-rolled a few times a second rather than every frame. */
+  private weatherTimer = 0;
+  private weatherState: WeatherState | null = null;
+  /** Set when a fresh boss notices the hero, so its warning plays once per fight. */
+  private bossSeen = new Set<string>();
+  /** When the hero last asked to go home; blocks the recall until the marker runs out. */
+  private recallBlockedUntil = 0;
+  /** The biggest hit the hero has taken recently, shown on the death screen. */
+  lastHitSource = "";
+  lastHitAmount = 0;
   /** Seconds since the hero's feet last moved, used to count the distance walked. */
   private walkedSinceSample = 0;
   private lastStepX = 0;
@@ -234,6 +250,137 @@ export class GameSession {
   /** Titles the hero may wear right now. */
   get titles(): string[] {
     return availableTitles(this.save);
+  }
+
+  /** The weather over the hero's head right now, and what it is doing to them. */
+  get weather(): WeatherState {
+    if (!this.weatherState) this.weatherState = weatherFor(this.zone.id, this.save.playtime);
+    return this.weatherState;
+  }
+
+  /** How much faster or slower the hero moves because of the sky. */
+  get weatherMoveBonus(): number {
+    return this.weather.effects.moveSpeed;
+  }
+
+  /** The three jobs on the bounty board right now. */
+  get bounties(): BountyDef[] {
+    return bountyBoard.currentBounties(this.save);
+  }
+
+  /** Bounty progress for one job, already capped at what it needs. */
+  bountyProgress(key: string): number {
+    return bountyBoard.bountyProgress(this.save, key);
+  }
+
+  /** Bounties finished and waiting to be collected. */
+  get readyBountyCount(): number {
+    return bountyBoard.readyBounties(this.save, this.bounties);
+  }
+
+  /**
+   * Take the purse for a finished bounty. The reward grows with the streak of bounties
+   * turned in without dying, so a careful run pays better than a reckless one.
+   */
+  claimBounty(key: string): boolean {
+    const bounty = this.bounties.find((entry) => entry.key === key);
+    if (!bounty) return false;
+    if (this.bountyProgress(key) < bounty.need) {
+      this.emit({ type: "log", text: `That bounty needs ${bounty.need} ${bounty.monsterName} kills.`, tone: "info" });
+      return false;
+    }
+    if (!bountyBoard.markBountyClaimed(this.save, key, bounty.need)) return false;
+    const bonus = 1 + Math.min(0.5, this.save.bountyStreak * 0.1);
+    const gold = this.gainGold(Math.round(bounty.gold * bonus));
+    this.gainXp(Math.round(bounty.xp * bonus));
+    this.save.bountyStreak += 1;
+    this.save.stats.bountyGold = (this.save.stats.bountyGold ?? 0) + gold;
+    const streakNote = bonus > 1 ? ` (streak bonus +${Math.round((bonus - 1) * 100)}%)` : "";
+    this.emit({ type: "log", text: `Bounty paid: ${gold} gold and ${Math.round(bounty.xp * bonus)} XP${streakNote}.`, tone: "good" });
+    return true;
+  }
+
+  /** Which blessing this hero can still buy today, and what it costs after trust. */
+  blessingStatus(): { available: boolean; reason: string; cost: number } {
+    const day = blessingDayOf(this.save.playtime);
+    const available = this.save.blessingDay !== day;
+    return {
+      available,
+      reason: available ? "" : "Elara can only bless you once a day.",
+      cost: this.blessingCost(),
+    };
+  }
+
+  /** Blessing price after the healer's trust discount. */
+  blessingCost(base = 35): number {
+    const off = this.healDiscountPercent;
+    return Math.max(5, Math.round(base * (1 - off / 100)));
+  }
+
+  /** Buy one shrine blessing. One per in-game day, so it stays a treat rather than a crutch. */
+  buyBlessing(id: string): boolean {
+    if (this.dead) return false;
+    const blessing = getBlessing(id);
+    if (!blessing) return false;
+    const day = blessingDayOf(this.save.playtime);
+    if (this.save.blessingDay === day) {
+      this.emit({ type: "log", text: "Elara can only bless you once a day. Come back tomorrow.", tone: "info" });
+      return false;
+    }
+    const cost = this.blessingCost(blessing.cost);
+    if (this.save.gold < cost) {
+      this.emit({ type: "log", text: `That blessing costs ${cost} gold.`, tone: "bad" });
+      return false;
+    }
+    this.save.gold -= cost;
+    this.save.blessingDay = day;
+    const existing = this.buffs.find((buff) => buff.name === blessing.buff.name);
+    if (existing) existing.remaining = Math.max(existing.remaining, blessing.duration);
+    else this.buffs.push({ ...blessing.buff, remaining: blessing.duration });
+    this.emit({ type: "log", text: `${blessing.name} settles over you for ${Math.round(blessing.duration / 60)} minutes.`, tone: "good" });
+    return true;
+  }
+
+  /** Seconds of blessing left, or 0 when none is running. */
+  get blessingRemaining(): number {
+    return this.buffs.reduce((longest, buff) => Math.max(longest, buff.remaining), 0);
+  }
+
+  /**
+   * Recall home: leave a fight behind and wake up at the village shrine. Free, instant, and
+   * always available, but never during a boss fight so it cannot be used to skip one.
+   */
+  recallHome(): boolean {
+    if (this.dead) return false;
+    if (this.elapsed < this.recallBlockedUntil) {
+      this.emit({ type: "log", text: "You cannot gather yourself yet. Steady your breath.", tone: "info" });
+      return false;
+    }
+    const inBossFight = this.monsters.some((monster) => monster.state !== "dead" && getMonster(monster.defId).boss && length(this.save.x - monster.x, this.save.y - monster.y) < 320);
+    if (inBossFight) {
+      this.emit({ type: "log", text: "Something will not let you leave. Deal with it first.", tone: "bad" });
+      return false;
+    }
+    if (this.save.zone === "village") {
+      this.emit({ type: "log", text: "You are already home.", tone: "info" });
+      return false;
+    }
+    const village = ZONES.village;
+    this.save.zone = "village";
+    this.save.x = village.spawn.x;
+    this.save.y = village.spawn.y;
+    this.unlockWaypoint("village");
+    this.dodgeTimer = 0;
+    this.loadZone();
+    this.recallBlockedUntil = this.elapsed + 6;
+    this.emit({ type: "zone", zone: "village" });
+    this.emit({ type: "log", text: "You follow Elara's light home to Eldoria Village.", tone: "good" });
+    return true;
+  }
+
+  /** Whether the recall is off its short cooldown right now. */
+  get canRecall(): boolean {
+    return !this.dead && this.elapsed >= this.recallBlockedUntil;
   }
 
   /** Put on one of the earned titles, or fall back to the default one. */
@@ -653,12 +800,18 @@ export class GameSession {
     this.potionCooldown = Math.max(0, this.potionCooldown - clamped);
     this.tickStatuses(clamped);
     this.tickBuffs(clamped);
+    // The sky changes slowly; a couple of times a second is plenty.
+    this.weatherTimer += clamped;
+    if (this.weatherTimer >= 0.5) {
+      this.weatherTimer = 0;
+      this.weatherState = null;
+    }
 
     const stats = this.stats;
     const currentStats = stats;
     const slow = this.statuses.find((s) => s.kind === "slow");
     const stunned = this.statuses.some((s) => s.kind === "stun");
-    const speed = currentStats.moveSpeed * (slow ? 1 - slow.value / 100 : 1);
+    const speed = currentStats.moveSpeed * (slow ? 1 - slow.value / 100 : 1) * (1 + this.weatherMoveBonus / 100);
     const dodging = this.dodgeTimer > 0 && !stunned;
     let moving = !stunned && (input.moveX !== 0 || input.moveY !== 0);
     if (dodging) {
@@ -704,6 +857,7 @@ export class GameSession {
       this.clampSave();
       return this.drainEvents();
     }
+    this.announceBosses();
     quests.advanceSurvival(this, clamped);
     this.updatePets(clamped);
     this.updateHatchling(clamped);
@@ -785,7 +939,7 @@ export class GameSession {
       }
 
       if (stunned) continue;
-      const speed = def.speed * (monster.elite === "swift" ? 1.3 : 1) * (slowed ? 1 - slowed.value / 100 : 1);
+      const speed = def.speed * (monster.elite === "swift" ? 1.3 : 1) * (slowed ? 1 - slowed.value / 100 : 1) * (1 + this.weather.effects.monsterSpeed / 100);
 
       if (monster.state === "return") {
         const dir = normalize(monster.spawnX - monster.x, monster.spawnY - monster.y);
@@ -1174,7 +1328,8 @@ export class GameSession {
   private updateLoot(dt: number): void {
     for (const drop of this.loot) {
       drop.ttl -= dt;
-      if (dist2(this.save.x, this.save.y, drop.x, drop.y) <= PICKUP_RANGE * PICKUP_RANGE) {
+      const reach = PICKUP_RANGE + AUTOLOOT_RADIUS;
+      if (dist2(this.save.x, this.save.y, drop.x, drop.y) <= reach * reach) {
         const leftover = this.addItem(drop.itemId, drop.qty, drop.instance);
         const collected = drop.qty - leftover;
         if (collected > 0) {
@@ -1394,6 +1549,63 @@ export class GameSession {
     quests.recordKill(this, monsterId);
   }
 
+  /** Count a kill toward the bounty board, and say so when one is finished. */
+  recordBountyKill(monsterId: string): void {
+    const open = this.bounties;
+    const touched = bountyBoard.addBountyKill(this.save, monsterId, open);
+    for (const key of touched) {
+      const bounty = open.find((entry) => entry.key === key);
+      if (!bounty) continue;
+      const done = this.bountyProgress(key);
+      if (done >= bounty.need) {
+        this.emit({ type: "log", text: `Bounty complete: ${bounty.monsterName}. Collect it from the journal.`, tone: "quest" });
+      }
+    }
+  }
+
+  /** Remember the last big hit for the death screen. */
+  rememberHit(source: string, damage: number): void {
+    if (damage <= 0) return;
+    this.lastHitSource = source;
+    this.lastHitAmount = Math.round(damage);
+  }
+
+  /**
+   * What killed the hero and what to try next, built when the hero falls. It exists so a
+   * death reads as a lesson rather than a four-second wait with nothing to look at.
+   */
+  get deathRecap(): { source: string; damage: number; tip: string; level: number } {
+    const source = this.lastHitSource || "the dark";
+    const damage = this.lastHitAmount;
+    const stats = this.stats;
+    let tip = "Dodge through the wind-up, not away from it. Rolling into a swing passes it.";
+    if (this.statuses.some((status) => status.kind === "poison")) tip = "Poison finished you. Carry an antidote or kill the venomous ones from range.";
+    if (this.statuses.some((status) => status.kind === "burn")) tip = "You burned down. Step out of the fire before it stacks.";
+    else if (this.inventoryEmptyOfPotions) tip = "Your bag had no potions left. The village shop sells them cheap.";
+    else if (damage >= stats.maxHp * 0.6) tip = "That was one huge blow. Shrine blessings give you a bigger health pool for fights like this.";
+    return { source, damage, tip, level: this.save.level };
+  }
+
+  /** True when there is nothing in the bag that can heal the hero. */
+  get inventoryEmptyOfPotions(): boolean {
+    return this.consumableCount("heal") === 0;
+  }
+
+  /**
+   * Say something when a fresh boss first notices the hero: a line of lore and one useful
+   * warning, once per boss per visit, so the fight opens with intent.
+   */
+  announceBosses(): void {
+    if (this.dead) return;
+    for (const monster of this.monsters) {
+      if (monster.state === "dead" || monster.state === "idle") continue;
+      const def = getMonster(monster.defId);
+      if (!def.boss || this.bossSeen.has(monster.uid)) continue;
+      this.bossSeen.add(monster.uid);
+      const lore = bossLore(def.id);
+      this.emit({ type: "boss-intro", monsterId: def.id, name: def.name, text: lore.text, warning: lore.warning, level: def.level });
+    }
+  }
   refreshQuestCompletion(state: QuestState): void {
     quests.refreshQuestCompletion(this, state);
   }

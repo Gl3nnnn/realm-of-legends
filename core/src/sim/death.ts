@@ -14,6 +14,8 @@ export function killPlayer(session: GameSession, _source: string): void {
   session.projectiles = [];
   session.save.stats.deaths += 1;
   session.resetKillStreak();
+  // A bounty streak only counts while the hero keeps their feet, so falling resets it.
+  session.save.bountyStreak = 0;
   session.emit({ type: "death", who: "player", x: session.save.x, y: session.save.y });
   session.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
 }

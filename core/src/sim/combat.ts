@@ -23,6 +23,8 @@ export function damagePlayer(s: GameSession, raw: number, source: string, damage
   const reduced = raw * (1 - s.modifiers.damageReduction / 100);
   const mitigated = Math.max(1, Math.round(reduced * (100 / (100 + stats.defense * 2))));
   let damage = mitigated;
+  // Whatever lands is remembered for the death screen, so a loss actually teaches something.
+  s.rememberHit(source, damage);
   if (s.shield > 0) {
     const absorbed = Math.min(s.shield, damage);
     s.shield -= absorbed;
@@ -73,6 +75,7 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   if (def.boss && firstBossKill) s.save.stats.bossesSlain += 1;
   s.save.petXp += def.boss ? 60 : 6;
   s.bumpKillStreak();
+  s.recordBountyKill(def.id);
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {
     damagePlayer(s, def.attack * s.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
     s.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
@@ -85,8 +88,10 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   const gold = Math.round(s.rng.int(def.goldMin, def.goldMax) * s.difficultyScale.gold * eliteReward);
   if (gold > 0) s.gainGold(gold);
   const drops: ItemStack[] = [];
+  // Rain and ash make the beasts leave a little more behind.
+  const weatherDrop = 1 + s.weather.effects.dropBonus / 100;
   for (const entry of def.loot) {
-    const dropChance = monster.elite ? Math.min(1, entry.chance * 1.5) : entry.chance;
+    const dropChance = (monster.elite ? Math.min(1, entry.chance * 1.5) : entry.chance) * weatherDrop;
     if (!s.rng.chance(dropChance)) continue;
     const item = ITEMS[entry.itemId];
     const qty = s.rng.int(entry.min, entry.max);

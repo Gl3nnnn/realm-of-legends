@@ -101,6 +101,14 @@ export function formatTime(seconds: number): string {
   return `${m}m`;
 }
 
+/**
+ * A monster name made safe and short enough for a one-line chip, so a long boss name
+ * never pushes the HUD out of shape.
+ */
+export function bountyLabel(name: string): string {
+  return name.length > 22 ? `${name.slice(0, 21)}…` : name;
+}
+
 const STAT_LABELS: Record<keyof StatBonus, string> = {
   attack: "Attack",
   defense: "Defense",

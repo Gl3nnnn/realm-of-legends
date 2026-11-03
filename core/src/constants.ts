@@ -6,7 +6,7 @@ export const LEVEL_CAP = 50;
 export const INVENTORY_SIZE = 24;
 export const MAX_CHARACTERS = 5;
 export const MAX_GOLD = 9_999_999;
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 export const PLAYER_RADIUS = 9;
 export const PLAYER_SPEED = 96;
 export const INTERACT_RANGE = 58;
@@ -18,6 +18,8 @@ export const PERFECT_DODGE_WINDOW = 0.18;
 export const DODGE_SPEED = DODGE_DISTANCE / DODGE_DURATION;
 export const POTION_COOLDOWN = 1;
 export const PICKUP_RANGE = 20;
+/** Drops are pulled in from a little further away, so a fight does not end in a victory lap. */
+export const AUTOLOOT_RADIUS = 34;
 export const RESPAWN_SECONDS = 4;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const COMBAT_TIMEOUT = 6;

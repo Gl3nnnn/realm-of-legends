@@ -46,6 +46,12 @@ const questSchema = z.object({
   claimedReward: z.number().int().min(0).max(9).optional(),
 });
 
+const bountySchema = z.object({
+  key: z.string().min(1).max(24),
+  progress: z.number().int().min(0).max(999),
+  claimed: z.boolean().default(false),
+});
+
 const statsSchema = z.object({
   monstersSlain: z.number().int().min(0).default(0),
   bossesSlain: z.number().int().min(0).default(0),
@@ -59,6 +65,8 @@ const statsSchema = z.object({
   bestHit: z.number().int().min(0).default(0),
   distanceWalked: z.number().min(0).default(0),
   bestStreak: z.number().int().min(0).default(0),
+  bountyGold: z.number().int().min(0).default(0),
+  flawlessFights: z.number().int().min(0).default(0),
 });
 
 const achievementIds = ACHIEVEMENT_IDS as [string, ...string[]];
@@ -101,6 +109,9 @@ export const saveSchema = z.object({
   waypoints: z.array(z.enum(ZONE_IDS)).max(8).default(["village"]),
   petXp: z.number().int().min(0).default(0),
   title: z.string().min(1).max(40).default(DEFAULT_TITLE),
+  bounties: z.array(bountySchema).max(16).default([]),
+  blessingDay: z.number().int().min(-1).default(-1),
+  bountyStreak: z.number().int().min(0).default(0),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -217,11 +228,14 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
-    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0 },
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0 },
     achievements: [],
     waypoints: ["village"],
     petXp: 0,
     title: DEFAULT_TITLE,
+    bounties: [],
+    blessingDay: -1,
+    bountyStreak: 0,
   };
 }
 
@@ -361,6 +375,13 @@ export function migrateSave(input: unknown): CharacterSave {
     // Older saves know nothing about lifetime counters, so they start from a clean slate.
     migrated.waypoints = ["village"];
     migrated.version = 11;
+  }
+  if (migrated.version === 11) {
+    // The bounty board and shrine blessings arrived later; older heroes simply have none yet.
+    migrated.bounties = [];
+    migrated.blessingDay = -1;
+    migrated.bountyStreak = 0;
+    migrated.version = 12;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

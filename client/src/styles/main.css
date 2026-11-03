@@ -754,6 +754,19 @@ input[type="text"]:focus {
   color: #a8c0ff;
 }
 
+/* Weather: one colour per kind, so the sky reads before the word does. */
+.zone-tag.weather-tag {
+  background: #24293a;
+  color: #c2d0e8;
+}
+
+.zone-tag.weather-tag[data-weather="rain"] { background: #1f2c3a; color: #9ec8f0; }
+.zone-tag.weather-tag[data-weather="storm"] { background: #262038; color: #b6a8ff; }
+.zone-tag.weather-tag[data-weather="fog"] { background: #2c2e33; color: #c6ccd6; }
+.zone-tag.weather-tag[data-weather="snow"] { background: #26333c; color: #cdf0ff; }
+.zone-tag.weather-tag[data-weather="ash"] { background: #38281f; color: #ffbe95; }
+.zone-tag.weather-tag[data-weather="wind"] { background: #22322b; color: #a8e8c8; }
+
 /* The name plate under the hero's name, only shown once a title is worn. */
 .hud-title {
   font-size: 9px;
@@ -846,11 +859,23 @@ input[type="text"]:focus {
   color: #d9c8ff;
 }
 
-/* A clean kill streak, parked under the buffs so it never covers a fight. */
-.streak-chip {
+/* One left-hand column for every small chip: streak, bounty, companion, then effects.
+   Each one takes its own row, so they queue instead of landing on top of each other. */
+.chip-stack {
   position: absolute;
   top: 152px;
   left: clamp(10px, 1.6vw, 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: 44vw;
+  pointer-events: none;
+}
+
+/* A clean kill streak, parked under the buffs so it never covers a fight. */
+.streak-chip {
+  position: static;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -870,6 +895,43 @@ input[type="text"]:focus {
   box-shadow: 0 0 18px rgba(255, 154, 60, 0.55);
 }
 
+/* The bounty board line: quiets down when nothing is due, glows when a purse is waiting. */
+.bounty-chip {
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(20, 24, 40, 0.92);
+  border: 1px solid #3f5170;
+  border-radius: 5px;
+  padding: 4px 9px;
+  color: #b8cde8;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bounty-chip .chip-icon {
+  margin-right: 3px;
+  opacity: 0.85;
+}
+
+.bounty-chip.ready {
+  border-color: #e8c46a;
+  color: #ffe6a3;
+  background: rgba(52, 40, 12, 0.95);
+  box-shadow: 0 0 14px rgba(232, 196, 106, 0.4);
+  animation: bounty-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes bounty-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(232, 196, 106, 0.28); }
+  50% { box-shadow: 0 0 18px rgba(232, 196, 106, 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bounty-chip.ready { animation: none; }
+}
+
 @keyframes streak-pop {
   from { transform: scale(0.86); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -879,23 +941,15 @@ input[type="text"]:focus {
   .streak-chip { animation: none; }
 }
 
-/* Companion level, kept small and beside the streak so both read as one status line. */
+/* Companion level, kept small and under the streak so both read as one status column. */
 .pet-chip {
-  position: absolute;
-  top: 152px;
-  left: clamp(10px, 1.6vw, 22px);
-  margin-top: 26px;
+  position: static;
   font-size: 10px;
   background: rgba(24, 32, 26, 0.9);
   border: 1px solid #467a55;
   border-radius: 5px;
   padding: 3px 8px;
   color: #b7e8c4;
-}
-
-/* The streak pushes the pet chip down when both are showing. */
-.streak-chip:not(.hidden) ~ .pet-chip {
-  margin-top: 52px;
 }
 
 /* Item comparison against the worn piece, in the bag panel. */
@@ -916,11 +970,10 @@ input[type="text"]:focus {
 .compare-line.up { color: #7fe0a0; }
 .compare-line.down { color: #ff9fa0; }
 
-/* Effects sitting on the hero: poison, burn, slow, stun, mark. */
+/* Effects sitting on the hero: poison, burn, slow, stun, mark. They sit in the chip
+   column, so they line up under the streak instead of covering it. */
 .status-chips {
-  position: absolute;
-  top: 156px;
-  left: clamp(10px, 1.6vw, 22px);
+  position: static;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
@@ -1304,6 +1357,7 @@ input[type="text"]:focus {
   display: grid;
   gap: 12px;
   padding: 28px 36px;
+  max-width: min(460px, 92vw);
   background: rgba(24, 16, 20, 0.92);
   border: 2px solid #6a3030;
   border-radius: 10px;
@@ -1312,6 +1366,111 @@ input[type="text"]:focus {
 .death-card h2 {
   color: #ff9fa0;
   font-size: 18px;
+}
+
+/* What killed you and what to try next, so a death teaches something. */
+.death-recap {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(160, 90, 90, 0.35);
+}
+
+.death-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 11px;
+}
+
+.death-label {
+  color: rgba(228, 206, 206, 0.6);
+}
+
+.death-value {
+  color: #ffb9b9;
+  font-weight: 700;
+}
+
+.death-tip {
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(160, 90, 90, 0.35);
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(238, 222, 210, 0.86);
+  text-align: left;
+}
+
+/* The boss introduction card: a name, one line of lore, one warning. */
+.boss-intro {
+  position: fixed;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 34;
+  pointer-events: none;
+  animation: boss-card-in 0.4s ease-out;
+  width: min(520px, 92vw);
+}
+
+.boss-intro.leaving {
+  animation: boss-card-out 0.42s ease-in forwards;
+}
+
+.boss-intro-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 20px;
+  text-align: center;
+  background: linear-gradient(165deg, rgba(40, 14, 18, 0.96), rgba(14, 10, 14, 0.96));
+  border: 1px solid #8a3a3a;
+  border-top: 3px solid #c4544a;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.boss-intro-kicker {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 190, 170, 0.7);
+}
+
+.boss-intro-card h2 {
+  font-size: 16px;
+  color: #ffb3a3;
+}
+
+.boss-intro-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(238, 220, 212, 0.82);
+}
+
+.boss-intro-warning {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  padding-top: 6px;
+  border-top: 1px dashed rgba(200, 150, 90, 0.3);
+}
+
+@keyframes boss-card-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes boss-card-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boss-intro, .boss-intro.leaving { animation: none; }
+  .boss-intro.leaving { opacity: 0; }
 }
 
 .death-timer {
@@ -2264,6 +2423,55 @@ html[data-contrast="high"] .log-line.good {
   color: #b8ffc8;
 }
 
+/*
+ * Colour-blind palettes. The game leans on red/green to mean "hurt" and "heal", which is
+ * exactly the pair protanopia and deuteranopia blur together, so each mode swaps in a set
+ * of colours that stay apart: blue-versus-orange, and gold-versus-violet.
+ */
+html[data-color-blind="protan"] .log-line.bad,
+html[data-color-blind="protan"] .death-value,
+html[data-color-blind="deutan"] .log-line.bad,
+html[data-color-blind="deutan"] .death-value {
+  color: #ffc46b;
+}
+
+html[data-color-blind="protan"] .log-line.good,
+html[data-color-blind="protan"] .compare-line.up,
+html[data-color-blind="protan"] .bounty-paid,
+html[data-color-blind="deutan"] .log-line.good,
+html[data-color-blind="deutan"] .compare-line.up,
+html[data-color-blind="deutan"] .bounty-paid {
+  color: #8ec8ff;
+}
+
+html[data-color-blind="protan"] .compare-line.down,
+html[data-color-blind="deutan"] .compare-line.down {
+  color: #ffb0d8;
+}
+
+html[data-color-blind="protan"] .bar.hp .bar-fill,
+html[data-color-blind="deutan"] .bar.hp .bar-fill {
+  background: linear-gradient(90deg, #d8742a, #ffab5c);
+}
+
+html[data-color-blind="protan"] .bounty-bar-fill,
+html[data-color-blind="deutan"] .bounty-bar-fill {
+  background: linear-gradient(90deg, #4a7fc0, #93c2f0);
+}
+
+/* Text size only touches the small reading text, never the world or the HUD frame. */
+html[data-text-size="1.15"] .small,
+html[data-text-size="1.15"] .log-line,
+html[data-text-size="1.15"] .qdesc {
+  font-size: calc(1em * 1.15);
+}
+
+html[data-text-size="1.3"] .small,
+html[data-text-size="1.3"] .log-line,
+html[data-text-size="1.3"] .qdesc {
+  font-size: calc(1em * 1.3);
+}
+
 html[data-motion="reduced"] *,
 html[data-motion="reduced"] *::before,
 html[data-motion="reduced"] *::after {
@@ -2569,6 +2777,182 @@ summary:focus-visible {
 .stat-note {
   font-size: 9px;
   color: var(--muted);
+}
+
+/* Shrine blessings: a short list of cheap buffs, one per day. */
+.blessing-section {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.blessing-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.blessing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.blessing-row:hover:not(:disabled) {
+  border-color: rgba(232, 192, 90, 0.6);
+  background: rgba(232, 192, 90, 0.08);
+}
+
+.blessing-row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.blessing-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.blessing-body {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+}
+
+.blessing-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e8dcc8;
+}
+
+.blessing-cost {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+/* The controls sheet: what, which key, and what it does. */
+.control-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(80px, auto) minmax(120px, 1.4fr);
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.control-what {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e8dcc8;
+}
+
+.control-key {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .control-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* Bounties: three rotating jobs, each with its own progress bar and purse. */
+.bounty-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.bounty-row {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bounty-row.ready {
+  border-color: rgba(232, 192, 90, 0.6);
+  background: rgba(232, 192, 90, 0.09);
+}
+
+.bounty-row.paid {
+  opacity: 0.55;
+}
+
+.bounty-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.bounty-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: #e8dcc8;
+}
+
+.bounty-purse {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.bounty-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.bounty-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6a9ad0, #9ec8f0);
+  transition: width 0.25s ease-out;
+}
+
+.bounty-row.ready .bounty-bar-fill {
+  background: linear-gradient(90deg, #c9a95f, #ffe6a3);
+}
+
+.bounty-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bounty-paid {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7fe0a0;
 }
 
 /* Achievements: dim until earned, then the icon fills in. */
