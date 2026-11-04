@@ -39,10 +39,11 @@ async function skipIntro(page: import("@playwright/test").Page) {
   await expect(box).toHaveCount(0);
 }
 
-test("reads the update board before choosing a hero, and can reopen it", async ({ page }) => {
+test("reads the update board over the hero list, and can reopen it", async ({ page }) => {
   await page.goto("/");
   const board = page.locator("#update-board");
   await expect(board).toBeVisible();
+  await expect(page.locator("#char-select")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Update board" })).toBeVisible();
   await expect(board).toContainText("The Chronicler's Update");
 

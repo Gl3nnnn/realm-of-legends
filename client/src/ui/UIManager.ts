@@ -157,7 +157,6 @@ export class UIManager {
   // Enter or Space also turns a page, the way other games let you read on.
   private storyKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   private storyTimer: number | null = null;
-  private updateBoardClose: (() => void) | null = null;
   private updateBoardOpener: HTMLElement | null = null;
 
   private readonly dom = {
@@ -252,18 +251,14 @@ export class UIManager {
     }, AUTOSAVE_MS);
   }
 
-  /** Boot hand-off: a new patch is read on the update board before the hero list appears. */
+  /** Boot hand-off: a new patch is read on the update board over the hero list. */
   async startup(): Promise<void> {
-    if (hasUnreadUpdates()) {
-      this.showUpdateBoard(() => void this.showCharacterSelect());
-    } else {
-      await this.showCharacterSelect();
-    }
+    await this.showCharacterSelect();
+    if (hasUnreadUpdates()) this.showUpdateBoard();
   }
 
   /** The update board, either on launch, from the hero list, or from inside the game. */
-  private showUpdateBoard(onClose?: () => void): void {
-    this.updateBoardClose = onClose ?? null;
+  private showUpdateBoard(): void {
     this.updateBoardOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.dom.updateList.innerHTML = updateBoardHtml();
     this.dom.updateLatest.textContent = `v${LATEST_UPDATE.version}`;
@@ -272,6 +267,7 @@ export class UIManager {
       ? `${unread} new update${unread === 1 ? "" : "s"} since your last visit.`
       : "You are all caught up. Older notes are kept below.";
     this.dom.updateBoard.classList.remove("hidden");
+    this.dom.updateBoard.setAttribute("aria-hidden", "false");
     this.refreshTouchVisibility();
     this.sfx.ui();
     requestAnimationFrame(() => this.dom.updateContinue.focus());
@@ -280,15 +276,13 @@ export class UIManager {
   private closeUpdateBoard(): void {
     if (this.dom.updateBoard.classList.contains("hidden")) return;
     this.dom.updateBoard.classList.add("hidden");
+    this.dom.updateBoard.setAttribute("aria-hidden", "true");
     markUpdatesSeen();
     this.updateBoardBadge();
     this.refreshTouchVisibility();
     const opener = this.updateBoardOpener;
     this.updateBoardOpener = null;
     if (opener?.isConnected && !opener.closest(".hidden")) opener.focus();
-    const done = this.updateBoardClose;
-    this.updateBoardClose = null;
-    done?.();
   }
 
   private updateBoardBadge(): void {
@@ -491,6 +485,9 @@ export class UIManager {
     // Clicking the dim backdrop behind the box cancels, like Escape does.
     this.dom.confirm.addEventListener("click", (event) => {
       if (event.target === this.dom.confirm) this.closeConfirm();
+    });
+    this.dom.updateBoard.addEventListener("click", (event) => {
+      if (event.target === this.dom.updateBoard) this.closeUpdateBoard();
     });
 
     this.dom.createPanel.addEventListener("input", (event) => {
@@ -754,6 +751,25 @@ export class UIManager {
       if (event.key === "Escape") {
         event.preventDefault();
         this.closeUpdateBoard();
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = Array.from(this.dom.updateBoard.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary, [tabindex]:not([tabindex="-1"])',
+        )).filter((element) => element.offsetParent !== null);
+        if (focusable.length === 0) {
+          event.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || !this.dom.updateBoard.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !this.dom.updateBoard.contains(document.activeElement))) {
+          event.preventDefault();
+          first.focus();
+        }
       }
       return;
     }
