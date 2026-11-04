@@ -55,6 +55,10 @@ import * as bountyBoard from "./bounties";
 import type { BountyDef } from "./bounties";
 import { blessingDay as blessingDayOf, getBlessing } from "../data/blessings";
 import { bossLore } from "../data/boss-lore";
+import { isWeaknessHit, monsterWeakness, weaknessMultiplier } from "../data/weakness";
+import { arenaWave } from "../data/arena";
+import { DEEDS, getDeed, journeyLevelFor, journeyNextStop, journeyPointsToNext, JOURNEY_STOPS, TOTAL_DEED_POINTS } from "../data/journey";
+import { pickRival, rivalFlavour, type RivalDef } from "../data/rival";
 import { cloneSave } from "../save/schema";
 import { LEVEL_CAP } from "../constants";
 import type {
@@ -159,6 +163,23 @@ export class GameSession {
   private lastStepY = 0;
   /** Set by combat when a reaction just fired, so the next hit does not pay for it twice. */
   private lastReactionAt = -999;
+  /**
+   * Momentum: the chain of hits landed without taking one. It builds on every
+   * landed hit, breaks the moment something lands on the hero, and pays out at
+   * milestones so a clean fight feels better than a scrappy one.
+   */
+  combo = 0;
+  /** Seconds left before the chain expires on its own. */
+  comboTimer = 0;
+  /** The strongest chain reached this run, for the HUD's "best" line. */
+  comboBest = 0;
+  /** Set on the cast that triggers the ultimate, so the HUD can flash. */
+  ultimateReady = false;
+  /** The Hollow Ring run in progress, or null when the hero is not in the ring. */
+  arenaWaveNumber = 0;
+  arenaAlive = 0;
+  arenaActive = false;
+  private arenaAnnounced = -1;
   private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
   private zoneLoaded = false;
 
@@ -804,6 +825,14 @@ export class GameSession {
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - clamped);
     this.invulnerable = Math.max(0, this.invulnerable - clamped);
     this.potionCooldown = Math.max(0, this.potionCooldown - clamped);
+    // The hit chain fades on its own if the hero stops swinging, so it cannot be banked.
+    if (this.comboTimer > 0) {
+      this.comboTimer = Math.max(0, this.comboTimer - clamped);
+      if (this.comboTimer <= 0 && this.combo > 0) {
+        this.combo = 0;
+      }
+    }
+    this.ultimateReady = this.ultimateCharged;
     this.tickStatuses(clamped);
     this.tickBuffs(clamped);
     // The sky changes slowly; a couple of times a second is plenty.
@@ -1196,8 +1225,344 @@ export class GameSession {
     combat.damagePlayer(this, raw, source, damageType);
   }
 
-  killPlayer(source: string): void {
-    killPlayer(this, source);
+  killPlayer(source: string, killerId = ""): void {
+    killPlayer(this, source, killerId);
+  }
+
+  private killMonster(monster: MonsterInstance): void {
+    const def = getMonster(monster.defId);
+    const wasArena = this.arenaActive;
+    combat.killMonster(this, monster);
+    // The rival is not a separate monster: it is one of these, wearing a grudge.
+    this.settleRival(def.id);
+    this.recordDeed("kills", def.boss ? 0 : 1);
+    if (def.boss && this.save.defeatedBosses.includes(def.id)) this.recordDeed("bosses", 1);
+    if (wasArena) this.onArenaKill();
+  }
+
+  /** Records that one deed counter went up, in every zone that counts it. */
+  recordDeed(kind: "kills" | "bosses" | "chests" | "gathers" | "arena" | "quests", amount: number): void {
+    if (amount <= 0) return;
+    for (const deed of DEEDS) {
+      if (deed.kind !== kind) continue;
+      // "kills in the forest" only counts forest kills, so the zone has to match.
+      if (kind !== "arena" && deed.zone !== this.save.zone) continue;
+      if (this.save.deeds.includes(deed.id)) continue;
+      const current = this.save.deedProgress[deed.id] ?? 0;
+      const next = Math.min(deed.target, current + amount);
+      this.save.deedProgress[deed.id] = next;
+      if (next >= deed.target) this.finishDeed(deed.id);
+    }
+  }
+
+  /** Pays a finished deed: journey points, gold and a line in the log. */
+  private finishDeed(deedId: string): void {
+    const deed = getDeed(deedId);
+    if (!deed || this.save.deeds.includes(deed.id)) return;
+    this.save.deeds.push(deed.id);
+    this.save.journeyPoints += deed.points;
+    this.save.stats.goldEarned += deed.gold;
+    this.save.gold = Math.min(MAX_GOLD, this.save.gold + deed.gold);
+    this.emit({ type: "log", text: `Deed done: ${deed.name}. +${deed.points} Journey, +${deed.gold} gold.`, tone: "good" });
+    writeDiary(this.save, "quest", `Finished the deed "${deed.name}".`);
+    // A finished deed can push the journey over the next stop, so check it right away.
+    this.checkJourneyStop();
+    this.checkAchievements();
+  }
+
+  /** The whole Journey track as the journal shows it. */
+  get journey(): { level: number; points: number; next: ReturnType<typeof journeyNextStop>; toNext: number; claimed: number; stops: { level: number; needed: number; gold: number; label: string; state: "claimed" | "ready" | "locked" }[] } {
+    const points = this.save.journeyPoints;
+    const level = journeyLevelFor(points);
+    const stops = JOURNEY_STOPS;
+    return {
+      level,
+      points,
+      next: journeyNextStop(points),
+      toNext: journeyPointsToNext(points),
+      claimed: this.save.journeyClaimed,
+      stops: stops.map((stop) => ({
+        level: stop.level,
+        needed: stop.needed,
+        gold: stop.gold,
+        label: stop.label,
+        state: this.save.journeyClaimed >= stop.level ? "claimed" : points >= stop.needed ? "ready" : "locked",
+      })),
+    };
+  }
+
+  /** Which deeds are done, grouped by zone, with live progress. */
+  get deedBoard(): { id: string; zone: string; name: string; task: string; progress: number; target: number; done: boolean; points: number; gold: number }[] {
+    return DEEDS.map((deed) => ({
+      id: deed.id,
+      zone: this.zoneName(deed.zone),
+      name: deed.name,
+      task: deed.task,
+      progress: Math.min(deed.target, this.save.deedProgress[deed.id] ?? 0),
+      target: deed.target,
+      done: this.save.deeds.includes(deed.id),
+      points: deed.points,
+      gold: deed.gold,
+    }));
+  }
+
+  /** Claim every Journey stop the hero has reached but not yet collected. */
+  claimJourney(): number {
+    let claimed = 0;
+    for (const stop of JOURNEY_STOPS) {
+      if (this.save.journeyPoints < stop.needed) break;
+      if (this.save.journeyClaimed >= stop.level) continue;
+      this.save.journeyClaimed = stop.level;
+      this.save.gold = Math.min(MAX_GOLD, this.save.gold + stop.gold);
+      if (stop.itemId) this.addItem(stop.itemId, 1);
+      claimed += 1;
+      this.emit({ type: "log", text: `Journey ${stop.level}: ${stop.label}. +${stop.gold} gold.`, tone: "good" });
+    }
+    if (claimed === 0) this.emit({ type: "log", text: "Nothing to claim on the Journey yet. Finish a deed.", tone: "info" });
+    return claimed;
+  }
+
+  private checkJourneyStop(): void {
+    const level = journeyLevelFor(this.save.journeyPoints);
+    // Only speak up when a new stop is waiting to be claimed, never twice for the same one.
+    if (level > this.save.journeyClaimed) {
+      this.emit({ type: "log", text: `Journey ${level} reached. Claim it in the journal.`, tone: "good" });
+    }
+  }
+
+  /** Total journey points still available from unfinished deeds, for the journal header. */
+  get deedPointsLeft(): number {
+    return Math.max(0, TOTAL_DEED_POINTS - this.save.deeds.reduce((sum, id) => sum + (getDeed(id)?.points ?? 0), 0));
+  }
+
+  /** The zone display name for a deed row. */
+  private zoneName(zone: CharacterSave["zone"]): string {
+    return ZONES[zone].name;
+  }
+
+  /** The rival, levelled to the hero's own progress. */
+  get rival(): RivalDef | null {
+    if (!this.save.rival) return null;
+    return rivalFlavour(this.save.rival, Math.max(1, this.save.level + this.save.rival.wins));
+  }
+
+  /**
+   * The first death of a hero's life picks the monster that did it. Later deaths
+   * feed the same grudge, so there is always one thing that got away.
+   */
+  pickRivalOnDeath(killerId: string): void {
+    if (!killerId || getMonster(killerId)?.boss) return;
+    if (!this.save.rival) {
+      const picked = pickRival(this.save.metMonsters, killerId);
+      this.save.rival = { ...picked, wins: 1, losses: 0 };
+      this.emit({ type: "log", text: `Something remembers you: ${picked.name}. It will want another turn.`, tone: "bad" });
+      writeDiary(this.save, "death", `${picked.name} put you down. It will come back.`);
+      return;
+    }
+    if (this.save.rival.species === killerId) {
+      this.save.rival.wins += 1;
+      return;
+    }
+    // A different monster doing the job just makes the old one angrier.
+    this.save.rival.wins += 1;
+  }
+
+  /** The rival fell: the grudge is settled, and a new one starts from a clean slate. */
+  private settleRival(monsterId: string): void {
+    const rival = this.save.rival;
+    if (!rival) return;
+    if (rival.species !== monsterId) return;
+    rival.losses += 1;
+    if (rival.wins <= 0) {
+      this.save.rival = null;
+      this.emit({ type: "log", text: "The grudge is settled. Nothing is left to remember you.", tone: "good" });
+      writeDiary(this.save, "kill", "Settled the score with the one that got away.");
+      return;
+    }
+    rival.wins = Math.max(0, rival.wins - 1);
+    this.emit({ type: "log", text: `${rival.name} went down. It has lost one of its wins back.`, tone: "good" });
+    writeDiary(this.save, "kill", `Finally put ${rival.name} down.`);
+  }
+
+  /** Land one hit in the momentum chain. Milestones pay a little resource and a log line. */
+  bumpCombo(): void {
+    this.combo += 1;
+    this.comboTimer = 4;
+    if (this.combo > this.comboBest) this.comboBest = this.combo;
+    if (this.combo > this.save.stats.bestCombo) this.save.stats.bestCombo = this.combo;
+    if (this.combo === 10 || this.combo === 25 || this.combo === 50 || this.combo % 100 === 0) {
+      this.save.resource = Math.min(this.stats.maxResource, this.save.resource + 8);
+      this.emit({ type: "log", text: `${this.combo} hit chain! The rhythm carries you.`, tone: "good" });
+    }
+  }
+
+  /** Anything landing on the hero ends the chain, which is what makes keeping it hard. */
+  breakCombo(): void {
+    if (this.combo >= 10) {
+      this.emit({ type: "log", text: `The ${this.combo} hit chain breaks.`, tone: "info" });
+    }
+    this.combo = 0;
+    this.comboTimer = 0;
+  }
+
+  /** True while the momentum chain is high enough that a special shows up. */
+  get ultimateCharged(): boolean {
+    return this.combo >= 20;
+  }
+
+  /** The Hollow Ring wave the hero is on, for the HUD and journal. */
+  get arenaStatus(): { active: boolean; wave: number; alive: number; best: number } {
+    return { active: this.arenaActive, wave: this.arenaWaveNumber, alive: this.arenaAlive, best: this.save.arenaBest };
+  }
+
+  /**
+   * Enter the Hollow Ring: clears the arena's floor and brings in wave one.
+   * Entering costs nothing, which is the whole point of the mode.
+   */
+  enterArena(): boolean {
+    if (this.dead) return false;
+    this.arenaActive = true;
+    this.arenaWaveNumber = 0;
+    this.arenaAlive = 0;
+    this.arenaAnnounced = -1;
+    this.emit({ type: "log", text: "You step into the Hollow Ring. Nothing in here is on your side.", tone: "quest" });
+    this.startArenaWave();
+    return true;
+  }
+
+  /** Leave the ring and take nothing that is still standing with you. */
+  leaveArena(): boolean {
+    if (!this.arenaActive) return false;
+    this.arenaActive = false;
+    this.arenaWaveNumber = 0;
+    this.arenaAlive = 0;
+    this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("arena_"));
+    this.emit({ type: "log", text: "You step out of the ring. It will be waiting when you come back.", tone: "info" });
+    return true;
+  }
+
+  /** Bring in the next wave around the hero, close enough to matter. */
+  private startArenaWave(): void {
+    const wave = arenaWave(this.arenaWaveNumber + 1);
+    this.arenaWaveNumber = wave.wave;
+    this.arenaAlive = 0;
+    for (let index = 0; index < wave.count; index += 1) {
+      const species = wave.species[index % wave.species.length];
+      const angle = (Math.PI * 2 * index) / wave.count + this.rng.between(0, 6) / 10;
+      const radius = 120 + this.rng.between(0, 60);
+      const x = Math.min(this.zone.width * this.zone.tileWidth - 20, Math.max(20, this.save.x + Math.cos(angle) * radius));
+      const y = Math.min(this.zone.height * this.zone.tileHeight - 20, Math.max(20, this.save.y + Math.sin(angle) * radius));
+      const monster = this.makeMonster({ id: species, x, y }, `arena_${wave.wave}_${index}_${this.nextUid("a")}`);
+      if (!monster) continue;
+      // Waves scale with the hero, so the ring stays a test rather than a wall.
+      const scale = 1 + wave.wave * 0.08;
+      monster.hp = Math.round(monster.hp * scale);
+      monster.maxHp = Math.round((monster.maxHp ?? monster.hp) * scale);
+      this.monsters.push(monster);
+      this.arenaAlive += 1;
+    }
+    if (this.arenaAnnounced !== wave.wave) {
+      this.arenaAnnounced = wave.wave;
+      this.emit({ type: "log", text: wave.announcement, tone: "quest" });
+    }
+  }
+
+  /** One wave member down: when the floor is clear, the next wave walks in. */
+  private onArenaKill(): void {
+    if (!this.arenaActive) return;
+    this.arenaAlive = Math.max(0, this.arenaAlive - 1);
+    if (this.arenaAlive > 0) return;
+    const wave = arenaWave(this.arenaWaveNumber);
+    this.save.gold = Math.min(MAX_GOLD, this.save.gold + wave.gold);
+    this.save.stats.goldEarned += wave.gold;
+    this.gainXp(wave.xp);
+    this.recordDeed("arena", 1);
+    if (this.arenaWaveNumber > this.save.arenaBest) {
+      this.save.arenaBest = this.arenaWaveNumber;
+      if (this.arenaWaveNumber % 5 === 0) {
+        this.emit({ type: "log", text: `Deepest run yet: wave ${this.arenaWaveNumber}.`, tone: "good" });
+      }
+    }
+    this.emit({ type: "log", text: `Wave ${this.arenaWaveNumber} cleared. +${wave.gold} gold.`, tone: "good" });
+    // A short breath between waves, then the next one is already on its way in.
+    this.startArenaWave();
+  }
+
+  /**
+   * Weakness: hitting a creature with the element it cannot stand. The bestiary
+   * and the boss card both print it, so the fight is a puzzle with a written answer.
+   */
+  weaknessFor(monsterId: string): { type: string; note: string; bonus: number } {
+    const weak = monsterWeakness(monsterId);
+    return { type: weak.type, note: weak.note, bonus: weak.bonus };
+  }
+
+  /** Count a weakness hit, and pay the little feedback that teaches the rule. */
+  recordWeaknessHit(_monsterId: string): void {
+    this.save.stats.weaknessHits += 1;
+    if (this.save.stats.weaknessHits === 1) {
+      this.emit({ type: "log", text: "A weakness! The right element cuts deeper.", tone: "good" });
+    }
+  }
+
+  /** True when this element is the answer for that species. */
+  isWeakTo(monsterId: string, damageType: string): boolean {
+    return isWeaknessHit(monsterId, damageType as Parameters<typeof isWeaknessHit>[1]);
+  }
+
+  /** How much a matching element multiplies damage by, for the damage maths. */
+  weaknessFactor(monsterId: string, damageType: string): number {
+    return weaknessMultiplier(monsterId, damageType as Parameters<typeof weaknessMultiplier>[1]);
+  }
+
+  /** Save the gear the hero is wearing as a named set, ready to put back on later. */
+  saveLoadout(name: string): boolean {
+    const clean = name.trim().slice(0, 24);
+    if (!clean) return false;
+    if (this.save.loadouts.length >= 3) {
+      this.emit({ type: "log", text: "Three saved sets is the limit. Overwrite one first.", tone: "info" });
+      return false;
+    }
+    this.save.loadouts.push({
+      name: clean,
+      equipment: cloneSave(this.save).equipment,
+      quickSlots: [this.save.quickSlots[0], this.save.quickSlots[1]],
+    });
+    this.emit({ type: "log", text: `Saved your current gear as "${clean}".`, tone: "good" });
+    return true;
+  }
+
+  /** Put a saved set back on, if every piece is still in the bag or already worn. */
+  wearLoadout(index: number): boolean {
+    const loadout = this.save.loadouts[index];
+    if (!loadout) return false;
+    for (const [slot, stack] of Object.entries(loadout.equipment) as [keyof CharacterSave["equipment"], ItemStack | undefined][]) {
+      if (!stack) continue;
+      const def = ITEMS[stack.itemId];
+      if (!def || !canClassUse(def, this.save.classId)) {
+        this.emit({ type: "log", text: `You cannot wear ${def?.name ?? "that piece"} any more.`, tone: "bad" });
+        return false;
+      }
+      const worn = this.save.equipment[slot];
+      if (worn && worn.itemId === stack.itemId) continue;
+      // The piece has to exist somewhere: worn in another slot, or in the bag.
+      const bagIndex = this.save.inventory.findIndex((entry) => entry && entry.itemId === stack.itemId);
+      if (bagIndex < 0) {
+        this.emit({ type: "log", text: `${def.name} is no longer in your bag.`, tone: "bad" });
+        return false;
+      }
+      this.equip(bagIndex);
+    }
+    this.save.quickSlots = [loadout.quickSlots[0], loadout.quickSlots[1]];
+    this.emit({ type: "log", text: `Wearing "${loadout.name}".`, tone: "good" });
+    return true;
+  }
+
+  /** Remove a saved set, so another can take its place. */
+  deleteLoadout(index: number): boolean {
+    if (!this.save.loadouts[index]) return false;
+    this.save.loadouts.splice(index, 1);
+    return true;
   }
 
   private respawn(): void {
@@ -1208,9 +1573,6 @@ export class GameSession {
     respawnMonster(this, monster);
   }
 
-  private killMonster(monster: MonsterInstance): void {
-    combat.killMonster(this, monster);
-  }
 
   private updateHatchling(dt: number): void {
     const companion = this.save.companion;

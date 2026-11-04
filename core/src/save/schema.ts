@@ -67,6 +67,24 @@ const statsSchema = z.object({
   bestStreak: z.number().int().min(0).default(0),
   bountyGold: z.number().int().min(0).default(0),
   flawlessFights: z.number().int().min(0).default(0),
+  bestCombo: z.number().int().min(0).default(0),
+  weaknessHits: z.number().int().min(0).default(0),
+});
+
+/** The monster with a grudge: one species that beat the hero and grows with them. */
+const rivalSchema = z.object({
+  name: z.string().min(1).max(40),
+  species: z.string().min(1).max(60),
+  faces: z.string().min(1).max(60),
+  wins: z.number().int().min(0).max(999),
+  losses: z.number().int().min(0).max(999),
+});
+
+/** A saved gear set, worn again with one press. */
+const loadoutSchema = z.object({
+  name: z.string().min(1).max(24),
+  equipment: equipmentSchema,
+  quickSlots: z.tuple([z.string().nullable(), z.string().nullable()]),
 });
 
 const achievementIds = ACHIEVEMENT_IDS as [string, ...string[]];
@@ -122,6 +140,13 @@ export const saveSchema = z.object({
     kind: z.enum(["kill", "quest", "boss", "level", "loot", "death", "zone", "achievement"]),
     text: z.string().min(1).max(160),
   })).max(60).default([]),
+  journeyPoints: z.number().int().min(0).max(1_000_000).default(0),
+  deeds: z.array(z.string().min(1).max(40)).max(200).default([]),
+  journeyClaimed: z.number().int().min(0).max(200).default(0),
+  deedProgress: z.record(z.string().min(1).max(40), z.number().int().min(0).max(1_000_000)).default({}),
+  rival: rivalSchema.nullable().default(null),
+  arenaBest: z.number().int().min(0).max(9999).default(0),
+  loadouts: z.array(loadoutSchema).max(3).default([]),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -238,7 +263,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
-    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0 },
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0 },
     achievements: [],
     waypoints: ["village"],
     petXp: 0,
@@ -252,6 +277,13 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     metMonsters: [],
     monsterKills: {},
     diary: [],
+    journeyPoints: 0,
+    deeds: [],
+    journeyClaimed: 0,
+    deedProgress: {},
+    rival: null,
+    arenaBest: 0,
+    loadouts: [],
   };
 }
 
@@ -321,6 +353,18 @@ export function validateSave(input: unknown): SaveParseResult {
   if (new Set(save.waypoints).size !== save.waypoints.length || save.waypoints.some((zone) => !ZONE_IDS.includes(zone))) {
     return { ok: false, error: "Unknown fast-travel point." };
   }
+  for (const loadout of save.loadouts) {
+    for (const stack of Object.values(loadout.equipment) as (ItemStack | undefined)[]) {
+      if (!stack) continue;
+      const def = ITEMS[stack.itemId];
+      if (!def || !isEquippable(def)) return { ok: false, error: `Unknown saved gear: ${stack.itemId}` };
+      if (stack.qty !== 1) return { ok: false, error: "Saved gear must be single pieces." };
+    }
+    for (const itemId of loadout.quickSlots) {
+      if (itemId && ITEMS[itemId]?.type !== "consumable") return { ok: false, error: "Saved quick slots must hold consumables." };
+    }
+  }
+  if (save.rival && !save.rival.species) return { ok: false, error: "Invalid rival." };
   const classDef = getClass(save.classId);
   if (save.level < 1 || save.level > LEVEL_CAP) return { ok: false, error: "Invalid level." };
   if (save.level !== clampLevel(save.level)) return { ok: false, error: "Invalid level." };
@@ -408,6 +452,17 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.monsterKills = {};
     migrated.diary = [];
     migrated.version = 13;
+  }
+  if (migrated.version === 13) {
+    // The Journey track, the rival, the Hollow Ring and saved gear sets all arrived together.
+    migrated.journeyPoints = 0;
+    migrated.deeds = [];
+    migrated.journeyClaimed = 0;
+    migrated.deedProgress = {};
+    migrated.rival = null;
+    migrated.arenaBest = 0;
+    migrated.loadouts = [];
+    migrated.version = 14;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

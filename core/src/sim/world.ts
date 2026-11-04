@@ -58,6 +58,7 @@ export function openChest(session: GameSession, id: string): void {
     session.emit({ type: "loot", itemId: item.itemId, qty: item.qty - leftover, x: chest.x, y: chest.y });
   }
   session.emit({ type: "log", text: `Opened a chest: ${gained} gold and supplies.`, tone: "good" });
+  session.recordDeed("chests", 1);
 }
 
 export function gatherNode(session: GameSession, id: string): void {
@@ -73,4 +74,5 @@ export function gatherNode(session: GameSession, id: string): void {
   const def = ITEMS[node.itemId];
   session.emit({ type: "pickup", itemId: node.itemId, qty: 1 });
   session.emit({ type: "log", text: `Gathered ${def?.name ?? "an herb"}.`, tone: "good" });
+  session.recordDeed("gathers", 1);
 }

@@ -462,6 +462,10 @@ export interface SaveStats {
   bountyGold: number;
   /** Monsters defeated while the winner was the last one standing in a fight. */
   flawlessFights: number;
+  /** Longest chain of hits landed without taking one. */
+  bestCombo: number;
+  /** Weakness hits landed, the "did you read the bestiary" counter. */
+  weaknessHits: number;
 }
 
 export interface BountyProgress {
@@ -531,6 +535,40 @@ export interface CharacterSave {
   monsterKills: Record<string, number>;
   /** The last few things that happened, newest first, for the "what did I just do" page. */
   diary: DiaryEntry[];
+  /** Journey points earned by finishing deeds, spent on the free Journey track. */
+  journeyPoints: number;
+  /** Ids of deeds already finished. */
+  deeds: string[];
+  /** The highest Journey stop the hero has already claimed. */
+  journeyClaimed: number;
+  /** Progress for each deed, counted as the hero plays. */
+  deedProgress: Record<string, number>;
+  /** The monster with a grudge, once one has beaten the hero. */
+  rival: RivalState | null;
+  /** The deepest Hollow Ring wave ever cleared. */
+  arenaBest: number;
+  /** Gear sets the hero saved, swapped with one press. */
+  loadouts: Loadout[];
+}
+
+/**
+ * The monster that beat the hero and remembers it. It grows with the hero,
+ * so the grudge stays worth settling.
+ */
+export interface RivalState {
+  name: string;
+  species: string;
+  faces: string;
+  wins: number;
+  losses: number;
+}
+
+/** A gear set the hero saved and can put back on with one press. */
+export interface Loadout {
+  name: string;
+  equipment: Equipment;
+  /** The two quick slots that belonged with the set. */
+  quickSlots: [string | null, string | null];
 }
 
 /**

@@ -6,7 +6,7 @@ import type { GameSession } from "./GameSession";
 import type { MonsterInstance } from "../types";
 
 // Player death: the hero falls, pets and projectiles clear, and the respawn timer starts.
-export function killPlayer(session: GameSession, _source: string): void {
+export function killPlayer(session: GameSession, _source: string, killerId = ""): void {
   if (session.dead) return;
   session.dead = true;
   session.moving = false;
@@ -15,6 +15,13 @@ export function killPlayer(session: GameSession, _source: string): void {
   session.projectiles = [];
   session.save.stats.deaths += 1;
   session.resetKillStreak();
+  session.breakCombo();
+  // A run in the Hollow Ring ends with the hero: the ring clears and starts again from wave one.
+  session.arenaActive = false;
+  session.arenaWaveNumber = 0;
+  session.arenaAlive = 0;
+  // The thing that did it becomes the hero's rival: a grudge worth settling later.
+  session.pickRivalOnDeath(killerId);
   // A bounty streak only counts while the hero keeps their feet, so falling resets it.
   session.save.bountyStreak = 0;
   writeDiary(session.save, "death", `Fell in ${session.zone.name} to ${_source || "the dark"}.`);

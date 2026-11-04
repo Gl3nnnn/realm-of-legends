@@ -114,6 +114,8 @@ export class UIManager {
   private classRoleFilter = "all";
   private classSearch = "";
   private bestiarySearch = "";
+  /** Set once the chain reaches the ultimate threshold, so the cue plays only once. */
+  private comboChimed = false;
   private selectedSlot: number | null = null;
   private selectedEquip: string | null = null;
   private inventoryFilter: InventoryFilter = "all";
@@ -210,6 +212,8 @@ export class UIManager {
     dayPart: must("hud-daypart"),
     weatherTag: must("hud-weather"),
     streakChip: must("streak-chip"),
+    comboChip: must("combo-chip"),
+    arenaChip: must("arena-chip"),
     bountyChip: must("bounty-chip"),
     petChip: must("pet-chip"),
     deathRecap: must("death-recap"),
@@ -1444,6 +1448,34 @@ export class UIManager {
       } else if (action === "pin-quest" && target.dataset.quest) {
         changed = session.pinQuest(target.dataset.quest);
         if (changed) this.toast(session.save.pinnedQuest ? "Quest pinned to the tracker." : "Pin cleared.", "good");
+      } else if (action === "claim-journey") {
+        const claimed = session.claimJourney();
+        changed = claimed > 0;
+        if (changed) {
+          this.sfx.coin();
+          this.toast(`Journey reward claimed (${claimed}).`, "good");
+        }
+      } else if (action === "enter-arena") {
+        changed = session.enterArena();
+        if (changed) {
+          this.toast("You step into the Hollow Ring.", "good");
+          this.closePanel(false);
+        }
+      } else if (action === "leave-arena") {
+        changed = session.leaveArena();
+        if (changed) this.toast("You step out of the ring.", "info");
+      } else if (action === "save-loadout") {
+        const name = window.prompt("Name this gear set", `Set ${session.save.loadouts.length + 1}`);
+        if (name !== null) {
+          changed = session.saveLoadout(name);
+          if (changed) this.toast("Gear set saved.", "good");
+        }
+      } else if (action === "wear-loadout" && target.dataset.index !== undefined) {
+        changed = session.wearLoadout(Number(target.dataset.index));
+        if (changed) this.sfx.level();
+      } else if (action === "delete-loadout" && target.dataset.index !== undefined) {
+        changed = session.deleteLoadout(Number(target.dataset.index));
+        if (changed) this.toast("Gear set forgotten.", "info");
       } else if (action === "fast-travel" && target.dataset.zone) {
         const zone = target.dataset.zone as Parameters<GameSession["fastTravel"]>[0];
         changed = session.fastTravel(zone);
@@ -1706,6 +1738,8 @@ export class UIManager {
       this.dom.weatherTag.dataset.weather = weather.kind;
     }
     this.updateStreakChip();
+    this.updateComboChip();
+    this.updateArenaChip();
     this.updateBountyChip();
     this.updatePetChip();
     this.dom.zone.textContent = session.zone.name;
@@ -1777,11 +1811,14 @@ export class UIManager {
   }
 
   /** Show the boss card for a moment when a new boss notices the hero. */
-  private showBossIntro(name: string, text: string, warning: string, level: number): void {
+  private showBossIntro(name: string, text: string, warning: string, level: number, monsterId = ""): void {
     this.dom.bossIntroKicker.textContent = `Level ${level} · A great enemy`;
     this.dom.bossIntroName.textContent = name;
     this.dom.bossIntroText.textContent = text;
-    this.dom.bossIntroWarning.textContent = warning;
+    // The weakness goes on the card, because it is the one thing that wins the fight.
+    const weak = monsterId ? this.session?.weaknessFor(monsterId) : null;
+    const weakLine = weak && weak.bonus > 0 ? ` Weak to ${weak.type}.` : "";
+    this.dom.bossIntroWarning.textContent = `${warning}${weakLine}`;
     this.dom.bossIntro.classList.remove("hidden");
     this.dom.bossIntro.classList.remove("leaving");
     window.clearTimeout(this.bossIntroTimer);
@@ -1971,6 +2008,37 @@ export class UIManager {
     const text = `🔥 ${streak} kills without a hit`;
     if (this.dom.streakChip.textContent !== text) this.dom.streakChip.textContent = text;
     this.dom.streakChip.classList.toggle("hot", streak >= 10);
+  }
+
+  /** The hit chain, shown once it is long enough to be worth protecting. */
+  private updateComboChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const combo = session.combo;
+    const show = combo >= 5 && !session.dead;
+    this.dom.comboChip.classList.toggle("hidden", !show);
+    // One chime the moment the chain reaches the ultimate threshold, so it is noticed.
+    if (session.ultimateCharged && !this.comboChimed) {
+      this.comboChimed = true;
+      this.sfx.level();
+    } else if (!session.ultimateCharged) {
+      this.comboChimed = false;
+    }
+    if (!show) return;
+    const text = `${combo} hit chain${session.ultimateCharged ? " A� ready" : ""}`;
+    if (this.dom.comboChip.textContent !== text) this.dom.comboChip.textContent = text;
+    this.dom.comboChip.classList.toggle("hot", combo >= 20);
+  }
+
+  /** The Hollow Ring standing, while a run is live. */
+  private updateArenaChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const arena = session.arenaStatus;
+    this.dom.arenaChip.classList.toggle("hidden", !arena.active || session.dead);
+    if (!arena.active) return;
+    const text = `Ring A� wave ${arena.wave} A� ${arena.alive} left`;
+    if (this.dom.arenaChip.textContent !== text) this.dom.arenaChip.textContent = text;
   }
 
   /** The companion's level and how close it is to the next one. */
@@ -2312,7 +2380,7 @@ export class UIManager {
           }
           break;
         case "boss-intro":
-          this.showBossIntro(event.name, event.text, event.warning, event.level);
+          this.showBossIntro(event.name, event.text, event.warning, event.level, event.monsterId);
           this.pushLog(`${event.name} notices you.`, "bad");
           break;
         case "levelup":

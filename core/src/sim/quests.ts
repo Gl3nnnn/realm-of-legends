@@ -174,6 +174,7 @@ export function turnInQuest(session: GameSession, questId: string): boolean {
   }
   state.completions += 1;
   session.save.stats.questsCompleted += 1;
+  session.recordDeed("quests", 1);
   writeDiary(session.save, "quest", `Turned in ${quest.name} for ${gold} gold.`);
   // A finished quest clears the pin, so the tracker always points at live work.
   if (session.save.pinnedQuest === questId) session.save.pinnedQuest = null;
@@ -203,6 +204,7 @@ export function pickQuestReward(session: GameSession, questId: string, index: nu
   state.claimedReward = index;
   state.completions += 1;
   session.save.stats.questsCompleted += 1;
+  session.recordDeed("quests", 1);
   session.gainGold(reward.gold);
   session.gainXp(reward.xp);
   for (const item of reward.items ?? []) {

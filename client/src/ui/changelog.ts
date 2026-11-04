@@ -21,6 +21,23 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.6.0",
+    date: "November 3, 2026",
+    title: "The Grudge Update",
+    summary:
+      "Fights now build momentum, every creature has one element it cannot stand, and the thing that beats you remembers your name. The Hollow Ring and the free Journey track give you a reason to come back.",
+    changes: [
+      { tag: "new", text: "Hit chains: land hits without taking one and the momentum carries you, with a bonus at every milestone." },
+      { tag: "new", text: "Weaknesses: every creature is soft against one element. The bestiary and the boss card print which." },
+      { tag: "new", text: "The Hollow Ring: an endless wave arena behind the village gate. Free to enter, deeper is better paid." },
+      { tag: "new", text: "The Journey: a free, permanent track filled by finishing deeds. It never expires and never resets." },
+      { tag: "new", text: "A rival: fall in a fight and that monster remembers you, growing stronger until the grudge is settled." },
+      { tag: "new", text: "Saved gear sets: store what you are wearing and swap back to it in one press." },
+      { tag: "improved", text: "The journal gains Journey, Deeds, Ring, Rival and Sets pages, and the HUD shows your chain and ring run." },
+      { tag: "improved", text: "Old saves upgrade themselves, so no hero is left behind by this update." },
+    ],
+  },
+  {
     version: "1.5.0",
     date: "November 3, 2026",
     title: "The Chronicler's Update",

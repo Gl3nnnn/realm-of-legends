@@ -34,7 +34,8 @@ export function damagePlayer(s: GameSession, raw: number, source: string, damage
   }
   s.save.hp = Math.max(0, s.save.hp - damage);
   s.lastCombat = s.elapsed;
-  // Any real hit breaks the clean streak, so it always means something.
+  // Any real hit breaks the clean streak and the hit chain, so both always mean something.
+  if (damage > 0) s.breakCombo();
   if (damage > 0) s.resetKillStreak();
   if (damage > 0) s.emit({ type: "damage", target: "player", amount: Math.round(damage), crit: false, x: s.save.x, y: s.save.y, damageType });
   if (s.save.hp <= 0) s.killPlayer(source);
@@ -135,6 +136,16 @@ export function hitMonster(
   const eliteDefense = monster.elite === "armored" ? 1.35 : 1;
   const defenseMultiplier = armorPiercing ? 1 : 100 / (100 + def.defense * 2.5 * eliteDefense);
   const mitigated = Math.max(1, Math.round(raw * defenseMultiplier * (marked ? 1.2 : 1) * execute));
+  // Every creature has one element it cannot stand, printed in the bestiary and on the boss card.
+  const weakness = s.weaknessFactor(def.id, damageType);
+  const weaknessDamage = weakness > 1 ? Math.max(1, Math.round(mitigated * weakness) - mitigated) : 0;
+  if (weakness > 1) s.recordWeaknessHit(def.id);
+  monster.hp -= weaknessDamage;
+  if (weaknessDamage > 0) {
+    s.emit({ type: "damage", target: "monster", uid: monster.uid, amount: weaknessDamage, crit: false, x: monster.x, y: monster.y, damageType });
+  }
+  // A landed hit builds the momentum chain, which is what a clean fight is made of.
+  s.bumpCombo();
   monster.hp -= mitigated;
   // Hitting a burning or frozen thing with a different element wakes a reaction for a little extra.
   const reactionBonus = s.wakeReaction(monster, damageType);

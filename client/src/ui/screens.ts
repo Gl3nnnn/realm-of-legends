@@ -449,6 +449,119 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
   return `<div class="objective ${done ? "done" : ""}">${done ? "✓" : "•"} ${esc(text)}</div>`;
 }
 
+/**
+ * The Journey track: a free, permanent progression bar filled by finishing deeds.
+ * It never expires, so a player who comes back after a month has not missed anything.
+ */
+export function journeySection(session: GameSession): string {
+  const journey = session.journey;
+  const next = journey.next;
+  const pct = next ? Math.min(100, Math.round((journey.points / next.needed) * 100)) : 100;
+  const ready = journey.stops.filter((stop) => stop.state === "ready").length;
+  const stops = journey.stops
+    .map((stop) => `<div class="journey-stop ${stop.state}">
+        <div class="journey-stop-head"><span class="journey-level">${stop.level}</span><span class="journey-label">${esc(stop.label)}</span></div>
+        <div class="small muted">${stop.needed} points A� ${stop.gold} gold A� ${stop.state === "claimed" ? "claimed" : stop.state === "ready" ? "ready to claim" : "locked"}</div>
+      </div>`)
+    .join("");
+  return `<div class="journal-section" id="journal-journey">
+    <div class="qtitle">The Journey A� level ${journey.level}</div>
+    <div class="small muted">${journey.points} points A� ${session.deedPointsLeft} still to earn from deeds. Free, permanent and never reset.</div>
+    <div class="journey-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+    <div class="small muted">${next ? `${journey.toNext} points to stop ${next.level}` : "Every stop reached. The song is sung."}</div>
+    ${ready > 0 ? `<button class="btn" data-action="claim-journey">Claim ${ready} stop${ready === 1 ? "" : "s"}</button>` : `<div class="small muted">Finish a deed to move the bar.</div>`}
+    <div class="journey-stops">${stops}</div>
+  </div>`;
+}
+
+/** Every deed, grouped by zone, with live progress. */
+export function deedsSection(session: GameSession): string {
+  const deeds = session.deedBoard;
+  const zones: string[] = [];
+  for (const deed of deeds) if (!zones.includes(deed.zone)) zones.push(deed.zone);
+  const groups = zones
+    .map((zone) => {
+      const rows = deeds
+        .filter((deed) => deed.zone === zone)
+        .map((deed) => {
+          const pct = Math.min(100, Math.round((deed.progress / deed.target) * 100));
+          return `<div class="deed-row ${deed.done ? "done" : ""}">
+            <div class="deed-head"><span class="deed-name">${esc(deed.name)}</span><span class="deed-points">+${deed.points}</span></div>
+            <div class="small muted">${esc(deed.task)}</div>
+            <div class="deed-bar"><span style="width:${pct}%"></span></div>
+            <div class="small muted">${deed.progress} / ${deed.target}${deed.done ? " A� done" : ""}</div>
+          </div>`;
+        })
+        .join("");
+      return `<div class="deed-group"><div class="deed-zone">${esc(zone)}</div>${rows}</div>`;
+    })
+    .join("");
+  return `<div class="journal-section" id="journal-deeds">
+    <div class="qtitle">Deeds</div>
+    <div class="small muted">Small, concrete goals. Each one pays Journey points and gold, and nothing here is time-limited.</div>
+    ${groups}
+  </div>`;
+}
+
+/** The Hollow Ring standing, plus the button that walks the hero in. */
+export function arenaSection(session: GameSession): string {
+  const arena = session.arenaStatus;
+  return `<div class="journal-section" id="journal-arena">
+    <div class="qtitle">The Hollow Ring</div>
+    <div class="small muted">An endless wave ring behind the village gate. It costs nothing to enter and pays better the deeper you get.</div>
+    <div class="arena-stats">
+      <div><span class="small muted">Deepest run</span><strong>Wave ${arena.best}</strong></div>
+      <div><span class="small muted">Current</span><strong>${arena.active ? `Wave ${arena.wave} A� ${arena.alive} left` : "not in the ring"}</strong></div>
+    </div>
+    ${arena.active
+      ? `<button class="btn ghost" data-action="leave-arena">Leave the ring</button>`
+      : `<button class="btn" data-action="enter-arena">Enter the ring</button>`}
+  </div>`;
+}
+
+/** The one monster that remembers the hero, and what it is owed. */
+export function rivalSection(session: GameSession): string {
+  const rival = session.rival;
+  if (!rival) {
+    return `<div class="journal-section" id="journal-rival">
+      <div class="qtitle">Nothing Has Your Name Yet</div>
+      <div class="small muted">Fall in a fight and whatever did it will remember you. It comes back stronger.</div>
+    </div>`;
+  }
+  const weak = session.weaknessFor(rival.species);
+  const status = rival.wins > rival.losses ? `It has the better of you, ${rival.wins} to ${rival.losses}.` : rival.wins === rival.losses ? `Honours are even, ${rival.wins} each.` : `You have the better of it, ${rival.losses} to ${rival.wins}.`;
+  return `<div class="journal-section" id="journal-rival">
+    <div class="qtitle">${esc(rival.name)}</div>
+    <div class="small muted">${esc(rival.line)}</div>
+    <div class="rival-card">
+      <div class="rival-vs"><span>It is level ${rival.level}</span><span>${esc(status)}</span></div>
+      <div class="small">Weak to <strong>${esc(weak.type)}</strong> A� ${esc(weak.note)}</div>
+    </div>
+  </div>`;
+}
+
+/** Saved gear sets, worn again with one press. */
+export function loadoutsSection(session: GameSession): string {
+  const rows = session.save.loadouts
+    .map((loadout, index) => {
+      const pieces = Object.values(loadout.equipment).filter(Boolean).length;
+      return `<div class="loadout-row">
+        <div><div class="loadout-name">${esc(loadout.name)}</div><div class="small muted">${pieces} piece${pieces === 1 ? "" : "s"}</div></div>
+        <div class="loadout-tools">
+          <button class="btn ghost small" data-action="wear-loadout" data-index="${index}">Wear</button>
+          <button class="btn ghost small" data-action="delete-loadout" data-index="${index}">Forget</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+  return `<div class="journal-section" id="journal-loadouts">
+    <div class="qtitle">Saved Sets</div>
+    <div class="small muted">Save what you are wearing, then swap back to it in one press.</div>
+    ${rows || `<div class="small muted">Nothing saved yet.</div>`}
+    <button class="btn${session.save.loadouts.length >= 3 ? " ghost" : ""}" data-action="save-loadout">Save current gear</button>
+  </div>`;
+}
+
 export function questsPanelHtml(session: GameSession, bestiarySearch = ""): string {
   const active = session.save.quests.filter((state) => QUESTS[state.id]);
   const lore = revealedLore(session.save);
@@ -476,11 +589,15 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-journey">Journey</a><a href="#journal-deeds">Deeds</a><a href="#journal-arena">Ring</a><a href="#journal-rival">Rival</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-loadouts">Sets</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
   if (active.length === 0) {
     return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      ${journeySection(session)}
+      ${deedsSection(session)}
+      ${arenaSection(session)}
+      ${rivalSection(session)}
       ${bountySection(session)}
       ${heroSection(session)}
       ${masterySection(session)}
@@ -511,10 +628,15 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
     .join("");
   return `${nav}
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
+    ${journeySection(session)}
+    ${deedsSection(session)}
+    ${arenaSection(session)}
+    ${rivalSection(session)}
     ${bountySection(session)}
     ${heroSection(session)}
     ${masterySection(session)}
     ${reactionSection(session)}
+    ${loadoutsSection(session)}
     ${diarySection(session)}
     ${travelSection(session)}
     ${bestiarySection(session, bestiarySearch)}
@@ -640,6 +762,10 @@ function bestiarySection(session: GameSession, search = ""): string {
       const role = entry.kind === "ranged" ? "Attacks from range" : entry.kind === "support" ? "Supports other monsters" : "Melee fighter";
       const met = session.hasMet(entry.monster.id);
       const kills = session.killCount(entry.monster.id);
+      const weakness = session.weaknessFor(entry.monster.id);
+      const weakLine = weakness.bonus > 0
+        ? `<div class="small" style="color:var(--gold)">Weak to ${esc(weakness.type)} (+${Math.round(weakness.bonus * 100)}% damage) &middot; ${esc(weakness.note)}</div>`
+        : "";
       if (!met) {
         return `<details class="beast-row unknown">
         <summary>
@@ -657,6 +783,7 @@ function bestiarySection(session: GameSession, search = ""): string {
         <div class="beast-body">
           <div class="small muted">${esc(entry.zoneName)} · ${esc(role)}</div>
           <div class="small">${Math.round(entry.monster.maxHp)} health · ${Math.round(entry.monster.attack)} attack · ${Math.round(entry.monster.speed)} speed</div>
+          ${weakLine}
           ${entry.drops.length ? `<div class="small muted">Drops: ${esc(entry.drops.join(", "))}</div>` : ""}
           ${entry.quests.length ? `<div class="small" style="color:var(--gold)">Wanted by: ${esc(entry.quests.join(", "))}</div>` : ""}
         </div>
