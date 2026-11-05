@@ -40,6 +40,9 @@ describe("character creation", () => {
       expect(save.zone).toBe("village");
       expect(save.hp).toBeGreaterThan(0);
       expect(save.equipment.weapon?.itemId).toBeTruthy();
+      expect(save.stash).toHaveLength(60);
+      expect(save.stash.every((stack) => stack === null)).toBe(true);
+      expect(save.stashTier).toBe(0);
       const result = validateSave(save);
       expect(result.ok, result.ok ? "" : result.error).toBe(true);
     }
@@ -78,6 +81,31 @@ describe("save validation", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.save.introShown).toBe(true);
     expect(migrateSave(copy).introShown).toBe(true);
+  });
+
+  it("migrates pre-vault saves to an empty first-tier vault", () => {
+    const save = base();
+    const v14 = { ...save, version: 14 } as unknown as Record<string, unknown>;
+    delete v14.stash;
+    delete v14.stashTier;
+
+    const migrated = migrateSave(v14);
+
+    expect(migrated.version).toBe(SAVE_VERSION);
+    expect(migrated.stash).toHaveLength(60);
+    expect(migrated.stash.every((stack) => stack === null)).toBe(true);
+    expect(migrated.stashTier).toBe(0);
+    expect(validateSave(migrated).ok).toBe(true);
+  });
+
+  it("rejects vault items outside the unlocked squares", () => {
+    const save = base();
+    save.stash[30] = { itemId: "herb", qty: 1 };
+    expect(validateSave(save)).toMatchObject({ ok: false, error: "The vault holds items beyond its unlocked space." });
+
+    save.stash[30] = null;
+    save.stash[0] = { itemId: "herb", qty: 51 };
+    expect(validateSave(save).ok).toBe(false);
   });
 
   it("normalizes legacy gold and New Game+ values to supported limits", () => {

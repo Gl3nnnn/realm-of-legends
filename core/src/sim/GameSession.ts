@@ -13,6 +13,9 @@ import {
   POTION_COOLDOWN,
   RESOURCE_LABELS,
   MAX_GOLD,
+  STASH_CAPACITIES,
+  STASH_SIZE,
+  STASH_UPGRADE_COSTS,
 } from "../constants";
 import { getClass } from "../data/classes";
 import {
@@ -2295,20 +2298,9 @@ export class GameSession {
    * then consumables and materials. Empty squares always go last so nothing floats.
    */
   sortInventory(): boolean {
-    const order: Record<string, number> = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 };
-    const typeOrder: Record<string, number> = { weapon: 0, armor: 1, helm: 2, boots: 3, trinket: 4, consumable: 5, material: 6 };
     const stacks = this.save.inventory
       .filter((stack): stack is ItemStack => Boolean(stack))
-      .sort((a, b) => {
-        const defA = ITEMS[a.itemId];
-        const defB = ITEMS[b.itemId];
-        if (!defA || !defB) return 0;
-        const typeDiff = (typeOrder[defA.type] ?? 9) - (typeOrder[defB.type] ?? 9);
-        if (typeDiff !== 0) return typeDiff;
-        const rarityDiff = (order[defB.rarity] ?? 0) - (order[defA.rarity] ?? 0);
-        if (rarityDiff !== 0) return rarityDiff;
-        return defA.name.localeCompare(defB.name);
-      });
+      .sort((a, b) => this.compareStacks(a, b));
     if (stacks.length === 0) return false;
     const before = this.save.inventory.map((stack) => stack?.itemId ?? "").join(",");
     this.save.inventory = [
@@ -2319,6 +2311,192 @@ export class GameSession {
     if (before === after) return false;
     this.emit({ type: "log", text: "Backpack sorted.", tone: "info" });
     return true;
+  }
+
+  /** How many vault squares the hero has unlocked. */
+  get stashCapacity(): number {
+    return STASH_CAPACITIES[this.save.stashTier] ?? STASH_CAPACITIES[0];
+  }
+
+  /** How many unlocked vault squares hold something. */
+  get stashUsed(): number {
+    let used = 0;
+    for (let i = 0; i < this.stashCapacity; i += 1) {
+      if (this.save.stash[i]) used += 1;
+    }
+    return used;
+  }
+
+  /** The price of the next vault expansion, or null when the vault is already as large as it gets. */
+  stashUpgradeCost(): { gold: number; nextTier: number } | null {
+    if (this.save.stashTier >= STASH_CAPACITIES.length - 1) return null;
+    const gold = STASH_UPGRADE_COSTS[this.save.stashTier];
+    return gold === undefined ? null : { gold, nextTier: this.save.stashTier + 1 };
+  }
+
+  /** Buy the next row of vault space with gold. */
+  upgradeStash(): boolean {
+    const cost = this.stashUpgradeCost();
+    if (!cost) {
+      this.emit({ type: "log", text: "Your vault is already at its largest.", tone: "info" });
+      return false;
+    }
+    if (this.save.gold < cost.gold) {
+      this.emit({ type: "log", text: `The vault expansion costs ${cost.gold} gold.`, tone: "bad" });
+      return false;
+    }
+    this.save.gold -= cost.gold;
+    this.save.stashTier = cost.nextTier;
+    this.emit({ type: "log", text: `Mira opens ${STASH_CAPACITIES[cost.nextTier]} vault squares for ${cost.gold} gold.`, tone: "good" });
+    return true;
+  }
+
+  /** Move one backpack stack into the vault, merging with matching stacks when it can. */
+  depositToStash(slotIndex: number): boolean {
+    const stack = this.save.inventory[slotIndex];
+    if (!stack) return false;
+    const before = stack.qty;
+    const leftover = this.insertIntoStash(stack.itemId, stack.qty, stack.instance);
+    const moved = before - leftover;
+    if (moved <= 0) {
+      this.emit({ type: "log", text: "The vault has no room for that.", tone: "bad" });
+      return false;
+    }
+    stack.qty -= moved;
+    if (stack.qty <= 0) this.save.inventory[slotIndex] = null;
+    this.refreshCollectQuests();
+    this.emit({ type: "log", text: `Stored ${moved}x ${getItem(stack.itemId).name} in the vault.`, tone: "info" });
+    return true;
+  }
+
+  /** Move one vault stack back into the backpack. Partial moves leave the rest stored. */
+  withdrawFromStash(stashIndex: number): boolean {
+    if (stashIndex < 0 || stashIndex >= this.stashCapacity) return false;
+    const stack = this.save.stash[stashIndex];
+    if (!stack) return false;
+    const leftover = this.insertIntoInventory(stack.itemId, stack.qty, stack.instance);
+    const moved = stack.qty - leftover;
+    if (moved <= 0) {
+      this.emit({ type: "log", text: "Your backpack is full.", tone: "bad" });
+      return false;
+    }
+    stack.qty -= moved;
+    if (stack.qty <= 0) this.save.stash[stashIndex] = null;
+    this.refreshCollectQuests();
+    this.emit({ type: "log", text: `Took ${moved}x ${getItem(stack.itemId).name} from the vault.`, tone: "info" });
+    return true;
+  }
+
+  /** Store every material in the backpack in one trip. Returns how many pieces moved. */
+  depositAllMaterials(): number {
+    let moved = 0;
+    for (let i = 0; i < this.save.inventory.length; i += 1) {
+      const stack = this.save.inventory[i];
+      if (!stack || getItem(stack.itemId).type !== "material") continue;
+      const leftover = this.insertIntoStash(stack.itemId, stack.qty, stack.instance);
+      const placed = stack.qty - leftover;
+      if (placed <= 0) continue;
+      moved += placed;
+      stack.qty -= placed;
+      if (stack.qty <= 0) this.save.inventory[i] = null;
+    }
+    if (moved <= 0) {
+      this.emit({ type: "log", text: "There are no materials to store, or the vault is full.", tone: "info" });
+      return 0;
+    }
+    this.refreshCollectQuests();
+    this.emit({ type: "log", text: `Stored ${moved} materials in the vault.`, tone: "good" });
+    return moved;
+  }
+
+  /** Sort the unlocked half of the vault the same way the backpack sorts. */
+  sortStash(): boolean {
+    const capacity = this.stashCapacity;
+    const stacks = this.save.stash
+      .slice(0, capacity)
+      .filter((stack): stack is ItemStack => Boolean(stack));
+    if (stacks.length === 0) return false;
+    const before = this.save.stash.map((stack) => stack?.itemId ?? "").join(",");
+    stacks.sort((a, b) => this.compareStacks(a, b));
+    this.save.stash = [
+      ...stacks,
+      ...Array.from({ length: Math.max(0, STASH_SIZE - stacks.length) }, () => null),
+    ];
+    const after = this.save.stash.map((stack) => stack?.itemId ?? "").join(",");
+    if (before === after) return false;
+    this.emit({ type: "log", text: "Vault sorted.", tone: "info" });
+    return true;
+  }
+
+  /** Put as much of a stack into the vault as fits, returning the part that did not. */
+  private insertIntoStash(itemId: string, qty: number, instance?: ItemStack["instance"]): number {
+    const def = ITEMS[itemId];
+    if (!def || qty <= 0) return qty;
+    const capacity = this.stashCapacity;
+    if (instance) {
+      for (let i = 0; i < capacity; i += 1) {
+        if (this.save.stash[i]) continue;
+        this.save.stash[i] = { itemId, qty: 1, instance };
+        return qty - 1;
+      }
+      return qty;
+    }
+    let remaining = qty;
+    for (let i = 0; i < capacity && remaining > 0; i += 1) {
+      const stack = this.save.stash[i];
+      if (!stack || stack.itemId !== itemId || stack.qty >= def.stack) continue;
+      const add = Math.min(remaining, def.stack - stack.qty);
+      stack.qty += add;
+      remaining -= add;
+    }
+    for (let i = 0; i < capacity && remaining > 0; i += 1) {
+      if (this.save.stash[i]) continue;
+      const add = Math.min(remaining, def.stack);
+      this.save.stash[i] = { itemId, qty: add };
+      remaining -= add;
+    }
+    return remaining;
+  }
+
+  /** Put as much of a stack back into the backpack as fits, returning the part that did not. */
+  private insertIntoInventory(itemId: string, qty: number, instance?: ItemStack["instance"]): number {
+    const def = ITEMS[itemId];
+    if (!def || qty <= 0) return qty;
+    if (instance) {
+      const free = this.save.inventory.findIndex((stack) => stack === null);
+      if (free === -1) return qty;
+      this.save.inventory[free] = { itemId, qty: 1, instance };
+      return qty - 1;
+    }
+    let remaining = qty;
+    for (const stack of this.save.inventory) {
+      if (!stack || stack.itemId !== itemId || stack.qty >= def.stack) continue;
+      const add = Math.min(remaining, def.stack - stack.qty);
+      stack.qty += add;
+      remaining -= add;
+      if (remaining <= 0) break;
+    }
+    for (let i = 0; i < this.save.inventory.length && remaining > 0; i += 1) {
+      if (this.save.inventory[i]) continue;
+      const add = Math.min(remaining, def.stack);
+      this.save.inventory[i] = { itemId, qty: add };
+      remaining -= add;
+    }
+    return remaining;
+  }
+
+  /** The one sort order shared by the backpack and the vault. */
+  private compareStacks(a: ItemStack, b: ItemStack): number {
+    const order: Record<string, number> = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 };
+    const typeOrder: Record<string, number> = { weapon: 0, armor: 1, helm: 2, boots: 3, trinket: 4, consumable: 5, material: 6 };
+    const defA = ITEMS[a.itemId];
+    const defB = ITEMS[b.itemId];
+    if (!defA || !defB) return 0;
+    const typeDiff = (typeOrder[defA.type] ?? 9) - (typeOrder[defB.type] ?? 9);
+    if (typeDiff !== 0) return typeDiff;
+    const rarityDiff = (order[defB.rarity] ?? 0) - (order[defA.rarity] ?? 0);
+    if (rarityDiff !== 0) return rarityDiff;
+    return defA.name.localeCompare(defB.name);
   }
 
   /** Sell every stack that only the shop wants: materials and spare potions, never equipped gear. */

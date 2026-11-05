@@ -888,6 +888,75 @@ describe("inventory, equipment and economy", () => {
     expect(session.countItem("herb")).toBe(before + 2);
     expect(session.loot).toHaveLength(0);
   });
+
+  it("starts with an empty first-tier vault and moves stacks both ways", () => {
+    const session = new GameSession(saveIn("village"));
+    expect(session.stashCapacity).toBe(24);
+    expect(session.stashUsed).toBe(0);
+    session.addItem("herb", 7);
+    const slot = session.save.inventory.findIndex((stack) => stack?.itemId === "herb");
+
+    expect(session.depositToStash(slot)).toBe(true);
+    expect(session.countItem("herb")).toBe(0);
+    expect(session.save.stash[0]).toMatchObject({ itemId: "herb", qty: 7 });
+    expect(session.stashUsed).toBe(1);
+
+    expect(session.withdrawFromStash(0)).toBe(true);
+    expect(session.countItem("herb")).toBe(7);
+    expect(session.save.stash[0]).toBeNull();
+  });
+
+  it("keeps item instances and stack limits while storing gear", () => {
+    const session = new GameSession(saveIn("village"));
+    session.addItem("steel_sword", 1, { uid: "vault-steel", affixes: ["fierce"], upgrade: 2 });
+    const slot = session.save.inventory.findIndex((stack) => stack?.itemId === "steel_sword");
+
+    expect(session.depositToStash(slot)).toBe(true);
+    expect(session.save.stash.some((stack) => stack?.instance?.uid === "vault-steel")).toBe(true);
+    expect(session.withdrawFromStash(session.save.stash.findIndex((stack) => stack?.instance?.uid === "vault-steel"))).toBe(true);
+    expect(session.save.inventory.some((stack) => stack?.instance?.uid === "vault-steel")).toBe(true);
+  });
+
+  it("refuses deposits when every unlocked vault square is full", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.stash = session.save.stash.map(() => ({ itemId: "herb", qty: getItem("herb").stack }));
+    session.save.inventory[0] = { itemId: "herb", qty: 5 };
+
+    expect(session.depositToStash(0)).toBe(false);
+    expect(session.save.inventory[0]).toMatchObject({ itemId: "herb", qty: 5 });
+  });
+
+  it("expands the vault for gold and unlocks the next squares", () => {
+    const session = new GameSession(saveIn("village"));
+    session.save.gold = 2000;
+
+    expect(session.upgradeStash()).toBe(true);
+    expect(session.save.stashTier).toBe(1);
+    expect(session.stashCapacity).toBe(36);
+    expect(session.save.gold).toBe(1500);
+    expect(session.stashUpgradeCost()).toEqual({ gold: 1500, nextTier: 2 });
+
+    session.save.gold = 0;
+    expect(session.upgradeStash()).toBe(false);
+    expect(session.save.stashTier).toBe(1);
+  });
+
+  it("stores only materials in one trip and sorts the vault", () => {
+    const session = new GameSession(saveIn("village"));
+    session.addItem("herb", 4);
+    session.addItem("iron_ore", 3);
+    const potions = session.countItem("health_potion");
+
+    expect(session.depositAllMaterials()).toBe(7);
+    expect(session.countItem("health_potion")).toBe(potions);
+    expect(session.countItem("herb")).toBe(0);
+    expect(session.countItem("iron_ore")).toBe(0);
+
+    session.save.stash[0] = { itemId: "herb", qty: 4 };
+    session.save.stash[1] = { itemId: "iron_sword", qty: 1 };
+    expect(session.sortStash()).toBe(true);
+    expect(session.save.stash[0]?.itemId).toBe("iron_sword");
+  });
 });
 
 describe("quests", () => {

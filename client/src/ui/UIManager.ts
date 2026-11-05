@@ -39,6 +39,7 @@ import {
   settingsPanelHtml,
   controlsPanelHtml,
   shopPanelHtml,
+  stashPanelHtml,
   talentsPanelHtml,
   type InventoryFilter,
   type InventorySort,
@@ -65,7 +66,8 @@ type PanelState =
   | { kind: "settings" }
   | { kind: "controls" }
   | { kind: "npc"; id: string }
-  | { kind: "shop"; id: string };
+  | { kind: "shop"; id: string }
+  | { kind: "stash" };
 
 interface UIOptions {
   repo: SaveRepository;
@@ -1173,6 +1175,7 @@ export class UIManager {
     else if (kind === "inventory") this.panel = { kind };
     else if (kind === "quests") this.panel = { kind };
     else if (kind === "talents") this.panel = { kind };
+    else if (kind === "stash") this.panel = { kind: "stash" };
     else if (kind === "controls") this.panel = { kind: "controls" };
     else this.panel = { kind: "settings" };
     this.selectedSlot = null;
@@ -1230,6 +1233,9 @@ export class UIManager {
     } else if (this.panel.kind === "shop") {
       title = SHOPS[this.panel.id]?.name ?? "Shop";
       body = this.session ? shopPanelHtml(this.session, this.panel.id) : "";
+    } else if (this.panel.kind === "stash" && this.session) {
+      title = "Mira's Vault";
+      body = stashPanelHtml(this.session);
     } else if (this.panel.kind === "controls") {
       title = "Controls";
       body = controlsPanelHtml(this.preferences);
@@ -1438,6 +1444,22 @@ export class UIManager {
       }
       if (changed) this.sfx.coin();
       this.renderPanel();
+    } else if (this.panel?.kind === "stash") {
+      if (action === "stash-deposit" && slot >= 0) {
+        changed = session.depositToStash(slot);
+      } else if (action === "stash-withdraw" && slot >= 0) {
+        changed = session.withdrawFromStash(slot);
+      } else if (action === "stash-materials") {
+        changed = session.depositAllMaterials() > 0;
+      } else if (action === "stash-sort") {
+        changed = session.sortStash();
+        if (!changed) this.toast("The vault is already tidy.", "info");
+      } else if (action === "stash-upgrade") {
+        changed = session.upgradeStash();
+        if (changed) this.sfx.coin();
+      }
+      if (changed) this.sfx.ui();
+      this.renderPanel();
     } else if (this.panel?.kind === "quests") {
       if (action === "claim-bounty" && target.dataset.bounty) {
         changed = session.claimBounty(target.dataset.bounty);
@@ -1521,6 +1543,9 @@ export class UIManager {
         if (changed) this.sfx.level();
       } else if (action === "open-shop" && target.dataset.shop) {
         this.openPanel("shop", target.dataset.shop);
+        return;
+      } else if (action === "open-stash") {
+        this.openPanel("stash");
         return;
       }
       this.renderPanel();

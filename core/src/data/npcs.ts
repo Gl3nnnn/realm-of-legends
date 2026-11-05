@@ -30,8 +30,10 @@ export const NPCS: Record<string, NpcDef> = {
     dialogue: [
       "Potions, pelts, and practical goods. What catches your eye?",
       "I buy anything that isn't nailed down. Well, mostly.",
+      "The vault in the back is yours to use. Keep what you cannot carry; I keep the key.",
     ],
     shop: "general",
+    stash: true,
     quests: sideQuestsFor("merchant"),
   },
   blacksmith: {

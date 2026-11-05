@@ -435,6 +435,8 @@ export interface NpcDef {
   shop?: string;
   healer?: boolean;
   trainer?: boolean;
+  /** This NPC keeps the village vault and can open it from their conversation. */
+  stash?: boolean;
   sprite: string;
   color: string;
 }
@@ -549,6 +551,10 @@ export interface CharacterSave {
   arenaBest: number;
   /** Gear sets the hero saved, swapped with one press. */
   loadouts: Loadout[];
+  /** The village vault. Only the first `STASH_CAPACITIES[stashTier]` squares can be used. */
+  stash: (ItemStack | null)[];
+  /** How many vault expansions have been bought (0-3). */
+  stashTier: number;
 }
 
 /**

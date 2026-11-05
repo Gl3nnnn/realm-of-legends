@@ -12,6 +12,7 @@ import {
   RECIPES,
   SHOPS,
   SIDE_QUEST_WHISPERS,
+  STASH_CAPACITIES,
   ZONES,
   canClassUse,
   deriveStats,
@@ -432,6 +433,51 @@ export function shopPanelHtml(session: GameSession, shopId: string): string {
     </div>
   </div>
   ${shopId === "forge" ? forgeSectionHtml(session) : ""}`;
+}
+
+/** The village vault: a second grid that survives the trip into the wilds. */
+export function stashPanelHtml(session: GameSession): string {
+  const capacity = session.stashCapacity;
+  const used = session.stashUsed;
+  const upgrade = session.stashUpgradeCost();
+  const vaultCells = Array.from({ length: capacity }, (_, index) => {
+    const stack = session.save.stash[index] ?? null;
+    if (!stack) return `<div class="inv-slot empty" aria-hidden="true"></div>`;
+    const def = getItem(stack.itemId);
+    return `<button class="inv-slot" data-action="stash-withdraw" data-slot="${index}" title="Take ${esc(itemDisplayName(stack))}">
+      <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
+      ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
+    </button>`;
+  }).join("");
+  const bagCells = session.save.inventory.map((stack, index) => {
+    if (!stack) return `<div class="inv-slot empty" aria-hidden="true"></div>`;
+    const def = getItem(stack.itemId);
+    return `<button class="inv-slot" data-action="stash-deposit" data-slot="${index}" title="Store ${esc(itemDisplayName(stack))}">
+      <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
+      ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
+    </button>`;
+  }).join("");
+  const nextCapacity = upgrade ? STASH_CAPACITIES[upgrade.nextTier] : capacity;
+  const upgradeHtml = upgrade
+    ? `<button class="btn small" data-action="stash-upgrade" ${session.save.gold >= upgrade.gold ? "" : "disabled"}>Expand to ${nextCapacity} squares · ${upgrade.gold}g</button>`
+    : `<span class="small muted">The vault is fully expanded.</span>`;
+  return `<div class="panel-columns">
+    <div>
+      <div class="section-title">Vault · ${used}/${capacity} squares · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
+      <div class="bag-tools">
+        <button class="btn ghost small" data-action="stash-sort">Tidy vault</button>
+        <button class="btn ghost small" data-action="stash-materials">Deposit materials</button>
+        ${upgradeHtml}
+      </div>
+      <div class="inv-grid">${vaultCells}</div>
+      <div class="small muted" style="margin-top:8px">Click an item to take it back. The vault keeps what your pack cannot carry.</div>
+    </div>
+    <div>
+      <div class="section-title">Backpack · ${session.freeSlots()} free squares</div>
+      <div class="inv-grid">${bagCells}</div>
+      <div class="small muted" style="margin-top:8px">Click an item to store it. Quest counters only count what you carry, so take quest items back out before turning them in.</div>
+    </div>
+  </div>`;
 }
 
 function objectiveRow(questId: string, progress: number, objectiveIndex: number): string {
@@ -1009,6 +1055,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
+    ${npc.stash ? `<button class="btn" data-action="open-stash">Open vault</button>` : ""}
     ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="small" style="color:var(--good);align-self:center">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
     <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
   </div>

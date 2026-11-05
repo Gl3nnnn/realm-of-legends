@@ -4,9 +4,14 @@ export const TICK_RATE = 60;
 export const FIXED_DT = 1 / TICK_RATE;
 export const LEVEL_CAP = 50;
 export const INVENTORY_SIZE = 24;
+/** The vault's final size. Only the first `STASH_CAPACITIES[tier]` squares are usable. */
+export const STASH_SIZE = 60;
+export const STASH_CAPACITIES = [24, 36, 48, 60] as const;
+/** Gold price for opening the next vault tier. Index 0 buys tier 1. */
+export const STASH_UPGRADE_COSTS = [500, 1500, 4000] as const;
 export const MAX_CHARACTERS = 5;
 export const MAX_GOLD = 9_999_999;
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 export const PLAYER_RADIUS = 9;
 export const PLAYER_SPEED = 96;
 export const INTERACT_RANGE = 58;

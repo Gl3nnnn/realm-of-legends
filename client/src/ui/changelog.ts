@@ -21,6 +21,19 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.7.0",
+    date: "November 5, 2026",
+    title: "The Vault Update",
+    summary:
+      "Mira has opened the back room. Store the gear and materials you cannot carry, expand the vault with gold, and keep your backpack for the fight ahead.",
+    changes: [
+      { tag: "new", text: "Mira's Vault: a 24-square storehouse that grows to 60 squares with three gold upgrades." },
+      { tag: "new", text: "Deposit materials in one click, tidy the vault, and take anything back into your backpack." },
+      { tag: "improved", text: "Vault space and contents travel with your save, so nothing is lost between sessions." },
+      { tag: "improved", text: "Old saves gain an empty first-tier vault automatically." },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "November 3, 2026",
     title: "The Grudge Update",

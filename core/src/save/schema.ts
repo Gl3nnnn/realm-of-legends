@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { INVENTORY_SIZE, LEVEL_CAP, MAX_GOLD, PLAYER_RADIUS, SAVE_VERSION } from "../constants";
+import { INVENTORY_SIZE, LEVEL_CAP, MAX_GOLD, PLAYER_RADIUS, SAVE_VERSION, STASH_CAPACITIES, STASH_SIZE } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
 import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
 import { getTalentChoice, talentTierChosen } from "../data/talents";
@@ -147,6 +147,8 @@ export const saveSchema = z.object({
   rival: rivalSchema.nullable().default(null),
   arenaBest: z.number().int().min(0).max(9999).default(0),
   loadouts: z.array(loadoutSchema).max(3).default([]),
+  stash: z.array(itemStackSchema.nullable()).length(STASH_SIZE).default(() => Array.from({ length: STASH_SIZE }, () => null)),
+  stashTier: z.number().int().min(0).max(STASH_CAPACITIES.length - 1).default(0),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -232,6 +234,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
   const startStats = deriveStats(classDef, 1, equipment, talentBonuses(classId, []));
   const inventory: (ItemStack | null)[] = new Array(INVENTORY_SIZE).fill(null);
   inventory[0] = { itemId: "health_potion", qty: 3 };
+  const stash: (ItemStack | null)[] = new Array(STASH_SIZE).fill(null);
   const zone = ZONES.village;
   return {
     version: SAVE_VERSION,
@@ -284,6 +287,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rival: null,
     arenaBest: 0,
     loadouts: [],
+    stash,
+    stashTier: 0,
   };
 }
 
@@ -318,6 +323,14 @@ export function validateSave(input: unknown): SaveParseResult {
     if (!ITEMS[stack.itemId]) return { ok: false, error: `Unknown inventory item: ${stack.itemId}` };
     if (stack.qty > ITEMS[stack.itemId].stack) return { ok: false, error: `${ITEMS[stack.itemId].name} exceeds its stack limit.` };
     if (stack.instance && (stack.qty !== 1 || !isEquippable(ITEMS[stack.itemId]))) return { ok: false, error: "Item instances must be single pieces of equipment." };
+  }
+  const stashCapacity = STASH_CAPACITIES[save.stashTier] ?? STASH_CAPACITIES[0];
+  for (const [index, stack] of save.stash.entries()) {
+    if (!stack) continue;
+    if (index >= stashCapacity) return { ok: false, error: "The vault holds items beyond its unlocked space." };
+    if (!ITEMS[stack.itemId]) return { ok: false, error: `Unknown vault item: ${stack.itemId}` };
+    if (stack.qty > ITEMS[stack.itemId].stack) return { ok: false, error: `${ITEMS[stack.itemId].name} exceeds its stack limit in the vault.` };
+    if (stack.instance && (stack.qty !== 1 || !isEquippable(ITEMS[stack.itemId]))) return { ok: false, error: "Vault instances must be single pieces of equipment." };
   }
   for (const itemId of save.quickSlots) {
     if (itemId && !ITEMS[itemId]) return { ok: false, error: `Unknown quick-slot item: ${itemId}` };
@@ -463,6 +476,12 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.arenaBest = 0;
     migrated.loadouts = [];
     migrated.version = 14;
+  }
+  if (migrated.version === 14) {
+    // Mira's vault arrived later; every existing hero starts with the first tier, empty.
+    migrated.stash = Array.from({ length: STASH_SIZE }, () => null);
+    migrated.stashTier = 0;
+    migrated.version = 15;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;
