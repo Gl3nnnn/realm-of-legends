@@ -57,3 +57,24 @@ export function arenaWave(wave: number): ArenaWave {
 export function arenaMilestone(wave: number): number {
   return Math.max(1, Math.floor(wave / 5) * 5);
 }
+
+/**
+ * The gauntlet: every story boss, one after another, with no waves in between.
+ * It is the Ring's answer to "you beat them once, can you beat them all".
+ * Each boss pays better than it did in its own zone, and the whole run pays a trophy.
+ */
+export const GAUNTLET_BOSSES = ["bone_warden", "miremother", "frost_revenant", "hollow_king"] as const;
+
+export function gauntletBoss(index: number): string {
+  return GAUNTLET_BOSSES[Math.max(0, Math.min(GAUNTLET_BOSSES.length - 1, Math.floor(index)))];
+}
+
+/** What one gauntlet round pays, in gold, experience and shards. */
+export function gauntletReward(index: number): { gold: number; xp: number; shards: number } {
+  const round = Math.max(0, Math.floor(index));
+  return {
+    gold: 400 + round * 500,
+    xp: 1200 + round * 1600,
+    shards: 12 + round * 8,
+  };
+}

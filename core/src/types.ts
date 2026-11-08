@@ -265,7 +265,7 @@ export interface MonsterInstance {
   spawnY: number;
   hp: number;
   maxHp?: number;
-  state: "idle" | "chase" | "attack" | "return" | "dead";
+  state: "idle" | "chase" | "attack" | "return" | "dead" | "flee";
   facing: number;
   attackTimer: number;
   respawnTimer: number;
@@ -275,6 +275,23 @@ export interface MonsterInstance {
   wanderY: number;
   elite?: EliteAffix;
   phase?: number;
+  /** Cannot be hurt: the training dummy soaks hits and never hits back. */
+  invulnerable?: boolean;
+  /** Seconds left before a fleeing thief escapes with its purse. */
+  fleeTimer?: number;
+  /** Where the fleeing thief is running to. */
+  fleeX?: number;
+  fleeY?: number;
+}
+
+/** A coin that points at a hidden chest, one per zone, worth the walk. */
+export interface TreasureHunt {
+  zone: ZoneId;
+  x: number;
+  y: number;
+  claimX: number;
+  claimY: number;
+  hint: string;
 }
 
 export interface ProjectileInstance {
@@ -468,6 +485,10 @@ export interface SaveStats {
   bestCombo: number;
   /** Weakness hits landed, the "did you read the bestiary" counter. */
   weaknessHits: number;
+  /** The biggest single hit the training dummy has soaked. */
+  bestDummyHit: number;
+  /** The longest clean chain landed on the training dummy. */
+  bestDummyCombo: number;
 }
 
 export interface BountyProgress {
@@ -549,6 +570,26 @@ export interface CharacterSave {
   rival: RivalState | null;
   /** The deepest Hollow Ring wave ever cleared. */
   arenaBest: number;
+  /** The deepest Endless Descent wave ever cleared. */
+  descentBest: number;
+  /** Shards earned in the Descent, traded for gold in the journal. */
+  descentShards: number;
+  /** Relics bought with shards. They are permanent and never lost. */
+  descentRelics: string[];
+  /** The risk carried into each Descent run (0-3, see data/descent.ts). */
+  descentPact: number;
+  /** Bosses already beaten in the Hollow Ring's gauntlet, in any order. */
+  gauntletCleared: string[];
+  /** The last few descent runs, kept for the local leaderboard. */
+  descentRuns: DescentRun[];
+  /** The local day the daily reward was last collected ("YYYY-MM-DD"). */
+  dailyClaimedOn: string;
+  /** Consecutive days the daily reward was collected. */
+  dailyStreak: number;
+  /** The week the weekly score belongs to ("YYYY-Www"). */
+  weeklyKey: string;
+  /** The best Endless Descent wave posted this week. */
+  weeklyBest: number;
   /** Gear sets the hero saved, swapped with one press. */
   loadouts: Loadout[];
   /** The village vault. Only the first `STASH_CAPACITIES[stashTier]` squares can be used. */
@@ -575,6 +616,16 @@ export interface Loadout {
   equipment: Equipment;
   /** The two quick slots that belonged with the set. */
   quickSlots: [string | null, string | null];
+}
+
+/** One finished Endless Descent run, kept for the local leaderboard. */
+export interface DescentRun {
+  /** Deepest wave cleared. */
+  score: number;
+  /** The seed the run was rolled from. */
+  seed: number;
+  /** When the run ended, as a timestamp. */
+  at: number;
 }
 
 /**
@@ -619,7 +670,7 @@ export type SimEvent =
   | { type: "heal"; amount: number; x: number; y: number }
   | { type: "dodge"; x: number; y: number }
   | { type: "immune"; x: number; y: number }
-  | { type: "death"; who: "player" | "monster"; defId?: string; x: number; y: number }
+  | { type: "death"; who: "player" | "monster"; defId?: string; x: number; y: number; boss?: boolean }
   | { type: "levelup"; level: number }
   | { type: "xp"; amount: number }
   | { type: "gold"; amount: number }
@@ -649,6 +700,7 @@ export type SimEvent =
   | { type: "respawn" }
   | { type: "achievement"; id: string; name: string; title?: string }
   | { type: "boss-intro"; monsterId: string; name: string; text: string; warning: string; level: number }
+  | { type: "treasure"; zone: ZoneId; x: number; y: number; claimX: number; claimY: number; hint: string }
   | { type: "error"; message: string };
 
 export interface InteractResult {

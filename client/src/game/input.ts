@@ -81,3 +81,33 @@ export type InputScene = {
   ui: { keybindVersion: number };
   input: Phaser.Input.InputPlugin;
 };
+
+/** The first connected pad, or null. Rumble and reads share this one lookup. */
+export function firstGamepad(): Gamepad | null {
+  if (typeof navigator.getGamepads !== "function") return null;
+  const pads = navigator.getGamepads();
+  return pads ? Array.from(pads).find((entry) => entry && entry.connected) ?? null : null;
+}
+
+/** The haptic actuator a pad may carry; the type is local because not every browser ships it. */
+type HapticPad = Gamepad & {
+  vibrationActuator?: { playEffect?: (type: string, params: { duration: number; strongMagnitude: number; weakMagnitude: number }) => Promise<unknown> };
+};
+
+/**
+ * Shake the pad, if the browser and the pad both support it. 1 is a clean hit, 2 is a boss.
+ * Rumble is a courtesy, not a requirement: a pad without it just plays on silently.
+ */
+export function rumblePad(kind: 0 | 1 | 2): void {
+  const pad = firstGamepad() as HapticPad | null;
+  const actuator = pad?.vibrationActuator;
+  if (!actuator?.playEffect) return;
+  const profile = kind === 2 ? { duration: 420, strongMagnitude: 0.9, weakMagnitude: 0.6 }
+    : kind === 1 ? { duration: 120, strongMagnitude: 0.35, weakMagnitude: 0.15 }
+      : { duration: 60, strongMagnitude: 0.12, weakMagnitude: 0.05 };
+  try {
+    void Promise.resolve(actuator.playEffect("dual-rumble", profile)).catch(() => undefined);
+  } catch {
+    // A pad that refuses the effect is not a problem: the game is unaffected.
+  }
+}

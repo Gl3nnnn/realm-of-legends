@@ -16,6 +16,8 @@ import {
   STASH_CAPACITIES,
   STASH_SIZE,
   STASH_UPGRADE_COSTS,
+  DUMMY_MONSTER_ID,
+  DUMMY_RESET_SECONDS,
 } from "../constants";
 import { getClass } from "../data/classes";
 import {
@@ -28,6 +30,7 @@ import {
   canClassUse,
   isEquippable,
   itemStats,
+  AFFIX_IDS,
 } from "../data/items";
 import { getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
@@ -59,7 +62,29 @@ import type { BountyDef } from "./bounties";
 import { blessingDay as blessingDayOf, getBlessing } from "../data/blessings";
 import { bossLore } from "../data/boss-lore";
 import { isWeaknessHit, monsterWeakness, weaknessMultiplier } from "../data/weakness";
-import { arenaWave } from "../data/arena";
+import { arenaWave, gauntletBoss, gauntletReward, GAUNTLET_BOSSES } from "../data/arena";
+import {
+  boonChoiceIds,
+  descentBoon,
+  descentPact,
+  descentRelic,
+  descentWave,
+  type DescentBoon,
+  type DescentPact,
+  type DescentRelic,
+  type DescentSpecial,
+} from "../data/descent";
+import {
+  dailyReward,
+  dailySeed,
+  dayKey,
+  previousDayKey,
+  weekKey,
+  weeklyModifierFor,
+  weeklySeed,
+  type DailyReward,
+  type WeeklyModifier,
+} from "../data/season";
 import { DEEDS, getDeed, journeyLevelFor, journeyNextStop, journeyPointsToNext, JOURNEY_STOPS, TOTAL_DEED_POINTS } from "../data/journey";
 import { pickRival, rivalFlavour, type RivalDef } from "../data/rival";
 import { cloneSave } from "../save/schema";
@@ -183,6 +208,28 @@ export class GameSession {
   arenaAlive = 0;
   arenaActive = false;
   private arenaAnnounced = -1;
+  /** The Endless Descent run in progress. Boons last only for the run. */
+  descentActive = false;
+  descentWaveNumber = 0;
+  descentAlive = 0;
+  descentBoonIds: string[] = [];
+  descentPendingBoons: string[] = [];
+  descentSeed = 1;
+  /** True while the Ring's gauntlet is running: one boss after another, no waves between. */
+  gauntletActive = false;
+  /** Index into GAUNTLET_BOSSES of the boss currently standing. */
+  gauntletIndex = 0;
+  gauntletAlive = 0;
+  /** The chase in progress: a purse imp running for the zone edge. */
+  private fleeTimer = 0;
+  private treasureTimer = 0;
+  /** The training dummy's meter: hits, total damage and clean chain since it was last reset. */
+  dummyHits = 0;
+  dummyDamage = 0;
+  dummyCombo = 0;
+  dummyBestHit = 0;
+  private dummyTimer = 0;
+  private descentAnnounced = -1;
   private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
   private zoneLoaded = false;
 
@@ -469,11 +516,12 @@ export class GameSession {
         ? { hp: 1.6, attack: 1.35, reward: 1.3 }
         : { hp: 1, attack: 1, reward: 1 };
     const cycle = 1 + this.save.ngPlus * 0.35;
+    const weekly = this.weeklyModifier;
     return {
-      hp: base.hp * cycle,
-      attack: base.attack * cycle,
-      xp: base.reward * (1 + this.save.ngPlus * 0.15),
-      gold: base.reward * (1 + this.save.ngPlus * 0.15),
+      hp: base.hp * cycle * weekly.hp,
+      attack: base.attack * cycle * weekly.attack,
+      xp: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.xp,
+      gold: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.gold,
     };
   }
 
@@ -498,6 +546,8 @@ export class GameSession {
   }
 
   private rescaleMonster(monster: MonsterInstance): void {
+    // The training dummy is fixed furniture, not a fight: scaling it would break its meter.
+    if (monster.invulnerable) return;
     const def = getMonster(monster.defId);
     const previousMaxHp = monster.maxHp ?? def.maxHp;
     const nextMaxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (monster.elite ? 1.6 : 1)));
@@ -556,6 +606,18 @@ export class GameSession {
       else if (buff.stat === "maxHp") maxHp *= 1 + buff.percent / 100;
       else if (buff.stat === "moveSpeed") moveSpeed *= 1 + buff.percent / 100;
     }
+    // Descent boons and the relics bought with shards are permanent for the run, so they are folded in after temporary buffs.
+    const boons = this.descentBonuses;
+    attack *= 1 + boons.attack / 100;
+    defense *= 1 + boons.defense / 100;
+    maxHp *= 1 + boons.maxHp / 100;
+    moveSpeed *= 1 + boons.moveSpeed / 100;
+    // Relics are kept forever, so they count in every zone and every mode.
+    const relics = this.relicStats;
+    attack *= 1 + relics.attack / 100;
+    defense *= 1 + relics.defense / 100;
+    maxHp *= 1 + relics.maxHp / 100;
+    moveSpeed *= 1 + relics.moveSpeed / 100;
     return {
       maxHp: Math.floor(maxHp),
       maxResource: base.maxResource,
@@ -602,6 +664,8 @@ export class GameSession {
     this.monsters = savedState?.monsters ?? zone.monsterSpawns
       .filter((spawn) => !(getMonster(spawn.id).boss && this.save.defeatedBosses.includes(spawn.id)))
       .map((spawn) => this.makeMonster(spawn));
+    // The training dummy never rejoins a fight: its page in the meter starts clean.
+    this.dummyTimer = 0;
     this.traps = zone.traps.map((trap) => ({
       uid: trap.id,
       x: trap.x,
@@ -660,11 +724,13 @@ export class GameSession {
 
   private makeMonster(spawn: { id: string; x: number; y: number }, uid?: string): MonsterInstance {
     const def = getMonster(spawn.id);
+    // The dummy is a tool, never a threat: it takes every hit and returns none.
+    const dummy = spawn.id === DUMMY_MONSTER_ID;
     const eliteChance = Math.min(0.5, 0.08 + this.save.ngPlus * 0.02);
-    const elite = !def.boss && this.rng.chance(eliteChance)
+    const elite = !def.boss && !dummy && this.rng.chance(eliteChance)
       ? this.rng.pick(["swift", "armored", "venomous", "volatile"] as const)
       : undefined;
-    const maxHp = Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (elite ? 1.6 : 1)));
+    const maxHp = dummy ? def.maxHp : Math.max(1, Math.round(def.maxHp * this.difficultyScale.hp * (elite ? 1.6 : 1)));
     return {
       uid: uid ?? this.nextUid("m"),
       defId: spawn.id,
@@ -684,6 +750,7 @@ export class GameSession {
       wanderY: spawn.y,
       elite,
       phase: 0,
+      ...(dummy ? { invulnerable: true } : {}),
     };
   }
 
@@ -895,6 +962,8 @@ export class GameSession {
       this.clampSave();
       return this.drainEvents();
     }
+    this.updateDummy(clamped);
+    this.updateSurprises(clamped);
     this.announceBosses();
     quests.advanceSurvival(this, clamped);
     this.updatePets(clamped);
@@ -950,6 +1019,147 @@ export class GameSession {
     this.save.y = Math.max(0, Math.min(this.save.y, this.zone.height * this.zone.tileHeight));
   }
 
+  /**
+   * The training dummy's meter, in plain numbers. It exists so a build can be measured
+   * instead of guessed at: the same skill, before and after a relic or a talent.
+   */
+  get dummyStatus(): { hits: number; damage: number; combo: number; bestHit: number; bestCombo: number; resetting: boolean } {
+    const dummy = this.monsters.find((monster) => monster.invulnerable);
+    return {
+      hits: this.dummyHits,
+      damage: this.dummyDamage,
+      combo: this.dummyCombo,
+      bestHit: this.dummyBestHit,
+      bestCombo: this.save.stats.bestDummyCombo,
+      resetting: Boolean(dummy && this.dummyTimer > 0),
+    };
+  }
+
+  /** Wipe the dummy's meter by hand, for a fresh comparison. */
+  resetDummy(): boolean {
+    const dummy = this.monsters.find((monster) => monster.invulnerable);
+    if (!dummy) return false;
+    this.dummyHits = 0;
+    this.dummyDamage = 0;
+    this.dummyCombo = 0;
+    this.dummyBestHit = 0;
+    this.dummyTimer = 0;
+    this.emit({ type: "log", text: "The dummy's meter is wiped. Hit it again.", tone: "info" });
+    return true;
+  }
+
+  /** Feed the dummy's meter with one landed hit. Combat calls this for the training dummy. */
+  recordDummyHit(amount: number): void {
+    this.dummyHits += 1;
+    this.dummyDamage += amount;
+    this.dummyCombo += 1;
+    this.dummyBestHit = Math.max(this.dummyBestHit, amount);
+    this.dummyTimer = DUMMY_RESET_SECONDS;
+    if (this.dummyCombo > this.save.stats.bestDummyCombo) this.save.stats.bestDummyCombo = this.dummyCombo;
+  }
+
+  private updateDummy(dt: number): void {
+    const dummy = this.monsters.find((monster) => monster.invulnerable);
+    if (!dummy) return;
+    // Every hit fills it back up, so the same skill can be hit again without waiting.
+    dummy.hp = dummy.maxHp ?? 100000;
+    if (this.dummyTimer > 0) {
+      this.dummyTimer = Math.max(0, this.dummyTimer - dt);
+      if (this.dummyTimer === 0) {
+        this.dummyHits = 0;
+        this.dummyDamage = 0;
+        this.dummyCombo = 0;
+        this.dummyBestHit = 0;
+      }
+    }
+  }
+
+  /**
+   * One tier of the world's surprises, rolled a few times a second: a purse imp that
+   * runs when it is hit, and a coin that points at a hidden chest.
+   */
+  private updateSurprises(dt: number): void {
+    if (this.dead) return;
+    // Dead thieves are swept out of the floor, so a long session does not fill up with ghosts.
+    if (this.monsters.some((monster) => monster.state === "dead" && monster.uid.startsWith("imp_"))) {
+      this.monsters = this.monsters.filter((monster) => !(monster.state === "dead" && monster.uid.startsWith("imp_")));
+    }
+    this.fleeTimer -= dt;
+    if (this.fleeTimer <= 0) {
+      this.fleeTimer = this.rng.between(30, 60);
+      const hostiles = this.monsters.filter((monster) => !monster.invulnerable && monster.state !== "dead" && monster.state !== "flee" && !getMonster(monster.defId).boss);
+      // A thief only shows up when the hero is in a dangerous zone, and never in the village.
+      if (!this.zone.safe && hostiles.length > 0 && this.rng.chance(0.35)) {
+        const angle = this.rng.between(0, Math.PI * 2);
+        const x = Math.min(this.zone.width * this.zone.tileWidth - 20, Math.max(20, this.save.x + Math.cos(angle) * 180));
+        const y = Math.min(this.zone.height * this.zone.tileHeight - 20, Math.max(20, this.save.y + Math.sin(angle) * 180));
+        const imp = this.makeMonster({ id: "loot_imp", x, y }, `imp_${this.nextUid("i")}`);
+        imp.state = "chase";
+        this.monsters.push(imp);
+        this.emit({ type: "log", text: "A purse imp bolts past you, dragging a fat purse. Hit it before it gets away!", tone: "quest" });
+      }
+    }
+    this.treasureTimer -= dt;
+    if (this.treasureTimer <= 0) {
+      this.treasureTimer = this.rng.between(90, 180);
+      if (this.zone.safe || !this.rng.chance(0.25)) return;
+      const honored = this.takeTreasureHunt();
+      if (!honored) return;
+    }
+  }
+
+  /** Find a free square away from walls and hand the hero a coin to walk there. */
+  private takeTreasureHunt(): boolean {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const x = this.rng.between(40, this.zone.width * this.zone.tileWidth - 40);
+      const y = this.rng.between(40, this.zone.height * this.zone.tileHeight - 40);
+      if (length(x - this.save.x, y - this.save.y) < 220) continue;
+      if (this.isBlockedAt(x, y, 14)) continue;
+      const chestId = `hunt_${this.zone.id}_${Math.round(x)}_${Math.round(y)}`;
+      if (this.zone.chests.some((chest) => chest.id === chestId)) return false;
+      this.zone.chests.push({ id: chestId, x, y });
+      const hint = `Something is buried ${this.compassWord(x, y)}. Follow the coin.`;
+      this.emit({ type: "treasure", zone: this.zone.id, x: this.save.x, y: this.save.y, claimX: x, claimY: y, hint });
+      this.emit({ type: "log", text: hint, tone: "quest" });
+      return true;
+    }
+    return false;
+  }
+
+  /** A plain-words direction, so the hint is readable without a map marker. */
+  private compassWord(x: number, y: number): string {
+    const dx = x - this.save.x;
+    const dy = y - this.save.y;
+    const ns = dy < -40 ? "north" : dy > 40 ? "south" : "";
+    const ew = dx > 40 ? "east" : dx < -40 ? "west" : "";
+    if (ns && ew) return `${ns}-${ew} of you`;
+    if (ns) return `${ns} of you`;
+    if (ew) return `${ew} of you`;
+    return "right beside you";
+  }
+
+  /**
+   * A purse imp bolts the moment it is hurt, running for the far edge of the zone.
+   * Catch it before the timer runs out and its purse is yours.
+   */
+  startImpFlee(monster: MonsterInstance): void {
+    if (monster.state === "flee") return;
+    monster.state = "flee";
+    monster.fleeTimer = 3.2;
+    const away = normalize(monster.x - this.save.x, monster.y - this.save.y);
+    monster.fleeX = Math.min(this.zone.width * this.zone.tileWidth - 16, Math.max(16, monster.x + away.x * 700));
+    monster.fleeY = Math.min(this.zone.height * this.zone.tileHeight - 16, Math.max(16, monster.y + away.y * 700));
+    this.emit({ type: "log", text: "The purse imp bolts! Three seconds to catch it.", tone: "bad" });
+  }
+
+  /** The imp got away, and the purse with it. */
+  private escapeImp(monster: MonsterInstance): void {
+    if (monster.state === "dead") return;
+    monster.state = "dead";
+    monster.respawnTimer = 0;
+    this.emit({ type: "log", text: "The purse imp is gone, and the purse with it.", tone: "bad" });
+  }
+
   private updateMonsters(dt: number): void {
     const player = this.save;
     for (const monster of this.monsters) {
@@ -980,6 +1190,17 @@ export class GameSession {
 
       if (stunned) continue;
       const speed = def.speed * (monster.elite === "swift" ? 1.3 : 1) * (slowed ? 1 - slowed.value / 100 : 1) * (1 + this.weather.effects.monsterSpeed / 100);
+
+      // A fleeing purse imp ignores the fight and runs for the zone edge instead.
+      if (monster.state === "flee" && monster.fleeX !== undefined && monster.fleeY !== undefined) {
+        monster.fleeTimer = (monster.fleeTimer ?? 0) - dt;
+        const dir = normalize(monster.fleeX - monster.x, monster.fleeY - monster.y);
+        // It runs a little slower than the hero, so the chase is winnable on foot.
+        this.moveEntity(monster, dir.x * 62 * dt, dir.y * 62 * dt, def.radius);
+        monster.facing = dir.x >= 0 ? 1 : -1;
+        if (monster.fleeTimer <= 0) this.escapeImp(monster);
+        continue;
+      }
 
       if (monster.state === "return") {
         const dir = normalize(monster.spawnX - monster.x, monster.spawnY - monster.y);
@@ -1020,7 +1241,8 @@ export class GameSession {
           monster.state = "chase";
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
-          const raw = def.attack * this.difficultyScale.attack * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
+          const modeScale = this.descentActive && monster.uid.startsWith("descent_") ? 1 + this.pact.attack / 100 : 1;
+          const raw = def.attack * this.difficultyScale.attack * modeScale * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
           if (def.role === "support") {
             const ally = this.monsters
               .filter((candidate) =>
@@ -1152,7 +1374,7 @@ export class GameSession {
         if (source?.state === "dead") continue;
         if (this.telegraphHits(telegraph)) {
           const wasInvulnerable = this.invulnerable > 0;
-          this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden", telegraph.damageType ?? "physical");
+          this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden", telegraph.damageType ?? "physical", telegraph.sourceUid ?? "");
           if (!wasInvulnerable && !this.dead && telegraph.statusEffect) {
             const existing = this.statuses.find((status) => status.kind === telegraph.statusEffect?.kind);
             if (existing) {
@@ -1224,8 +1446,8 @@ export class GameSession {
     this.traps = this.traps.filter((trap) => trap.kind !== "snare" || trap.armed);
   }
 
-  damagePlayer(raw: number, source: string, damageType: DamageType = "physical"): void {
-    combat.damagePlayer(this, raw, source, damageType);
+  damagePlayer(raw: number, source: string, damageType: DamageType = "physical", sourceUid = ""): void {
+    combat.damagePlayer(this, raw, source, damageType, sourceUid);
   }
 
   killPlayer(source: string, killerId = ""): void {
@@ -1234,13 +1456,21 @@ export class GameSession {
 
   private killMonster(monster: MonsterInstance): void {
     const def = getMonster(monster.defId);
-    const wasArena = this.arenaActive;
     combat.killMonster(this, monster);
     // The rival is not a separate monster: it is one of these, wearing a grudge.
     this.settleRival(def.id);
     this.recordDeed("kills", def.boss ? 0 : 1);
     if (def.boss && this.save.defeatedBosses.includes(def.id)) this.recordDeed("bosses", 1);
-    if (wasArena) this.onArenaKill();
+  }
+
+  /**
+   * A monster died somewhere in the world. Called from the single death path in combat, so
+   * the Ring, the Descent and the gauntlet all count their own kills whichever blow landed.
+   */
+  onModeKill(monster: MonsterInstance): void {
+    if (monster.uid.startsWith("arena_")) this.onArenaKill();
+    if (monster.uid.startsWith("descent_")) this.onDescentKill();
+    if (monster.uid.startsWith("gauntlet_")) this.onGauntletKill();
   }
 
   /** Records that one deed counter went up, in every zone that counts it. */
@@ -1424,6 +1654,14 @@ export class GameSession {
    */
   enterArena(): boolean {
     if (this.dead) return false;
+    if (this.gauntletActive) {
+      this.emit({ type: "log", text: "Finish the gauntlet before stepping into the ring.", tone: "info" });
+      return false;
+    }
+    if (this.descentActive) {
+      this.emit({ type: "log", text: "Finish the Descent before stepping into the ring.", tone: "info" });
+      return false;
+    }
     this.arenaActive = true;
     this.arenaWaveNumber = 0;
     this.arenaAlive = 0;
@@ -1489,6 +1727,431 @@ export class GameSession {
     this.emit({ type: "log", text: `Wave ${this.arenaWaveNumber} cleared. +${wave.gold} gold.`, tone: "good" });
     // A short breath between waves, then the next one is already on its way in.
     this.startArenaWave();
+  }
+
+  /** The weekly mood and the seed the Descent is rolled from. */
+  get weeklyModifier(): WeeklyModifier {
+    return weeklyModifierFor(weekKey());
+  }
+
+  get weeklyRunSeed(): number {
+    return weeklySeed(weekKey(), this.save.id);
+  }
+
+  /** Today's login reward and whether it is still waiting to be claimed. */
+  get dailyStatus(): { key: string; available: boolean; streak: number; nextStreak: number; reward: DailyReward; lastClaimed: string } {
+    const key = dayKey();
+    const available = this.save.dailyClaimedOn !== key;
+    const nextStreak = available
+      ? this.save.dailyClaimedOn === previousDayKey(key)
+        ? Math.min(7, this.save.dailyStreak + 1)
+        : 1
+      : Math.max(1, this.save.dailyStreak);
+    return {
+      key,
+      available,
+      streak: Math.max(1, this.save.dailyStreak),
+      nextStreak,
+      reward: dailyReward(nextStreak),
+      lastClaimed: this.save.dailyClaimedOn,
+    };
+  }
+
+  /** Collect today's reward. The streak grows only when yesterday was collected too. */
+  claimDaily(): boolean {
+    const status = this.dailyStatus;
+    if (!status.available) {
+      this.emit({ type: "log", text: "Today's reward is already collected. Come back tomorrow.", tone: "info" });
+      return false;
+    }
+    const reward = status.reward;
+    const gold = this.gainGold(reward.gold);
+    if (reward.xp > 0) this.gainXp(reward.xp);
+    if (reward.itemId) this.addItem(reward.itemId, 1);
+    this.save.dailyClaimedOn = status.key;
+    this.save.dailyStreak = status.nextStreak;
+    const itemNote = reward.itemId ? ` and ${getItem(reward.itemId).name}` : "";
+    this.emit({
+      type: "log",
+      text: `Daily reward: ${gold} gold${reward.xp > 0 ? `, ${reward.xp} XP` : ""}${itemNote}. Streak: ${status.nextStreak} day${status.nextStreak === 1 ? "" : "s"}.`,
+      tone: "good",
+    });
+    return true;
+  }
+
+  /** The Endless Descent run, for the journal and the HUD. */
+  get descentStatus(): {
+    active: boolean;
+    wave: number;
+    alive: number;
+    best: number;
+    shards: number;
+    boons: DescentBoon[];
+    pending: DescentBoon[];
+    seed: number;
+    weeklyBest: number;
+    runs: { score: number; seed: number; at: number }[];
+    relics: DescentRelic[];
+    pact: DescentPact;
+    specials: Record<DescentSpecial, number>;
+  } {
+    const boons = this.descentBoonIds.map((id) => descentBoon(id)).filter((boon): boon is DescentBoon => Boolean(boon));
+    const pending = this.descentPendingBoons.map((id) => descentBoon(id)).filter((boon): boon is DescentBoon => Boolean(boon));
+    return {
+      active: this.descentActive,
+      wave: this.descentWaveNumber,
+      alive: this.descentAlive,
+      best: this.save.descentBest,
+      shards: this.save.descentShards,
+      boons,
+      pending,
+      seed: this.descentSeed,
+      weeklyBest: this.save.weeklyKey === weekKey() ? this.save.weeklyBest : 0,
+      runs: this.save.descentRuns,
+      relics: this.relics,
+      pact: this.pact,
+      specials: this.fightSpecials,
+    };
+  }
+
+  /** Sum of every boon picked this run, as percentages. */
+  get descentBonuses(): { attack: number; defense: number; maxHp: number; moveSpeed: number } {
+    const total = { attack: 0, defense: 0, maxHp: 0, moveSpeed: 0 };
+    for (const id of this.descentBoonIds) {
+      const boon = descentBoon(id);
+      if (!boon) continue;
+      for (const [stat, value] of Object.entries(boon.stats) as [keyof typeof total, number][]) {
+        total[stat] += value;
+      }
+    }
+    return total;
+  }
+
+  /** The stat half of the relics bought with shards, kept forever. */
+  get relicStats(): { attack: number; defense: number; maxHp: number; moveSpeed: number } {
+    const total = { attack: 0, defense: 0, maxHp: 0, moveSpeed: 0 };
+    for (const relic of this.relics) {
+      for (const [stat, value] of Object.entries(relic.stats ?? {}) as [keyof typeof total, number][]) {
+        total[stat] += value;
+      }
+    }
+    return total;
+  }
+
+  /** Every relic the hero owns. */
+  get relics(): DescentRelic[] {
+    return this.save.descentRelics.map((id) => descentRelic(id)).filter((relic): relic is DescentRelic => Boolean(relic));
+  }
+
+  /**
+   * The effects that change how a fight plays, added up across the run's boons and the
+   * hero's permanent relics. The sim asks for these instead of hard-coding a number, so
+   * buying a relic quietly changes every fight afterwards.
+   */
+  get fightSpecials(): Record<DescentSpecial, number> {
+    const total: Record<DescentSpecial, number> = { lifesteal: 0, healOnKill: 0, thorns: 0, execute: 0, shardBonus: 0 };
+    const add = (specials?: Partial<Record<DescentSpecial, number>>) => {
+      if (!specials) return;
+      for (const [key, value] of Object.entries(specials) as [DescentSpecial, number][]) total[key] += value;
+    };
+    for (const id of this.descentBoonIds) add(descentBoon(id)?.special);
+    for (const relic of this.relics) add(relic.special);
+    return total;
+  }
+
+  /** The risk dial the hero carries into the Descent. */
+  get pact(): DescentPact {
+    return descentPact(this.save.descentPact);
+  }
+
+  /** Choose how much risk to take on. Changed from the journal between runs. */
+  setDescentPact(level: number): boolean {
+    if (this.dead) return false;
+    // The risk is chosen before the run, never in the middle of one.
+    if (this.descentActive) {
+      this.emit({ type: "log", text: "The risk is set before a run, not during one.", tone: "info" });
+      return false;
+    }
+    const next = Math.max(0, Math.min(3, Math.floor(level)));
+    if (next === this.save.descentPact) return false;
+    this.save.descentPact = next;
+    const pact = descentPact(next);
+    this.emit({ type: "log", text: `Descent risk set to ${pact.name}. ${pact.description}`, tone: "info" });
+    return true;
+  }
+
+  /** Buy a relic with shards. It is kept forever, which is what makes a bad run worth it. */
+  buyDescentRelic(id: string): boolean {
+    const relic = descentRelic(id);
+    if (!relic) return false;
+    // Relics are spent between runs, so a run's build cannot be bought halfway through it.
+    if (this.descentActive) {
+      this.emit({ type: "log", text: "Buy relics between runs, not during one.", tone: "info" });
+      return false;
+    }
+    if (this.save.descentRelics.includes(id)) {
+      this.emit({ type: "log", text: `${relic.name} is already yours.`, tone: "info" });
+      return false;
+    }
+    if (this.save.descentShards < relic.cost) {
+      this.emit({ type: "log", text: `${relic.name} costs ${relic.cost} shards and you have ${this.save.descentShards}.`, tone: "bad" });
+      return false;
+    }
+    this.save.descentShards -= relic.cost;
+    this.save.descentRelics.push(id);
+    this.emit({ type: "log", text: `Relic bought: ${relic.name}. ${relic.description}`, tone: "good" });
+    return true;
+  }
+
+  /** Walk into the Descent. A run is free, and every wave pays shards. */
+  enterDescent(): boolean {
+    if (this.dead) return false;
+    if (this.arenaActive) {
+      this.emit({ type: "log", text: "Leave the Hollow Ring before descending.", tone: "info" });
+      return false;
+    }
+    if (this.descentActive) return false;
+    if (this.gauntletActive) {
+      this.emit({ type: "log", text: "Finish the gauntlet before descending.", tone: "info" });
+      return false;
+    }
+    this.descentActive = true;
+    this.descentWaveNumber = 0;
+    this.descentAlive = 0;
+    this.descentBoonIds = [];
+    this.descentPendingBoons = [];
+    this.descentAnnounced = -1;
+    this.descentSeed = (dailySeed(dayKey(), this.save.id) ^ this.weeklyRunSeed) >>> 0;
+    const pact = this.pact;
+    this.emit({ type: "log", text: "You start down the Endless Descent. Every second wave offers a boon, and every fifth a boss.", tone: "quest" });
+    if (pact.level > 0) this.emit({ type: "log", text: `${pact.name}: ${pact.description}`, tone: "bad" });
+    this.startDescentWave();
+    return true;
+  }
+
+  /** Leave the Descent; the run ends, but its shards and best wave stay earned. */
+  leaveDescent(): boolean {
+    if (!this.descentActive) return false;
+    this.descentActive = false;
+    this.descentWaveNumber = 0;
+    this.descentAlive = 0;
+    this.descentBoonIds = [];
+    this.descentPendingBoons = [];
+    this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("descent_"));
+    this.emit({ type: "log", text: "You climb out of the Descent. The dark keeps what it has not lost.", tone: "info" });
+    return true;
+  }
+
+  /** Bring in the next wave. Boss waves arrive every fifth floor. */
+  private startDescentWave(): void {
+    const wave = descentWave(this.descentWaveNumber + 1);
+    this.descentWaveNumber = wave.wave;
+    this.descentAlive = 0;
+    for (let index = 0; index < wave.count; index += 1) {
+      const species = wave.species[index % wave.species.length]!;
+      const angle = (Math.PI * 2 * index) / Math.max(1, wave.count) + this.rng.between(0, 6) / 10;
+      const radius = 110 + this.rng.between(0, 70);
+      const x = Math.min(this.zone.width * this.zone.tileWidth - 20, Math.max(20, this.save.x + Math.cos(angle) * radius));
+      const y = Math.min(this.zone.height * this.zone.tileHeight - 20, Math.max(20, this.save.y + Math.sin(angle) * radius));
+      const monster = this.makeMonster({ id: species, x, y }, `descent_${wave.wave}_${index}_${this.nextUid("d")}`);
+      if (!monster) continue;
+      // Waves grow with depth, and the risk dial piles on top of that.
+      const pact = this.pact;
+      const scale = (wave.boss ? 1 + wave.wave * 0.03 : 1 + wave.wave * 0.06) * (1 + pact.hp / 100);
+      monster.hp = Math.round(monster.hp * scale);
+      monster.maxHp = Math.round((monster.maxHp ?? monster.hp) * scale);
+      this.monsters.push(monster);
+      this.descentAlive += 1;
+    }
+    if (this.descentAnnounced !== wave.wave) {
+      this.descentAnnounced = wave.wave;
+      this.emit({ type: "log", text: wave.announcement, tone: "quest" });
+    }
+  }
+
+  /** One descent monster down: pay the floor and offer a boon every second wave. */
+  private onDescentKill(): void {
+    if (!this.descentActive) return;
+    this.descentAlive = Math.max(0, this.descentAlive - 1);
+    if (this.descentAlive > 0) return;
+    const wave = descentWave(this.descentWaveNumber);
+    const weekly = this.weeklyModifier;
+    const gold = this.gainGold(Math.round(wave.gold * weekly.gold));
+    this.gainXp(Math.round(wave.xp * weekly.xp));
+    const shards = Math.round((wave.shards + (wave.boss ? 3 : 0)) * (1 + this.pact.shards / 100 + this.fightSpecials.shardBonus / 100));
+    this.save.descentShards = Math.min(1_000_000, this.save.descentShards + shards);
+    this.recordDescentScore(wave.wave);
+    this.emit({ type: "log", text: `Descent wave ${wave.wave} cleared. +${gold} gold, +${shards} shards.`, tone: "good" });
+    if (wave.wave % 2 === 0) {
+      this.descentPendingBoons = boonChoiceIds((this.descentSeed ^ Math.imul(wave.wave, 0x9e3779b1)) >>> 0);
+      this.emit({ type: "log", text: "A boon is offered. Open the Journal (Q) to choose one.", tone: "quest" });
+      return;
+    }
+    this.startDescentWave();
+  }
+
+  /** Pick one of the three offered boons and continue the run. */
+  chooseDescentBoon(id: string): boolean {
+    if (!this.descentActive || this.descentPendingBoons.length === 0) return false;
+    if (!this.descentPendingBoons.includes(id)) return false;
+    const boon = descentBoon(id);
+    if (!boon) return false;
+    this.descentBoonIds.push(id);
+    this.descentPendingBoons = [];
+    this.emit({ type: "log", text: `Boon taken: ${boon.name}. ${boon.description}`, tone: "good" });
+    this.startDescentWave();
+    return true;
+  }
+
+  /**
+   * The Hollow Ring's gauntlet: every story boss in order, with no waves in between.
+   * A boss that has already been beaten in its own zone still shows up here, because
+   * the ring's bosses are echoes rather than the story's kills.
+   */
+  enterGauntlet(): boolean {
+    if (this.dead) return false;
+    if (this.descentActive || this.arenaActive || this.gauntletActive) {
+      this.emit({ type: "log", text: "Finish what you started in the Ring first.", tone: "info" });
+      return false;
+    }
+    this.gauntletActive = true;
+    this.gauntletIndex = 0;
+    this.gauntletAlive = 0;
+    this.emit({ type: "log", text: "The gauntlet begins. There is no wave to rest between: only the next name.", tone: "quest" });
+    this.startGauntletRound();
+    return true;
+  }
+
+  /** Leave the gauntlet; the bosses it already paid for stay paid. */
+  leaveGauntlet(): boolean {
+    if (!this.gauntletActive) return false;
+    this.gauntletActive = false;
+    this.gauntletIndex = 0;
+    this.gauntletAlive = 0;
+    this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("gauntlet_"));
+    this.emit({ type: "log", text: "You leave the gauntlet. The names wait where they stood.", tone: "info" });
+    return true;
+  }
+  /** Put the next gauntlet boss on the floor, in front of the hero. */
+  private startGauntletRound(): void {
+    const bossId = gauntletBoss(this.gauntletIndex);
+    const boss = getMonster(bossId);
+    this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("gauntlet_"));
+    const angle = this.rng.between(0, Math.PI * 2);
+    const x = Math.min(this.zone.width * this.zone.tileWidth - 40, Math.max(40, this.save.x + Math.cos(angle) * 170));
+    const y = Math.min(this.zone.height * this.zone.tileHeight - 40, Math.max(40, this.save.y + Math.sin(angle) * 170));
+    const monster = this.makeMonster({ id: bossId, x, y }, `gauntlet_${this.gauntletIndex}_${this.nextUid("g")}`);
+    this.gauntletAlive = 1;
+    this.monsters.push(monster);
+    const lore = bossLore(boss.id);
+    // The shared boss announcer would say this again once the boss starts moving, so claim it here.
+    this.bossSeen.add(monster.uid);
+    this.emit({ type: "log", text: `Gauntlet ${this.gauntletIndex + 1} of ${GAUNTLET_BOSSES.length}: ${boss.name} steps in.`, tone: "quest" });
+    this.emit({ type: "boss-intro", monsterId: boss.id, name: boss.name, text: lore.text, warning: lore.warning, level: boss.level });
+  }
+
+  /** One gauntlet boss down: pay the round, then call the next one in. */
+  private onGauntletKill(): void {
+    if (!this.gauntletActive) return;
+    this.gauntletAlive = Math.max(0, this.gauntletAlive - 1);
+    const bossId = gauntletBoss(this.gauntletIndex);
+    const reward = gauntletReward(this.gauntletIndex);
+    if (!this.save.gauntletCleared.includes(bossId)) this.save.gauntletCleared.push(bossId);
+    this.save.descentShards = Math.min(1_000_000, this.save.descentShards + reward.shards);
+    const gold = this.gainGold(reward.gold);
+    this.gainXp(reward.xp);
+    this.emit({ type: "log", text: `Gauntlet round ${this.gauntletIndex + 1} cleared. +${gold} gold, +${reward.shards} shards.`, tone: "good" });
+    this.gauntletIndex += 1;
+    if (this.gauntletIndex >= GAUNTLET_BOSSES.length) {
+      this.gauntletActive = false;
+      this.gauntletAlive = 0;
+      const trophy = this.gainGold(3000);
+      this.save.descentShards = Math.min(1_000_000, this.save.descentShards + 50);
+      this.emit({ type: "log", text: `The gauntlet is finished. Every name is settled: +${trophy} gold and 50 shards.`, tone: "good" });
+      writeDiary(this.save, "boss", "Cleared the Hollow Ring's gauntlet in one run.");
+      return;
+    }
+    this.startGauntletRound();
+  }
+
+  /** Progress for the gauntlet card in the journal. */
+  get gauntletStatus(): { active: boolean; round: number; total: number; alive: number; next: string; cleared: string[] } {
+    return {
+      active: this.gauntletActive,
+      round: this.gauntletIndex,
+      total: GAUNTLET_BOSSES.length,
+      alive: this.gauntletAlive,
+      next: getMonster(gauntletBoss(this.gauntletIndex)).name,
+      cleared: this.save.gauntletCleared,
+    };
+  }
+
+  /** Trade descent shards for gold. One shard is worth 20 gold. */
+  cashOutShards(): boolean {
+    if (this.save.descentShards <= 0) {
+      this.emit({ type: "log", text: "No shards to trade yet. Descend a little deeper.", tone: "info" });
+      return false;
+    }
+    const shards = this.save.descentShards;
+    const gold = this.gainGold(shards * 20);
+    this.save.descentShards = 0;
+    this.emit({ type: "log", text: `Traded ${shards} shards for ${gold} gold.`, tone: "good" });
+    return true;
+  }
+
+  /** Keep the best wave, the weekly score and the local leaderboard in sync. */
+  private recordDescentScore(score: number): void {
+    if (score > this.save.descentBest) {
+      this.save.descentBest = score;
+      if (score % 5 === 0) this.emit({ type: "log", text: `Deepest descent yet: wave ${score}.`, tone: "good" });
+    }
+    const key = weekKey();
+    if (this.save.weeklyKey !== key) {
+      this.save.weeklyKey = key;
+      this.save.weeklyBest = 0;
+    }
+    if (score > this.save.weeklyBest) this.save.weeklyBest = score;
+    this.save.descentRuns = [...this.save.descentRuns, { score, seed: this.descentSeed, at: Date.now() }]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }
+
+  /** What a reroll costs: coins and a little ore, so it stays a real choice. */
+  rerollAffixCost(stack: ItemStack): { gold: number; ore: number } | null {
+    if (!stack.instance || stack.instance.affixes.length === 0) return null;
+    return { gold: 50 + stack.instance.affixes.length * 35, ore: 1 };
+  }
+
+  /** Reroll one affix on a backpack item. */
+  rerollInventoryAffix(slotIndex: number, affixIndex: number): boolean {
+    const stack = this.save.inventory[slotIndex];
+    return stack ? this.rerollAffixOn(stack, affixIndex) : false;
+  }
+
+  /** Reroll one affix on worn gear. */
+  rerollEquippedAffix(slot: keyof CharacterSave["equipment"], affixIndex: number): boolean {
+    const stack = this.save.equipment[slot];
+    return stack ? this.rerollAffixOn(stack, affixIndex) : false;
+  }
+
+  private rerollAffixOn(stack: ItemStack, affixIndex: number): boolean {
+    const instance = stack.instance;
+    if (!instance || affixIndex < 0 || affixIndex >= instance.affixes.length) return false;
+    const cost = this.rerollAffixCost(stack);
+    if (!cost) return false;
+    if (this.save.gold < cost.gold || this.countItem("iron_ore") < cost.ore) {
+      this.emit({ type: "log", text: `A reroll costs ${cost.gold} gold and ${cost.ore}x Iron Ore.`, tone: "bad" });
+      return false;
+    }
+    const current = instance.affixes[affixIndex]!;
+    const options = AFFIX_IDS.filter((id) => !instance.affixes.includes(id) || id === current);
+    const pool = options.length > 1 ? options.filter((id) => id !== current) : AFFIX_IDS.filter((id) => id !== current);
+    const next = pool[Math.floor(this.rng.next() * pool.length)] ?? current;
+    this.save.gold -= cost.gold;
+    this.removeItem("iron_ore", cost.ore);
+    instance.affixes[affixIndex] = next;
+    this.emit({ type: "log", text: `Borin rerolls the affix into ${next}.`, tone: "good" });
+    return true;
   }
 
   /**
@@ -1720,6 +2383,8 @@ export class GameSession {
     let bestD = maxRange * maxRange;
     for (const monster of this.monsters) {
       if (monster.state === "dead") continue;
+      // The dummy is never a target for pets or abilities: it is there to be hit on purpose.
+      if (monster.invulnerable) continue;
       if (requireLineOfSight && !this.hasLineOfSight(x, y, monster.x, monster.y)) continue;
       const d = dist2(x, y, monster.x, monster.y);
       if (d < bestD) {
@@ -2522,9 +3187,43 @@ export class GameSession {
     return gained;
   }
 
+  /**
+   * Sell every piece of gear that is not worn and not worth keeping: anything below
+   * rare. A full bag is the real boss of an action RPG, and this is the one-button broom.
+   */
+  sellAllJunk(): number {
+    let gold = 0;
+    let sold = 0;
+    const worn = new Set(Object.values(this.save.equipment).filter((stack): stack is ItemStack => Boolean(stack)));
+    for (let i = 0; i < this.save.inventory.length; i += 1) {
+      const stack = this.save.inventory[i];
+      if (!stack) continue;
+      const def = ITEMS[stack.itemId];
+      if (!def || def.type === "consumable" || def.type === "material") continue;
+      if (def.rarity !== "common" && def.rarity !== "uncommon") continue;
+      if (worn.has(stack)) continue;
+      gold += itemSellValue(stack) * stack.qty;
+      sold += stack.qty;
+      this.save.inventory[i] = null;
+    }
+    if (sold === 0) {
+      this.emit({ type: "log", text: "No junk gear to sell. Everything left is rare or better.", tone: "info" });
+      return 0;
+    }
+    const gained = this.gainGold(gold);
+    this.emit({ type: "log", text: `Sold ${sold} pieces of junk gear for ${gained} gold.`, tone: "good" });
+    this.refreshCollectQuests();
+    return gained;
+  }
+
   /** Drink the first healing potion on hand, best one first. Returns false when there is none. */
   drinkBestPotion(kind: "heal" | "resource" = "heal"): boolean {
     if (this.dead) return false;
+    // The risk dial can forbid potions outright, which is the whole point of taking it.
+    if (this.descentActive && this.pact.noPotions) {
+      this.emit({ type: "log", text: `${this.pact.name} forbids potions. Fight it on foot.`, tone: "bad" });
+      return false;
+    }
     const slots = this.save.inventory
       .map((stack, index) => ({ stack, index }))
       .filter((entry): entry is { stack: ItemStack; index: number } => Boolean(entry.stack))

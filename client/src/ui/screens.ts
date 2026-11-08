@@ -2,6 +2,7 @@ import {
   CLASS_LIST,
   FLAGSHIP_CLASSES,
   ITEMS,
+  AFFIXES,
   LORE_ENTRIES,
   MAX_CHARACTERS,
   MAX_UPGRADE,
@@ -37,6 +38,8 @@ import {
   MAX_MASTERY,
   diaryRows,
   masteredCount,
+  DESCENT_PACTS,
+  DESCENT_RELICS,
   type CharacterSave,
   type ClassId,
   type GameSession,
@@ -58,6 +61,15 @@ import {
 } from "./helpers";
 
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
+
+/** Plain words for the Descent's fight effects, so the journal reads like a build. */
+const SPECIAL_LABELS: Record<string, string> = {
+  lifesteal: "heal on hit",
+  healOnKill: "heal on kill",
+  thorns: "damage back",
+  execute: "bonus on weak foes",
+  shardBonus: "extra shards",
+};
 
 const CLASS_CATEGORIES: { id: string; label: TextKey; classes: ClassId[] }[] = [
   { id: "all", label: "classFilterAll", classes: CLASS_LIST.map((def) => def.id) },
@@ -300,6 +312,15 @@ export function inventoryPanelHtml(
     }
     actions += `<button class="btn ghost small" data-action="sell" data-slot="${selectedSlot}">Sell for ${itemSellValue(stack)}g</button>`;
   }
+  const rerollCost = stack ? session.rerollAffixCost(stack) : null;
+  const affixes = stack?.instance?.affixes ?? [];
+  if (stack && rerollCost && affixes.length > 0) {
+    const target = selectedEquip ? `data-equip="${selectedEquip}"` : `data-slot="${selectedSlot}"`;
+    const canReroll = save.gold >= rerollCost.gold && session.countItem("iron_ore") >= rerollCost.ore;
+    actions += affixes
+      .map((id, index) => `<button class="btn ghost small" data-action="reroll-affix" ${target} data-index="${index}" ${canReroll ? "" : "disabled"}>Reroll ${esc(AFFIXES[id]?.name ?? id)} (${rerollCost.gold}g + ${rerollCost.ore} ore)</button>`)
+      .join("");
+  }
   const compareLines = !selectedEquip && stack ? session.compareToEquipped(stack) : null;
   const compareHtml = compareLines && compareLines.lines.length
     ? `<div class="compare-box"><div class="small muted">Against your ${esc(compareLines.slot)}</div>${compareLines.lines
@@ -427,6 +448,7 @@ export function shopPanelHtml(session: GameSession, shopId: string): string {
       <div class="inv-grid">${sellGrid}</div>
       <div class="bag-tools">
         <button class="btn ghost small" data-action="sell-materials">Sell all materials</button>
+        <button class="btn ghost small" data-action="sell-junk">Sell all junk gear</button>
         <span class="small muted">Click an item to sell one</span>
       </div>
       <div class="small muted" style="margin-top:6px">Equipped gear cannot be sold here, and quest items stay in your pack.</div>
@@ -549,6 +571,44 @@ export function deedsSection(session: GameSession): string {
   </div>`;
 }
 
+/** Relics bought with shards, the risk dial, and what the hero carries into the next run. */
+function descentShopSection(session: GameSession): string {
+  const descent = session.descentStatus;
+  const owned = new Set(descent.relics.map((relic) => relic.id));
+  // Relics and the risk are between-run decisions, so both close while a run is live.
+  const locked = descent.active;
+  const relics = DESCENT_RELICS.map((relic) => {
+    const bought = owned.has(relic.id);
+    const affordable = descent.shards >= relic.cost;
+    return `<div class="relic-row ${bought ? "owned" : ""}">
+      <div class="relic-icon">${esc(relic.icon)}</div>
+      <div class="relic-body">
+        <strong>${esc(relic.name)}</strong>
+        <span class="small muted">${esc(relic.description)}</span>
+      </div>
+      <button class="btn ghost small" data-action="buy-relic" data-relic="${esc(relic.id)}" ${bought || !affordable || locked ? "disabled" : ""}>${bought ? "Owned" : `${relic.cost} shards`}</button>
+    </div>`;
+  }).join("");
+  const pactRows = DESCENT_PACTS.map((pact) => `<button class="pact-choice ${pact.level === descent.pact.level ? "active" : ""}" data-action="set-pact" data-level="${pact.level}" ${locked ? "disabled" : ""}>
+      <strong>${esc(pact.name)}</strong>
+      <span class="small muted">${esc(pact.description)}</span>
+    </button>`).join("");
+  const specials = (Object.entries(descent.specials) as [string, number][])
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => `${SPECIAL_LABELS[key] ?? key} ${Math.round(value)}%`)
+    .join(" - ");
+  return `<div class="descent-shop">
+    <div class="qtitle small-title">Relics - kept forever</div>
+    <div class="small muted">Shards buy relics between runs. They never reset, so a bad run still leaves you stronger.</div>
+    <div class="relic-list">${relics}</div>
+    <div class="qtitle small-title">Risk dial</div>
+    <div class="small muted">Take on more danger for the next run and every wave pays more shards.</div>
+    <div class="pact-grid">${pactRows}</div>
+    ${specials ? `<div class="small muted">Fight effects now: ${esc(specials)}</div>` : ""}
+    ${locked ? `<div class="small muted">Relics and the risk open up between runs.</div>` : ""}
+  </div>`;
+}
+
 /** The Hollow Ring standing, plus the button that walks the hero in. */
 export function arenaSection(session: GameSession): string {
   const arena = session.arenaStatus;
@@ -562,6 +622,94 @@ export function arenaSection(session: GameSession): string {
     ${arena.active
       ? `<button class="btn ghost" data-action="leave-arena">Leave the ring</button>`
       : `<button class="btn" data-action="enter-arena">Enter the ring</button>`}
+    ${gauntletCard(session)}
+  </div>`;
+}
+
+/** The gauntlet: every story boss back to back, and the trophy for finishing it. */
+function gauntletCard(session: GameSession): string {
+  const gauntlet = session.gauntletStatus;
+  const cleared = gauntlet.cleared.length;
+  const state = gauntlet.active
+    ? `Round ${gauntlet.round + 1} of ${gauntlet.total}: ${esc(gauntlet.next)}`
+    : "not started";
+  return `<div class="gauntlet-card">
+    <div class="qtitle small-title">The Gauntlet</div>
+    <div class="small muted">Every story boss, back to back, with no waves between. Each one pays better than it did in its own zone.</div>
+    <div class="arena-stats">
+      <div><span class="small muted">Beaten at least once</span><strong>${cleared} / ${gauntlet.total}</strong></div>
+      <div><span class="small muted">Standing</span><strong>${state}</strong></div>
+    </div>
+    ${gauntlet.active
+      ? `<button class="btn ghost" data-action="leave-gauntlet">Abandon the gauntlet</button>`
+      : `<button class="btn" data-action="enter-gauntlet" ${session.descentStatus.active ? "disabled" : ""}>Face the gauntlet</button>`}
+  </div>`;
+}
+
+/** The daily chest and the weekly modifier, shown together because they share a rhythm. */
+export function seasonSection(session: GameSession): string {
+  const weekly = session.weeklyModifier;
+  const daily = session.dailyStatus;
+  const rewardParts = [`${daily.reward.gold} gold`];
+  if (daily.reward.xp > 0) rewardParts.push(`${daily.reward.xp} XP`);
+  if (daily.reward.itemId) rewardParts.push(getItem(daily.reward.itemId).name);
+  return `<div class="journal-section" id="journal-season">
+    <div class="qtitle">The Turning Week</div>
+    <div class="weekly-card">
+      <div class="weekly-head"><span class="weekly-icon">${esc(weekly.icon)}</span><strong>${esc(weekly.name)}</strong></div>
+      <div class="small muted">${esc(weekly.description)}</div>
+      <div class="weekly-stats small">
+        <span>Enemies ${Math.round(weekly.hp * 100)}% HP</span>
+        <span>${Math.round(weekly.attack * 100)}% damage</span>
+        <span>${Math.round(weekly.xp * 100)}% XP</span>
+        <span>${Math.round(weekly.gold * 100)}% gold</span>
+      </div>
+    </div>
+    <div class="daily-card ${daily.available ? "ready" : ""}">
+      <div class="daily-head"><strong>Daily reward</strong><span class="small muted">streak ${daily.streak} day${daily.streak === 1 ? "" : "s"}</span></div>
+      <div class="small muted">${esc(rewardParts.join(" - "))}</div>
+      <button class="btn${daily.available ? "" : " ghost"}" data-action="claim-daily" ${daily.available ? "" : "disabled"}>${daily.available ? `Claim day ${daily.nextStreak}` : "Collected today"}</button>
+    </div>
+  </div>`;
+}
+
+/** The Endless Descent: seeded waves, boons and a weekly leaderboard. */
+export function descentSection(session: GameSession): string {
+  const descent = session.descentStatus;
+  const boons = descent.boons
+    .map((boon) => `<div class="boon-chip"><strong>${esc(boon.name)}</strong><span class="small muted">${esc(boon.description)}</span></div>`)
+    .join("");
+  const pending = descent.pending
+    .map((boon) => `<button class="boon-choice" data-action="choose-boon" data-boon="${esc(boon.id)}">
+        <strong>${esc(boon.name)}</strong>
+        <span class="small muted">${esc(boon.description)}</span>
+      </button>`)
+    .join("");
+  const runs = descent.runs
+    .slice(0, 5)
+    .map((run, index) => `<div class="run-row"><span>#${index + 1}</span><strong>Wave ${run.score}</strong><span class="small muted">seed ${run.seed}</span></div>`)
+    .join("");
+  return `<div class="journal-section" id="journal-descent">
+    <div class="qtitle">The Endless Descent</div>
+    <div class="small muted">A seeded roguelite below the Ring. Every second wave offers a boon, every fifth a boss, and shards keep after the run ends.</div>
+    <div class="arena-stats">
+      <div><span class="small muted">Deepest</span><strong>Wave ${descent.best}</strong></div>
+      <div><span class="small muted">This week</span><strong>Wave ${descent.weeklyBest}</strong></div>
+      <div><span class="small muted">Shards</span><strong>${descent.shards}</strong></div>
+      <div><span class="small muted">Current</span><strong>${descent.active ? `Wave ${descent.wave} - ${descent.alive} left` : "not descending"}</strong></div>
+    </div>
+    ${descent.active
+      ? `${pending ? `<div class="boon-grid"><div class="small muted">Choose one boon to continue:</div>${pending}</div>` : `<div class="small muted">Next boon after wave ${descent.wave + (descent.wave % 2 === 0 ? 0 : 1)}.</div>`}
+        <button class="btn ghost" data-action="leave-descent">Leave the Descent</button>`
+      : `<button class="btn" data-action="enter-descent">Enter the Descent</button>`}
+    ${boons ? `<div class="boon-list">${boons}</div>` : ""}
+    <div class="small muted">Seed ${descent.seed}. ${esc("Share it to race the same floors.")}</div>
+    <div class="descent-tools">
+      <button class="btn ghost small" data-action="share-seed" data-seed="${descent.seed}">Copy seed</button>
+      <button class="btn ghost small" data-action="cash-shards" ${descent.shards > 0 ? "" : "disabled"}>Trade ${descent.shards} shards for ${descent.shards * 20} gold</button>
+    </div>
+    ${runs ? `<div class="run-list"><div class="small muted">Local best runs</div>${runs}</div>` : ""}
+    ${descentShopSection(session)}
   </div>`;
 }
 
@@ -635,16 +783,18 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-journey">Journey</a><a href="#journal-deeds">Deeds</a><a href="#journal-arena">Ring</a><a href="#journal-rival">Rival</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-loadouts">Sets</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-journey">Journey</a><a href="#journal-deeds">Deeds</a><a href="#journal-arena">Ring</a><a href="#journal-descent">Descent</a><a href="#journal-season">Season</a><a href="#journal-rival">Rival</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-loadouts">Sets</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
   if (active.length === 0) {
     return `${nav}
       <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
       ${journeySection(session)}
       ${deedsSection(session)}
-      ${arenaSection(session)}
-      ${rivalSection(session)}
-      ${bountySection(session)}
+    ${arenaSection(session)}
+    ${descentSection(session)}
+    ${seasonSection(session)}
+    ${rivalSection(session)}
+    ${bountySection(session)}
       ${heroSection(session)}
       ${masterySection(session)}
       ${reactionSection(session)}
@@ -677,7 +827,9 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
     ${journeySection(session)}
     ${deedsSection(session)}
     ${arenaSection(session)}
-    ${rivalSection(session)}
+      ${descentSection(session)}
+      ${seasonSection(session)}
+          ${rivalSection(session)}
     ${bountySection(session)}
     ${heroSection(session)}
     ${masterySection(session)}

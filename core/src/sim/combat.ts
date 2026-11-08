@@ -7,7 +7,7 @@ import type { DamageType, ItemStack, MonsterInstance, StatusInstance } from "../
 import type { GameSession } from "./GameSession";
 
 // Take damage that already has the hero's own reduction applied; kills the hero when hp reaches 0.
-export function damagePlayer(s: GameSession, raw: number, source: string, damageType: DamageType = "physical"): void {
+export function damagePlayer(s: GameSession, raw: number, source: string, damageType: DamageType = "physical", sourceUid = ""): void {
   if (s.dead) return;
   if (s.invulnerable > 0) {
     if (s.perfectDodgeTimer > 0) {
@@ -24,6 +24,15 @@ export function damagePlayer(s: GameSession, raw: number, source: string, damage
   const reduced = raw * (1 - s.modifiers.damageReduction / 100);
   const mitigated = Math.max(1, Math.round(reduced * (100 / (100 + stats.defense * 2))));
   let damage = mitigated;
+  // Spiked Hide and Thorn Mail: whatever hits the hero takes part of it back.
+  const thorns = s.fightSpecials.thorns;
+  if (thorns > 0 && sourceUid) {
+    const attacker = s.monsters.find((monster) => monster.uid === sourceUid);
+    if (attacker && attacker.state !== "dead" && !attacker.invulnerable) {
+      const back = Math.max(1, Math.round(mitigated * (thorns / 100)));
+      s.hitMonster(attacker, back, false, "physical", []);
+    }
+  }
   // Whatever lands is remembered for the death screen, so a loss actually teaches something.
   s.rememberHit(source, damage);
   if (s.shield > 0) {
@@ -60,27 +69,36 @@ export function advanceStoryFromBoss(s: GameSession): void {
 
 export function killMonster(s: GameSession, monster: MonsterInstance): void {
   if (monster.state === "dead") return;
+  // The training dummy cannot die: it swallows every hit and pays nothing for it.
+  if (monster.invulnerable) return;
   monster.state = "dead";
   const def = getMonster(monster.defId);
+  // Arena, Descent and gauntlet bosses are echoes, not story kills: they pay the mode, not the chapter.
+  const modeKill = monster.uid.startsWith("arena_") || monster.uid.startsWith("descent_") || monster.uid.startsWith("gauntlet_");
   // A boss that was already defeated never comes back, so it has no respawn timer.
   monster.respawnTimer = def.respawn > 0 && !def.boss ? def.respawn : 0;
-  s.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y });
+  s.emit({ type: "death", who: "monster", defId: def.id, x: monster.x, y: monster.y, boss: def.boss });
+  // Every death passes through here, so this is where a mode hears about its own kill.
+  s.onModeKill(monster);
   s.lastCombat = s.elapsed;
-  const firstBossKill = def.boss && !s.save.defeatedBosses.includes(def.id);
+  const firstBossKill = !modeKill && def.boss && !s.save.defeatedBosses.includes(def.id);
   if (firstBossKill) {
     s.save.defeatedBosses.push(def.id);
     writeDiary(s.save, "boss", `Defeated ${def.name} in ${s.zone.name}.`);
     if (def.id === "bone_warden") s.openDungeonWing();
   }
-  if (def.boss) advanceStoryFromBoss(s);
+  if (def.boss && !modeKill) advanceStoryFromBoss(s);
   // Lifetime counters, and the kill streak that a clean fight builds up.
   s.save.stats.monstersSlain += 1;
   if (def.boss && firstBossKill) s.save.stats.bossesSlain += 1;
+  // Glutton and the Reaper's Toll relic: a kill gives a little health back.
+  const healOnKill = s.fightSpecials.healOnKill;
+  if (healOnKill > 0) s.healPlayer(s.stats.maxHp * (healOnKill / 100));
   s.save.petXp += def.boss ? 60 : 6;
   s.bumpKillStreak();
   s.recordBountyKill(def.id);
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {
-    damagePlayer(s, def.attack * s.difficultyScale.attack * 1.4, `${def.name} (Volatile)`);
+    damagePlayer(s, def.attack * s.difficultyScale.attack * 1.4, `${def.name} (Volatile)`, "physical", monster.uid);
     s.emit({ type: "log", text: `${def.name} bursts in a volatile blast!`, tone: "bad" });
   }
   if (SUMMON_IDS.has(def.id)) return;
@@ -128,11 +146,29 @@ export function hitMonster(
   armorPiercing = false,
 ): void {
   if (monster.state === "dead") return;
+  // A purse imp never takes the blow: it runs instead, which is the whole chase.
+  if (monster.defId === "loot_imp" && monster.state !== "flee") {
+    s.startImpFlee(monster);
+    return;
+  }
   const def = getMonster(monster.defId);
   const mods = s.modifiers;
+  const specials = s.fightSpecials;
+  // The dummy is a measuring stick: it takes the hit, reports it, and is never killed.
+  // It does not build a combo, so a metered hit cannot charge an ultimate.
+  if (monster.invulnerable) {
+    const dummyHp = monster.maxHp ?? def.maxHp;
+    const dummyMitigated = Math.max(1, Math.round(raw * (armorPiercing ? 1 : 100 / (100 + def.defense * 2.5))));
+    monster.hp = dummyHp;
+    s.recordDummyHit(dummyMitigated);
+    s.emit({ type: "damage", target: "monster", uid: monster.uid, amount: dummyMitigated, crit, x: monster.x, y: monster.y, damageType });
+    s.lastCombat = s.elapsed;
+    return;
+  }
   const marked = monster.statuses.some((st) => st.kind === "mark");
   const maxHp = monster.maxHp ?? def.maxHp;
-  const execute = monster.hp / maxHp <= 0.3 ? 1 + mods.execute / 100 : 1;
+  // Executioner, Bloodletter and Reaper's Toll all make a low-health foe the better target.
+  const execute = (monster.hp / maxHp <= 0.3 ? 1 + mods.execute / 100 : 1) * (monster.hp / maxHp <= 0.3 ? 1 + specials.execute / 100 : 1);
   const eliteDefense = monster.elite === "armored" ? 1.35 : 1;
   const defenseMultiplier = armorPiercing ? 1 : 100 / (100 + def.defense * 2.5 * eliteDefense);
   const mitigated = Math.max(1, Math.round(raw * defenseMultiplier * (marked ? 1.2 : 1) * execute));
@@ -165,6 +201,8 @@ export function hitMonster(
   }
   if (mitigated > s.save.stats.bestHit) s.save.stats.bestHit = mitigated;
   if (mods.lifesteal > 0) s.healPlayer(mitigated * (mods.lifesteal / 100));
+  // Leech and the Blood Pact relic: every hit gives a little back, so a long run holds together.
+  if (specials.lifesteal > 0) s.healPlayer(mitigated * (specials.lifesteal / 100));
   s.lastCombat = s.elapsed;
   s.emit({
     type: "damage",

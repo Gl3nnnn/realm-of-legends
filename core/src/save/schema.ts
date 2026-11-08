@@ -6,6 +6,7 @@ import { getTalentChoice, talentTierChosen } from "../data/talents";
 import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
 import { getAchievement, ACHIEVEMENT_IDS, DEFAULT_TITLE } from "../data/achievements";
+import { DESCENT_RELICS } from "../data/descent";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
 import { clampLevel, deriveStats } from "../progression";
 import { talentBonuses } from "../data/talents";
@@ -14,6 +15,8 @@ const CLASS_IDS = Object.keys(CLASSES) as [ClassId, ...ClassId[]];
 const ZONE_IDS = ["village", "forest", "dungeon", "marsh", "frost", "throne"] as const;
 const DIFFICULTIES = ["story", "normal", "nightmare"] as const;
 const BOSS_IDS = ["bone_warden", "miremother", "frost_revenant", "hollow_king"] as const;
+/** Relic ids, so a save can never name one that does not exist. */
+const DESCENT_RELIC_IDS = DESCENT_RELICS.map((relic) => relic.id) as [string, ...string[]];
 
 const affixIds = AFFIX_IDS as [string, ...string[]];
 
@@ -69,6 +72,8 @@ const statsSchema = z.object({
   flawlessFights: z.number().int().min(0).default(0),
   bestCombo: z.number().int().min(0).default(0),
   weaknessHits: z.number().int().min(0).default(0),
+  bestDummyHit: z.number().int().min(0).default(0),
+  bestDummyCombo: z.number().int().min(0).default(0),
 });
 
 /** The monster with a grudge: one species that beat the hero and grows with them. */
@@ -85,6 +90,13 @@ const loadoutSchema = z.object({
   name: z.string().min(1).max(24),
   equipment: equipmentSchema,
   quickSlots: z.tuple([z.string().nullable(), z.string().nullable()]),
+});
+
+/** One finished Endless Descent run, kept for the local leaderboard. */
+const descentRunSchema = z.object({
+  score: z.number().int().min(0).max(9999),
+  seed: z.number().int().min(0).max(0xffffffff),
+  at: z.number().int().min(0),
 });
 
 const achievementIds = ACHIEVEMENT_IDS as [string, ...string[]];
@@ -146,6 +158,16 @@ export const saveSchema = z.object({
   deedProgress: z.record(z.string().min(1).max(40), z.number().int().min(0).max(1_000_000)).default({}),
   rival: rivalSchema.nullable().default(null),
   arenaBest: z.number().int().min(0).max(9999).default(0),
+  descentBest: z.number().int().min(0).max(9999).default(0),
+  descentShards: z.number().int().min(0).max(1_000_000).default(0),
+  descentRelics: z.array(z.enum(DESCENT_RELIC_IDS)).max(DESCENT_RELIC_IDS.length).default([]),
+  descentPact: z.number().int().min(0).max(3).default(0),
+  gauntletCleared: z.array(z.enum(BOSS_IDS)).max(32).default([]),
+  descentRuns: z.array(descentRunSchema).max(5).default([]),
+  dailyClaimedOn: z.string().max(10).default(""),
+  dailyStreak: z.number().int().min(0).max(9999).default(0),
+  weeklyKey: z.string().max(10).default(""),
+  weeklyBest: z.number().int().min(0).max(9999).default(0),
   loadouts: z.array(loadoutSchema).max(3).default([]),
   stash: z.array(itemStackSchema.nullable()).length(STASH_SIZE).default(() => Array.from({ length: STASH_SIZE }, () => null)),
   stashTier: z.number().int().min(0).max(STASH_CAPACITIES.length - 1).default(0),
@@ -266,7 +288,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
-    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0 },
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0, bestDummyHit: 0, bestDummyCombo: 0 },
     achievements: [],
     waypoints: ["village"],
     petXp: 0,
@@ -286,6 +308,16 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     deedProgress: {},
     rival: null,
     arenaBest: 0,
+    descentBest: 0,
+    descentShards: 0,
+    descentRelics: [],
+    descentPact: 0,
+    gauntletCleared: [],
+    descentRuns: [],
+    dailyClaimedOn: "",
+    dailyStreak: 0,
+    weeklyKey: "",
+    weeklyBest: 0,
     loadouts: [],
     stash,
     stashTier: 0,
@@ -482,6 +514,24 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.stash = Array.from({ length: STASH_SIZE }, () => null);
     migrated.stashTier = 0;
     migrated.version = 15;
+  }
+  if (migrated.version === 15) {
+    // The Endless Descent, daily streak and weekly best arrived together.
+    migrated.descentBest = 0;
+    migrated.descentShards = 0;
+    migrated.descentRuns = [];
+    migrated.dailyClaimedOn = "";
+    migrated.dailyStreak = 0;
+    migrated.weeklyKey = "";
+    migrated.weeklyBest = 0;
+    migrated.version = 16;
+  }
+  if (migrated.version === 16) {
+    // Relics, the risk dial and the Ring's gauntlet arrived together; nobody owns any yet.
+    migrated.descentRelics = [];
+    migrated.descentPact = 0;
+    migrated.gauntletCleared = [];
+    migrated.version = 17;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

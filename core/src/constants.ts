@@ -4,6 +4,21 @@ export const TICK_RATE = 60;
 export const FIXED_DT = 1 / TICK_RATE;
 export const LEVEL_CAP = 50;
 export const INVENTORY_SIZE = 24;
+/**
+ * Seconds of freeze at the moment of a heavy blow. A tiny stop makes a hit feel
+ * like it landed; without it, damage is just a number going down.
+ */
+export const HIT_FREEZE_SECONDS = 0.06;
+export const HIT_FREEZE_CRIT_SECONDS = 0.1;
+/** How long the world crawls after a boss falls. */
+export const BOSS_KILL_SLOWMO_SECONDS = 0.7;
+export const BOSS_KILL_SLOWMO_SCALE = 0.25;
+/** Gamepad rumble per hit kind, in milliseconds and strength (0-1). */
+export const RUMBLE_HIT = { duration: 120, strong: 0.35, weak: 0.15 } as const;
+export const RUMBLE_BOSS = { duration: 420, strong: 0.9, weak: 0.6 } as const;
+/** The training dummy's own definition id and the meter's window. */
+export const DUMMY_MONSTER_ID = "training_dummy";
+export const DUMMY_RESET_SECONDS = 8;
 /** The vault's final size. Only the first `STASH_CAPACITIES[tier]` squares are usable. */
 export const STASH_SIZE = 60;
 export const STASH_CAPACITIES = [24, 36, 48, 60] as const;
@@ -11,7 +26,7 @@ export const STASH_CAPACITIES = [24, 36, 48, 60] as const;
 export const STASH_UPGRADE_COSTS = [500, 1500, 4000] as const;
 export const MAX_CHARACTERS = 5;
 export const MAX_GOLD = 9_999_999;
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 17;
 export const PLAYER_RADIUS = 9;
 export const PLAYER_SPEED = 96;
 export const INTERACT_RANGE = 58;

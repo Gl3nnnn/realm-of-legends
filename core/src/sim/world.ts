@@ -44,12 +44,18 @@ export function openChest(session: GameSession, id: string): void {
   if (session.save.openedChests.includes(id)) return;
   session.save.openedChests.push(id);
   session.save.stats.chestsOpened += 1;
-  const gold = session.save.zone === "dungeon" ? session.rng.int(90, 170) : session.rng.int(45, 90);
+  // A chest found by following a treasure coin pays far more than the one by the road.
+  const hunted = id.startsWith("hunt_");
+  const gold = hunted
+    ? session.rng.int(220, 420)
+    : session.save.zone === "dungeon" ? session.rng.int(90, 170) : session.rng.int(45, 90);
   const gained = session.gainGold(gold);
-  const items: ItemStack[] = session.save.zone === "dungeon"
-    ? [{ itemId: "greater_health_potion", qty: 1 }, { itemId: "iron_ore", qty: session.rng.int(1, 3) }]
-    : [{ itemId: "health_potion", qty: 2 }, { itemId: "herb", qty: session.rng.int(1, 2) }];
-  if (session.rng.chance(0.35)) items.push({ itemId: "gemstone", qty: 1 });
+  const items: ItemStack[] = hunted
+    ? [{ itemId: "greater_health_potion", qty: 1 }, { itemId: "gemstone", qty: session.rng.int(1, 3) }]
+    : session.save.zone === "dungeon"
+      ? [{ itemId: "greater_health_potion", qty: 1 }, { itemId: "iron_ore", qty: session.rng.int(1, 3) }]
+      : [{ itemId: "health_potion", qty: 2 }, { itemId: "herb", qty: session.rng.int(1, 2) }];
+  if (!hunted && session.rng.chance(0.35)) items.push({ itemId: "gemstone", qty: 1 });
   for (const item of items) {
     const leftover = session.addItem(item.itemId, item.qty);
     if (leftover > 0) {

@@ -20,8 +20,12 @@ export function killPlayer(session: GameSession, _source: string, killerId = "")
   session.arenaActive = false;
   session.arenaWaveNumber = 0;
   session.arenaAlive = 0;
+  // The Descent run also ends here, but the shards and deepest wave already earned stay.
+  if (session.descentActive) session.leaveDescent();
   // The thing that did it becomes the hero's rival: a grudge worth settling later.
   session.pickRivalOnDeath(killerId);
+  // A gauntlet run dies with the hero, but the rounds already cleared stay paid.
+  if (session.gauntletActive) session.leaveGauntlet();
   // A bounty streak only counts while the hero keeps their feet, so falling resets it.
   session.save.bountyStreak = 0;
   writeDiary(session.save, "death", `Fell in ${session.zone.name} to ${_source || "the dark"}.`);

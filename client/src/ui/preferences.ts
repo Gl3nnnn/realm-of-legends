@@ -22,6 +22,12 @@ export interface GamePreferences {
   showDamage: boolean;
   screenShake: boolean;
   touchControls: boolean;
+  /** Gently snap aim to the nearest monster when no explicit aim input is held. */
+  autoAim: boolean;
+  /** Vibration on phones and gamepads that support it. */
+  haptics: boolean;
+  /** Trim particles and ambient effects for older phones. */
+  performanceMode: boolean;
   cameraZoom: 1.5 | 2 | 2.5;
   effectIntensity: 0.5 | 1 | 1.5;
   brightness: 1 | 1.2 | 1.4;
@@ -85,6 +91,9 @@ const DEFAULTS: GamePreferences = {
   showDamage: true,
   screenShake: true,
   touchControls: false,
+  autoAim: false,
+  haptics: true,
+  performanceMode: false,
   cameraZoom: 2,
   effectIntensity: 1,
   brightness: 1,
@@ -154,6 +163,9 @@ export function loadPreferences(): GamePreferences {
       showDamage: parsed.showDamage !== false,
       screenShake: parsed.screenShake !== false,
       touchControls: Boolean(parsed.touchControls),
+      autoAim: Boolean(parsed.autoAim),
+      haptics: parsed.haptics !== false,
+      performanceMode: Boolean(parsed.performanceMode),
       cameraZoom: parsed.cameraZoom === 1.5 || parsed.cameraZoom === 2.5 ? parsed.cameraZoom : 2,
       effectIntensity: parsed.effectIntensity === 0.5 || parsed.effectIntensity === 1.5 ? parsed.effectIntensity : 1,
       brightness: parsed.brightness === 1.2 || parsed.brightness === 1.4 ? parsed.brightness : 1,

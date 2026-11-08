@@ -68,7 +68,7 @@ export const ZONES = {
       { id: "trainer", x: 696, y: 568 },
     ],
     monsterSpawns: [
-
+      { id: "training_dummy", x: 648, y: 280 },
     ],
     chests: [
       { id: "village_chest_1", x: 488, y: 440 },

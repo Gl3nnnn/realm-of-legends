@@ -1,5 +1,5 @@
 import { ITEMS } from "../data/items";
-import { MONSTERS, SUMMON_IDS } from "../data/monsters";
+import { MONSTERS, SUMMON_IDS, GUIDE_HIDDEN } from "../data/monsters";
 import { QUESTS } from "../data/quests";
 import { STORY_CHAPTERS } from "../data/story";
 import { ZONES } from "../generated/world-data";
@@ -44,6 +44,8 @@ export function monsterGuide(): MonsterGuideEntry[] {
   if (guideCache) return guideCache;
   const entries: MonsterGuideEntry[] = Object.values(MONSTERS)
     .filter((monster) => !SUMMON_IDS.has(monster.id))
+    // Tools and thieves get no bestiary page: one is furniture, the other is a surprise.
+    .filter((monster) => !GUIDE_HIDDEN.has(monster.id))
     .map((monster) => {
       const zone = zoneForMonster(monster.id);
       const drops = monster.loot

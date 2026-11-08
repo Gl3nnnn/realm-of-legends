@@ -1,5 +1,9 @@
 import Phaser from "phaser";
 import {
+  BOSS_KILL_SLOWMO_SCALE,
+  BOSS_KILL_SLOWMO_SECONDS,
+  HIT_FREEZE_CRIT_SECONDS,
+  HIT_FREEZE_SECONDS,
   MONSTERS,
   NPCS,
   charFrame,
@@ -14,7 +18,7 @@ import {
 import type { UIManager } from "../ui/UIManager";
 import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
 import { damageColor, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
-import { isDown, justDown, readGamepad, syncKeybinds, type GamepadState } from "./input";
+import { isDown, justDown, readGamepad, rumblePad, syncKeybinds, type GamepadState } from "./input";
 import {
   renderFloorEffects as renderFloorEffectsFx,
   castMotion as castMotionFx,
@@ -39,6 +43,10 @@ const DAMAGE_TEXT_COLORS: Record<string, string> = {
 const MONSTER_TINTS: Record<string, number> = {
   skeleton_minion: 0xd8c8a8,
   spirit_wolf: 0x9fd8ff,
+  // The dummy is straw and grey rags, so it never reads as a live enemy.
+  training_dummy: 0xb9a377,
+  // The purse imp wears a purse: gold-tinted so it is spotted across a room.
+  loot_imp: 0xffd76a,
   bog_lurker: 0x7fb07a,
   mire_wisp: 0xb0ffd0,
   venom_spider: 0xa0e050,
@@ -98,6 +106,8 @@ export class WorldScene extends Phaser.Scene {
   private tallTileSprites = new Map<string, Phaser.GameObjects.Image>();
   private aim = { x: 0, y: 0 };
   private hitPauseLeft = 0;
+  /** Seconds left of the slow crawl after a boss falls. */
+  private slowmoLeft = 0;
   private pointerMoved = false;
   private zoneId = "";
 
@@ -304,22 +314,35 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createChests(): void {
-    const interactKey = loadPreferences().keybinds.interact;
     for (const chest of this.session.zone.chests) {
       if (this.session.save.openedChests.includes(chest.id)) continue;
-      const image = this.add.image(chest.x, chest.y, "tileset", 25).setDepth(chest.y);
-      this.chestSprites.set(chest.id, image);
-      const label = this.add
-        .text(chest.x, chest.y - 14, interactKey, {
-          fontFamily: "monospace",
-          fontSize: "10px",
-          color: "#ffd76a",
-          backgroundColor: "#14111b",
-          padding: { x: 3, y: 1 },
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(chest.y + 1);
-      this.chestLabels.set(chest.id, label);
+      this.addChestSprite(chest.id, chest.x, chest.y);
+    }
+  }
+
+  private addChestSprite(id: string, x: number, y: number): void {
+    const interactKey = loadPreferences().keybinds.interact;
+    const image = this.add.image(x, y, "tileset", 25).setDepth(y);
+    this.chestSprites.set(id, image);
+    const label = this.add
+      .text(x, y - 14, interactKey, {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: "#ffd76a",
+        backgroundColor: "#14111b",
+        padding: { x: 3, y: 1 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(y + 1);
+    this.chestLabels.set(id, label);
+  }
+
+  /** Chests can appear mid-run (a treasure hunt), so the floor is checked once a frame. */
+  private syncChests(): void {
+    for (const chest of this.session.zone.chests) {
+      if (this.chestSprites.has(chest.id)) continue;
+      if (this.session.save.openedChests.includes(chest.id)) continue;
+      this.addChestSprite(chest.id, chest.x, chest.y);
     }
   }
 
@@ -692,9 +715,12 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // Hit pause: for a moment after a heavy hit, freeze the simulation so the impact lands.
+    // A boss falling makes the opposite request: the world crawls, so the kill is felt.
     this.hitPauseLeft = Math.max(0, this.hitPauseLeft - delta / 1000);
+    this.slowmoLeft = Math.max(0, this.slowmoLeft - delta / 1000);
+    const slowFactor = this.slowmoLeft > 0 ? BOSS_KILL_SLOWMO_SCALE : 1;
     if (this.hitPauseLeft <= 0) {
-      const events = this.session.step(Math.min(delta / 1000, 0.05), {
+      const events = this.session.step(Math.min(delta / 1000, 0.05) * slowFactor, {
         moveX,
         moveY,
         aimX: this.aim.x,
@@ -758,8 +784,10 @@ export class WorldScene extends Phaser.Scene {
             }
           }
           if (!preferences.reducedMotion && (event.crit || event.target === "player")) {
-            this.hitPauseLeft = Math.max(this.hitPauseLeft, event.crit ? 0.07 : 0.04);
+            this.hitPauseLeft = Math.max(this.hitPauseLeft, event.crit ? HIT_FREEZE_CRIT_SECONDS : HIT_FREEZE_SECONDS);
           }
+          // A gamepad says the hit landed in the hand, not just on the screen.
+          this.rumble(event.crit ? 1 : 0);
           this.flashMonster(event.x, event.y);
           this.burst(event.x, event.y, Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color, 4, 0.6);
           break;
@@ -776,6 +804,11 @@ export class WorldScene extends Phaser.Scene {
           break;
         case "death":
           if (event.who === "monster") this.burst(event.x, event.y, 0xb24a4a);
+          // A boss kill is the one moment the whole run was for: crawl, rumble, breathe.
+          if (event.who === "monster" && event.boss) {
+            if (!preferences.reducedMotion) this.slowmoLeft = BOSS_KILL_SLOWMO_SECONDS;
+            this.rumble(2);
+          }
           break;
         case "cast":
           this.playCastVfx(event, preferences);
@@ -824,6 +857,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private syncEntities(): void {
+    this.syncChests();
     this.updateNpcQuestMarks();
     const session = this.session;
     const save = session.save;
@@ -1471,6 +1505,13 @@ export class WorldScene extends Phaser.Scene {
         },
       });
     }
+  }
+
+  /** Shake the pad for a landed hit. Kind 1 is a crit, 0 a clean hit, 2 a boss falling. */
+  private rumble(kind: 0 | 1 | 2): void {
+    const preferences = loadPreferences();
+    if (preferences.reducedMotion || !preferences.haptics) return;
+    rumblePad(kind);
   }
 
   private flashMonster(x: number, y: number): void {

@@ -177,6 +177,8 @@ export function getMonster(id: string): MonsterDef {
 }
 
 export const SUMMON_IDS = new Set(["skeleton_minion", "spirit_wolf", "familiar"]);
+/** Creatures that exist for a mechanic rather than as wildlife, so they get no bestiary page. */
+export const GUIDE_HIDDEN = new Set(["training_dummy", "loot_imp"]);
 
 const expansionMonsters: MonsterDef[] = [
   {
@@ -409,6 +411,64 @@ const expansionMonsters: MonsterDef[] = [
 ];
 
 for (const monster of expansionMonsters) {
+  defs.push(monster);
+  MONSTERS[monster.id] = monster;
+}
+
+/**
+ * Two creatures that are not wildlife:
+ *  - The training dummy in the village: it soaks every hit, never hits back and
+ *    cannot die, so a build can be measured instead of guessed at.
+ *  - The loot imp: a thief that runs from a fight and pays a fat purse if caught.
+ */
+const mechanicMonsters: MonsterDef[] = [
+  {
+    id: "training_dummy",
+    name: "Training Dummy",
+    level: 1,
+    maxHp: 100000,
+    attack: 0,
+    defense: 0,
+    speed: 0,
+    aggroRadius: 0,
+    leashRadius: 40,
+    attackRange: 0,
+    attackCooldown: 999,
+    xp: 0,
+    goldMin: 0,
+    goldMax: 0,
+    loot: [],
+    respawn: 0,
+    radius: 12,
+    sprite: "skeleton",
+  },
+  {
+    id: "loot_imp",
+    name: "Purse Imp",
+    level: 6,
+    maxHp: 220,
+    attack: 8,
+    defense: 4,
+    speed: 78,
+    aggroRadius: 210,
+    leashRadius: 900,
+    attackRange: 24,
+    attackCooldown: 2.4,
+    xp: 160,
+    goldMin: 60,
+    goldMax: 120,
+    loot: [
+      { itemId: "gemstone", chance: 0.75, min: 1, max: 2 },
+      { itemId: "greater_health_potion", chance: 0.5, min: 1, max: 1 },
+      { itemId: "iron_ore", chance: 0.4, min: 1, max: 3 },
+    ],
+    respawn: 0,
+    radius: 9,
+    sprite: "familiar",
+  },
+];
+
+for (const monster of mechanicMonsters) {
   defs.push(monster);
   MONSTERS[monster.id] = monster;
 }

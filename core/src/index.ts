@@ -18,6 +18,8 @@ export * from "./data/blessings";
 export * from "./data/boss-lore";
 export * from "./data/weakness";
 export * from "./data/arena";
+export * from "./data/descent";
+export * from "./data/season";
 export * from "./data/journey";
 export * from "./data/rival";
 export * from "./save/schema";

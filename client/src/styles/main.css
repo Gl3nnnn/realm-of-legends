@@ -1110,6 +1110,94 @@ input[type="text"]:focus {
   box-shadow: 0 0 12px rgba(160, 94, 192, 0.35);
 }
 
+/* The training dummy's meter: grey and quiet, because it is a tool, not a fight. */
+.dummy-chip {
+  position: static;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(26, 30, 38, 0.92);
+  border: 1px solid #7e8ba3;
+  border-radius: 5px;
+  padding: 4px 9px;
+  color: #cfd8e8;
+}
+
+/* Relics and the risk dial, inside the journal's Descent card. */
+.descent-shop {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(160, 94, 192, 0.3);
+}
+
+.relic-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.relic-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.relic-row.owned {
+  border: 1px solid rgba(160, 94, 192, 0.5);
+  background: rgba(96, 40, 120, 0.18);
+}
+
+.relic-icon {
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+
+.relic-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pact-grid {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pact-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  cursor: pointer;
+}
+
+.pact-choice.active {
+  border-color: #c9762f;
+  background: rgba(160, 70, 20, 0.22);
+}
+
+.gauntlet-card {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(160, 94, 192, 0.3);
+}
+
+.small-title {
+  font-size: 13px;
+  margin-top: 10px;
+}
+
 /* A clean kill streak, parked under the buffs so it never covers a fight. */
 .streak-chip {
   position: static;

@@ -216,6 +216,8 @@ export class UIManager {
     streakChip: must("streak-chip"),
     comboChip: must("combo-chip"),
     arenaChip: must("arena-chip"),
+    descentChip: must("descent-chip"),
+    dummyChip: must("dummy-chip"),
     bountyChip: must("bounty-chip"),
     petChip: must("pet-chip"),
     deathRecap: must("death-recap"),
@@ -1420,6 +1422,15 @@ export class UIManager {
         const pieces = session.equipBestGear();
         changed = pieces > 0;
         if (changed) this.toast("Changed " + pieces + " piece" + (pieces === 1 ? "" : "s") + " of gear.", "good");
+      } else if (action === "reroll-affix" && target.dataset.index !== undefined) {
+        const index = Number(target.dataset.index);
+        changed = target.dataset.equip
+          ? session.rerollEquippedAffix(target.dataset.equip as keyof CharacterSave["equipment"], index)
+          : slot >= 0
+            ? session.rerollInventoryAffix(slot, index)
+            : false;
+        if (changed) this.sfx.level();
+        else this.toast("A reroll needs gold and Iron Ore.", "bad");
       }
       if (!changed) this.selectedSlot = null;
       else {
@@ -1441,6 +1452,11 @@ export class UIManager {
         const gained = session.sellAllMaterials();
         changed = gained > 0;
         if (changed) this.toast(`Sold everything spare for ${gained} gold.`, "good");
+      } else if (action === "sell-junk") {
+        const gained = session.sellAllJunk();
+        changed = gained > 0;
+        if (changed) this.toast(`Swept the junk gear out for ${gained} gold.`, "good");
+        else this.toast("No junk gear in the bag. " + "Everything left is worn or worth keeping.", "info");
       }
       if (changed) this.sfx.coin();
       this.renderPanel();
@@ -1486,6 +1502,48 @@ export class UIManager {
       } else if (action === "leave-arena") {
         changed = session.leaveArena();
         if (changed) this.toast("You step out of the ring.", "info");
+      } else if (action === "claim-daily") {
+        changed = session.claimDaily();
+        if (changed) {
+          this.sfx.coin();
+          this.toast(`Daily streak: ${session.save.dailyStreak} day${session.save.dailyStreak === 1 ? "" : "s"}.`, "good");
+        }
+      } else if (action === "enter-descent") {
+        changed = session.enterDescent();
+        if (changed) {
+          this.toast("You start down the Endless Descent.", "good");
+          this.closePanel(false);
+        }
+      } else if (action === "leave-descent") {
+        changed = session.leaveDescent();
+        if (changed) this.toast("You climb out of the Descent.", "info");
+      } else if (action === "choose-boon" && target.dataset.boon) {
+        changed = session.chooseDescentBoon(target.dataset.boon);
+        if (changed) this.sfx.level();
+      } else if (action === "cash-shards") {
+        changed = session.cashOutShards();
+        if (changed) this.sfx.coin();
+      } else if (action === "buy-relic" && target.dataset.relic) {
+        changed = session.buyDescentRelic(target.dataset.relic);
+        if (changed) this.sfx.level();
+      } else if (action === "set-pact" && target.dataset.level) {
+        changed = session.setDescentPact(Number(target.dataset.level));
+        if (changed) this.toast(`Risk set to ${session.pact.name}.`, "info");
+      } else if (action === "enter-gauntlet") {
+        changed = session.enterGauntlet();
+        if (changed) {
+          this.toast("The gauntlet begins. Every name, one after another.", "good");
+          this.closePanel(false);
+        }
+      } else if (action === "leave-gauntlet") {
+        changed = session.leaveGauntlet();
+        if (changed) this.toast("You leave the gauntlet.", "info");
+      } else if (action === "share-seed" && target.dataset.seed) {
+        const seed = target.dataset.seed;
+        void navigator.clipboard?.writeText(seed).then(
+          () => this.toast(`Seed ${seed} copied.`, "good"),
+          () => this.toast(`Seed ${seed}`, "info"),
+        );
       } else if (action === "save-loadout") {
         const name = window.prompt("Name this gear set", `Set ${session.save.loadouts.length + 1}`);
         if (name !== null) {
@@ -1765,6 +1823,8 @@ export class UIManager {
     this.updateStreakChip();
     this.updateComboChip();
     this.updateArenaChip();
+    this.updateDummyChip();
+    this.updateDescentChip();
     this.updateBountyChip();
     this.updatePetChip();
     this.dom.zone.textContent = session.zone.name;
@@ -2060,10 +2120,47 @@ export class UIManager {
     const session = this.session;
     if (!session) return;
     const arena = session.arenaStatus;
+    const gauntlet = session.gauntletStatus;
+    if (gauntlet.active && !session.dead) {
+      this.dom.arenaChip.classList.remove("hidden");
+      const text = `Gauntlet - round ${gauntlet.round + 1} of ${gauntlet.total} - ${gauntlet.next}`;
+      if (this.dom.arenaChip.textContent !== text) this.dom.arenaChip.textContent = text;
+      return;
+    }
     this.dom.arenaChip.classList.toggle("hidden", !arena.active || session.dead);
     if (!arena.active) return;
-    const text = `Ring A� wave ${arena.wave} A� ${arena.alive} left`;
+    const text = `Ring - wave ${arena.wave} - ${arena.alive} left`;
     if (this.dom.arenaChip.textContent !== text) this.dom.arenaChip.textContent = text;
+  }
+
+  /** The Endless Descent depth, while a run is live. */
+  private updateDescentChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const descent = session.descentStatus;
+    const show = descent.active && !session.dead;
+    this.dom.descentChip.classList.toggle("hidden", !show);
+    if (!show) return;
+    const pact = descent.pact.level > 0 ? ` [${descent.pact.name}]` : "";
+    const text = descent.pending.length > 0
+      ? `Descent - wave ${descent.wave} cleared - choose a boon (Q)${pact}`
+      : `Descent - wave ${descent.wave} - ${descent.alive} left${pact}`;
+    if (this.dom.descentChip.textContent !== text) this.dom.descentChip.textContent = text;
+  }
+
+  /** The dummy's meter, so a new relic or talent can be measured instead of guessed at. */
+  private updateDummyChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const dummy = session.dummyStatus;
+    const near = session.monsters.some((monster) => monster.invulnerable && Math.hypot(monster.x - session.save.x, monster.y - session.save.y) < 170);
+    const show = near && !session.dead;
+    this.dom.dummyChip.classList.toggle("hidden", !show);
+    if (!show) return;
+    const text = dummy.hits > 0
+      ? `Dummy - ${dummy.hits} hits - ${Math.round(dummy.damage)} damage - best ${Math.round(dummy.bestHit)}`
+      : `Dummy - personal best combo ${dummy.bestCombo}`;
+    if (this.dom.dummyChip.textContent !== text) this.dom.dummyChip.textContent = text;
   }
 
   /** The companion's level and how close it is to the next one. */
@@ -2122,11 +2219,19 @@ export class UIManager {
     }
     for (const chest of zone.chests) {
       if (session.save.openedChests.includes(chest.id)) continue;
+      // A treasure hunt is meant to be found by walking to it, so it stays off the map.
+      if (chest.id.startsWith("hunt_")) continue;
       ctx.fillStyle = "#ffd76a";
       ctx.fillRect(px(chest.x) - 2, py(chest.y) - 2, 4, 4);
     }
     for (const monster of session.monsters) {
       if (monster.state === "dead") continue;
+      // The training dummy is furniture, not danger: a grey dot, not a hostile one.
+      if (monster.invulnerable) {
+        ctx.fillStyle = "#b9a377";
+        ctx.fillRect(px(monster.x) - 2, py(monster.y) - 2, 4, 4);
+        continue;
+      }
       const boss = MONSTERS[monster.defId]?.boss;
       ctx.fillStyle = boss ? "#ff6b6b" : "#cf5f5f";
       const size = boss ? 8 : 4;
@@ -2427,6 +2532,10 @@ export class UIManager {
           this.sfx.portal();
           this.minimapZone = null;
           shouldPersist = true;
+          break;
+        case "treasure":
+          // A treasure hunt is a coin on the floor and a line in the log: no map marker, by design.
+          this.sfx.quest();
           break;
         case "gold": {
           const now = performance.now();
