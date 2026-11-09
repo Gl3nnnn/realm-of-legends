@@ -1,4 +1,4 @@
-import { ITEMS, createItemInstance, isEquippable } from "../data/items";
+import { ITEMS, GEM_ITEM_IDS, createItemInstance, isEquippable } from "../data/items";
 import { getMonster, SUMMON_IDS } from "../data/monsters";
 import { STORY_CHAPTERS, NG_PLUS_HOLLOW_ENDING } from "../data/story";
 import { length } from "./geometry";
@@ -94,7 +94,13 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   // Glutton and the Reaper's Toll relic: a kill gives a little health back.
   const healOnKill = s.fightSpecials.healOnKill;
   if (healOnKill > 0) s.healPlayer(s.stats.maxHp * (healOnKill / 100));
+  const petStageBefore = s.petStage.stage;
   s.save.petXp += def.boss ? 60 : 6;
+  // The companion grows in stages: say so the moment it changes, so the player sees it happen.
+  if (s.petStage.stage > petStageBefore) {
+    s.emit({ type: "pet-stage", stage: s.petStage.stage, name: s.petStage.name });
+    writeDiary(s.save, "loot", `${s.save.companion?.name ?? "Your companion"} grew into a ${s.petStage.name}.`);
+  }
   s.bumpKillStreak();
   s.recordBountyKill(def.id);
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {
@@ -118,6 +124,10 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
     const qty = s.rng.int(entry.min, entry.max);
     const instance = item && isEquippable(item) ? createItemInstance(entry.itemId, s.rng) : undefined;
     drops.push({ itemId: entry.itemId, qty: instance ? 1 : qty, instance });
+  }
+  // A boss leaves one gem behind, so the sockets fill from real fights and not only from the shop.
+  if (def.boss && !modeKill) {
+    drops.push({ itemId: s.rng.pick(GEM_ITEM_IDS), qty: 1 });
   }
   for (const drop of drops) {
     const item = ITEMS[drop.itemId];

@@ -1,5 +1,7 @@
 import type { AffixId, ClassId, Equipment, GearSetId, ItemDef, ItemInstance, ItemStack, Rarity, StatBonus } from "../types";
 import type { Rng } from "../rng";
+import { GEM_SOCKETS } from "../constants";
+import { GEMS, gemStats } from "./gems";
 
 type ItemInput = Omit<ItemDef, "sell"> & { sell?: number };
 
@@ -191,6 +193,25 @@ export const EXPANSION_WEAPON_IDS = expandedWeapons.map(({ id }) => id);
 export const EXPANSION_GEAR_IDS = expandedGear.map(({ id }) => id);
 export const EXPANSION_SUPPLY_IDS = [...expandedConsumables, ...expandedMaterials].map(({ id }) => id);
 
+/**
+ * The gems, as ordinary material items so they can be bought, sold, carried and
+ * stored like ore. Their ids all begin with `gem_`.
+ */
+const gemItems: ItemDef[] = GEMS.map((gem) =>
+  item({
+    id: gem.id,
+    name: `Uncut ${gem.name}`,
+    type: "material",
+    rarity: "rare",
+    icon: "gem",
+    description: `${gem.description} Set it into a socketed piece of gear to use it.`,
+    stack: 50,
+    buy: 180,
+  }),
+);
+
+export const GEM_ITEM_IDS = gemItems.map(({ id }) => id);
+
 const classStarterWeapons = [
   item({ id: "starter_warden_hammer", name: "Warden's Hammer", type: "weapon", rarity: "common", icon: "mace", description: "A sturdy hammer built for guarding the village road. +5 attack, +2 defense.", stack: 1, buy: 55, classes: ["warden"], stats: { attack: 5, defense: 2 } }),
   item({ id: "starter_oracle_focus", name: "Sunstone Focus", type: "weapon", rarity: "common", icon: "staff", description: "A clear crystal focus for a new seer. +3 attack, +12 resource.", stack: 1, buy: 52, classes: ["oracle"], stats: { attack: 3, maxResource: 12 } }),
@@ -212,6 +233,7 @@ const defs: ItemDef[] = [
   ...expandedGear,
   ...expandedConsumables,
   ...expandedMaterials,
+  ...gemItems,
   item({
     id: "iron_sword",
     name: "Iron Sword",
@@ -825,7 +847,31 @@ export function itemStats(stack: ItemStack): StatBonus {
   for (const key of Object.keys(total) as (keyof StatBonus)[]) {
     total[key] = Math.round((total[key] ?? 0) * multiplier * 100) / 100;
   }
+  // Sockets are not scaled by the item's upgrade: a gem gives exactly what it says.
+  const gems = gemStats(stack.instance?.gems);
+  for (const [key, value] of Object.entries(gems) as [keyof StatBonus, number][]) {
+    total[key] = Math.round(((total[key] ?? 0) + value) * 100) / 100;
+  }
   return total;
+}
+
+/** How many gems a piece of gear can hold, from its rarity. Non-gear holds none. */
+export function socketCount(stack: ItemStack): number {
+  const def = getItem(stack.itemId);
+  if (!isEquippable(def)) return 0;
+  const open = GEM_SOCKETS[def.rarity] ?? 0;
+  // An upgrade of 3 or better opens one more socket, so improving gear also makes it worth re-gemming.
+  return open + ((stack.instance?.upgrade ?? 0) >= 3 ? 1 : 0);
+}
+
+/** The gems currently set into a piece of gear. */
+export function socketedGems(stack: ItemStack): string[] {
+  return stack.instance?.gems ?? [];
+}
+
+/** True when this stack has a free socket waiting for a gem. */
+export function hasOpenSocket(stack: ItemStack): boolean {
+  return socketedGems(stack).length < socketCount(stack);
 }
 
 export function itemDisplayName(stack: ItemStack): string {

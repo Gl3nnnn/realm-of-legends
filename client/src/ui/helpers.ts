@@ -7,6 +7,7 @@ import {
   itemIcon,
   portraitFrame,
   GEAR_SETS,
+  getGem,
   getItem,
   itemDisplayName,
   itemSellValue,
@@ -163,6 +164,7 @@ export function itemDetailHtml(stack: ItemStack | null, compareTo: ItemStack | n
     <p class="desc">${esc(def.description)}</p>
     ${lines.length ? `<div class="item-stat">${lines.map(esc).join("<br>")}</div>` : ""}
     ${affixes ? `<div class="small muted">${esc(affixes)}</div>` : ""}
+    ${stack.instance?.gems?.length ? `<div class="small">Gems: ${stack.instance.gems.map((gemId) => esc(getGem(gemId)?.name ?? gemId)).join(" · ")}</div>` : ""}
     ${set ? `<div class="small" style="color:var(--gold)">Set: ${esc(set.name)}</div>${set.bonuses.map((bonus) => `<div class="small muted">${bonus.pieces} pieces: ${esc(bonus.text)}</div>`).join("")}` : ""}
     ${comparison}
     ${def.heal ? `<div class="item-stat">Restores ${def.heal} health</div>` : ""}

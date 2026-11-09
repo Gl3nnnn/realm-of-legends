@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import { MAX_CHARACTERS, migrateSave } from "@realm/core";
-import type { CharacterSave } from "@realm/core";
+import { MAX_CHARACTERS, mergeVaults, migrateSave } from "@realm/core";
+import type { CharacterSave, ItemStack } from "@realm/core";
 
 interface RealmDB extends DBSchema {
   characters: {
@@ -12,6 +12,15 @@ interface RealmDB extends DBSchema {
 
 const DB_NAME = "realm-of-legends";
 const DB_VERSION = 1;
+
+/** A vault copy that no two heroes share, so editing one never edits another. */
+function cloneVault(stash: readonly (ItemStack | null)[]): (ItemStack | null)[] {
+  return stash.map((stack) => (stack ? { ...stack, instance: stack.instance ? { ...stack.instance, affixes: [...stack.instance.affixes], gems: stack.instance.gems ? [...stack.instance.gems] : undefined } : undefined } : null));
+}
+
+function withVault(save: CharacterSave, vault: { stash: (ItemStack | null)[]; stashTier: number }): CharacterSave {
+  return { ...save, stash: cloneVault(vault.stash), stashTier: vault.stashTier };
+}
 
 export class SaveRepository {
   private dbPromise: Promise<IDBPDatabase<RealmDB>> | null = null;
@@ -31,13 +40,17 @@ export class SaveRepository {
   async list(): Promise<CharacterSave[]> {
     const db = await this.db();
     const saves = await db.getAll("characters");
-    return saves.map(migrateSave).sort((a, b) => b.updatedAt - a.updatedAt);
+    // The vault belongs to the player, not to one hero: hand every hero the same vault.
+    const vault = mergeVaults(saves);
+    return saves.map((save) => withVault(migrateSave(save), vault)).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async get(id: string): Promise<CharacterSave | undefined> {
     const db = await this.db();
     const save = await db.get("characters", id);
-    return save ? migrateSave(save) : undefined;
+    if (!save) return undefined;
+    const all = await db.getAll("characters");
+    return withVault(migrateSave(save), mergeVaults(all));
   }
 
   async count(): Promise<number> {
@@ -56,7 +69,15 @@ export class SaveRepository {
     if (!existing && (await db.count("characters")) >= MAX_CHARACTERS) {
       throw new Error(`You can only keep ${MAX_CHARACTERS} characters. Delete one first.`);
     }
-    await db.put("characters", save);
+    // One write, so every hero ends up holding the same vault: what the played
+    // hero just stored or took out is what the next hero finds.
+    const tx = db.transaction("characters", "readwrite");
+    await tx.store.put(save);
+    for (const other of await tx.store.getAll()) {
+      if (other.id === save.id) continue;
+      await tx.store.put(withVault(other, save));
+    }
+    await tx.done;
   }
 
   async delete(id: string): Promise<void> {

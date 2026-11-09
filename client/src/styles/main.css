@@ -1156,6 +1156,45 @@ input[type="text"]:focus {
   text-align: center;
 }
 
+/* Gems: a coloured chip per stone, so a socketed item reads at a glance. */
+.gem-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gem-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gem-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.gem-x {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.gem-x:hover {
+  opacity: 1;
+}
+
 .relic-body {
   display: flex;
   flex-direction: column;

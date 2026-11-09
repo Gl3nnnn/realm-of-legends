@@ -1431,6 +1431,18 @@ export class UIManager {
             : false;
         if (changed) this.sfx.level();
         else this.toast("A reroll needs gold and Iron Ore.", "bad");
+      } else if (action === "socket-gem" && target.dataset.gem) {
+        const held = target.dataset.equip
+          ? session.save.equipment[target.dataset.equip as keyof CharacterSave["equipment"]]
+          : slot >= 0 ? session.save.inventory[slot] : null;
+        if (held) {
+          changed = session.socketGem(held, target.dataset.gem);
+          if (changed) this.sfx.level();
+          else this.toast("That gem could not be set.", "bad");
+        }
+      } else if (action === "unsocket-gem" && target.dataset.slot && target.dataset.index !== undefined) {
+        changed = session.unsocketGem(target.dataset.slot as keyof CharacterSave["equipment"], Number(target.dataset.index));
+        if (changed) this.sfx.ui();
       }
       if (!changed) this.selectedSlot = null;
       else {
@@ -1566,6 +1578,19 @@ export class UIManager {
       } else if (action === "set-title" && target.dataset.title) {
         changed = session.setTitle(target.dataset.title);
         if (changed) this.toast(`You now go by ${target.dataset.title}.`, "good");
+      } else if (action === "claim-achievement" && target.dataset.id) {
+        changed = session.claimAchievement(target.dataset.id);
+        if (changed) this.sfx.coin();
+      } else if (action === "claim-all-achievements") {
+        const paid = session.claimAllAchievements();
+        changed = paid > 0;
+        if (changed) {
+          this.sfx.coin();
+          this.toast(`Collected ${paid} reward${paid === 1 ? "" : "s"}.`, "good");
+        }
+      } else if (action === "torment-up" || action === "torment-down") {
+        changed = session.setTorment(session.save.torment + (action === "torment-up" ? 1 : -1));
+        if (changed) this.toast(session.tormentInfo.name, "good");
       }
       this.renderPanel();
     } else if (this.panel?.kind === "talents") {
@@ -2172,7 +2197,7 @@ export class UIManager {
     if (!hatched) return;
     const need = session.petXpToNext;
     const pct = need <= 0 ? 100 : Math.round(((140 - need) / 140) * 100);
-    const text = `🐣 ${session.save.companion?.name ?? "Hatchling"} · Lv ${session.petLevel}${need > 0 ? ` · ${pct}%` : " · max"}`;
+    const text = `🐣 ${session.save.companion?.name ?? "Hatchling"} · ${session.petStage.name} · Lv ${session.petLevel}${need > 0 ? ` · ${pct}%` : " · max"}`;
     if (this.dom.petChip.textContent !== text) this.dom.petChip.textContent = text;
   }
 
@@ -2571,6 +2596,13 @@ export class UIManager {
           const title = event.title ? " - title unlocked: " + event.title : "";
           this.toast("🏆 " + event.name + title, "good");
           this.pushLog("Achievement earned: " + event.name + (event.title ? " (" + event.title + ")" : "") + ".", "good");
+          this.sfx.level();
+          shouldPersist = true;
+          break;
+        }
+        case "pet-stage": {
+          this.toast(`Your companion grew into a ${event.name}!`, "good");
+          this.pushLog(`Companion stage ${event.stage}: ${event.name}.`, "good");
           this.sfx.level();
           shouldPersist = true;
           break;

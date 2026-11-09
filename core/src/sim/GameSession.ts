@@ -31,7 +31,13 @@ import {
   isEquippable,
   itemStats,
   AFFIX_IDS,
+  socketCount,
+  socketedGems,
 } from "../data/items";
+import { getGem, isGem } from "../data/gems";
+import { petStageFor, nextPetStage } from "../data/pets";
+import { achievementReward, getAchievement } from "../data/achievements";
+import { TORMENT_TIERS, tormentTier, unlockedTorment } from "../data/torment";
 import { getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { pendingAchievements, availableTitles } from "../data/achievements";
@@ -289,9 +295,19 @@ export class GameSession {
     return 140 - (this.save.petXp % 140);
   }
 
-  /** How much the companion's own hits grow with its level. */
+  /** How much the companion's own hits grow with its level and its stage. */
   get petPower(): number {
-    return 1 + (this.petLevel - 1) * 0.08;
+    return (1 + (this.petLevel - 1) * 0.08) * petStageFor(this.petLevel).power;
+  }
+
+  /** The stage the companion has reached, and what it gives its hero. */
+  get petStage() {
+    return petStageFor(this.petLevel);
+  }
+
+  /** The next stage the companion is heading for, or null when it is already an Elder. */
+  get petStageNext() {
+    return nextPetStage(this.petLevel) ?? null;
   }
 
   /** Standing with one villager, from -10 to 10. */
@@ -517,11 +533,13 @@ export class GameSession {
         : { hp: 1, attack: 1, reward: 1 };
     const cycle = 1 + this.save.ngPlus * 0.35;
     const weekly = this.weeklyModifier;
+    // The Torment tier multiplies on top of everything else, so a tier is a real jump.
+    const torment = tormentTier(this.save.torment);
     return {
-      hp: base.hp * cycle * weekly.hp,
-      attack: base.attack * cycle * weekly.attack,
-      xp: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.xp,
-      gold: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.gold,
+      hp: base.hp * cycle * weekly.hp * torment.hp,
+      attack: base.attack * cycle * weekly.attack * torment.attack,
+      xp: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.xp * torment.reward,
+      gold: base.reward * (1 + this.save.ngPlus * 0.15) * weekly.gold * torment.reward,
     };
   }
 
@@ -618,6 +636,11 @@ export class GameSession {
     defense *= 1 + relics.defense / 100;
     maxHp *= 1 + relics.maxHp / 100;
     moveSpeed *= 1 + relics.moveSpeed / 100;
+    // A grown companion lends part of its strength to the hero it followed.
+    const pet = petStageFor(this.petLevel).bonus;
+    attack += pet.attack;
+    maxHp += pet.maxHp;
+    moveSpeed += pet.moveSpeed;
     return {
       maxHp: Math.floor(maxHp),
       maxResource: base.maxResource,
@@ -2120,6 +2143,122 @@ export class GameSession {
   rerollAffixCost(stack: ItemStack): { gold: number; ore: number } | null {
     if (!stack.instance || stack.instance.affixes.length === 0) return null;
     return { gold: 50 + stack.instance.affixes.length * 35, ore: 1 };
+  }
+
+  /**
+   * Set the Torment tier. It only climbs as far as the hero has opened, so a new
+   * player cannot accidentally drag the whole realm up to Mythic.
+   */
+  setTorment(tier: number): boolean {
+    if (this.dead) return false;
+    const wanted = Math.max(0, Math.min(TORMENT_TIERS.length - 1, Math.floor(tier)));
+    const open = this.tormentUnlocked;
+    if (wanted > open) {
+      const next = TORMENT_TIERS[open + 1];
+      this.emit({ type: "log", text: `Torment ${wanted} is still locked. Reach level ${next?.level ?? 0}${next?.needsFinalBoss ? " and put the Hollow King down" : ""} first.`, tone: "bad" });
+      return false;
+    }
+    if (this.save.torment === wanted) return false;
+    this.save.torment = wanted;
+    for (const monster of this.monsters) this.rescaleMonster(monster);
+    this.emit({ type: "log", text: `${tormentTier(wanted).name}: ${tormentTier(wanted).description}`, tone: wanted > 0 ? "quest" : "info" });
+    return true;
+  }
+
+  /** The highest Torment tier this hero has opened. */
+  get tormentUnlocked(): number {
+    return unlockedTorment(this.save.level, this.save.defeatedBosses);
+  }
+
+  /** The tier the hero is on, with its numbers, for the hero screen. */
+  get tormentInfo() {
+    const tier = tormentTier(this.save.torment);
+    return { ...tier, unlocked: this.tormentUnlocked, max: TORMENT_TIERS.length - 1 };
+  }
+
+  /**
+   * Set a gem into a piece of gear. Both the backpack slot and the two equip targets
+   * share this one rule, so a socket behaves the same wherever the item is.
+   */
+  socketGem(stack: ItemStack, gemId: string): boolean {
+    const gem = getGem(gemId);
+    if (!gem) return false;
+    if (this.countItem(gemId) < 1) {
+      this.emit({ type: "log", text: `You have no ${gem.name} to set.`, tone: "bad" });
+      return false;
+    }
+    const instance = stack.instance;
+    if (!instance) {
+      this.emit({ type: "log", text: "Only gear with a little character can hold a gem.", tone: "bad" });
+      return false;
+    }
+    const sockets = socketCount(stack);
+    if (socketedGems(stack).length >= sockets) {
+      this.emit({ type: "log", text: `${getItem(stack.itemId).name} has no open socket left.`, tone: "bad" });
+      return false;
+    }
+    this.removeItem(gemId, 1);
+    instance.gems = [...socketedGems(stack), gemId];
+    this.emit({ type: "log", text: `Set a ${gem.name} into ${getItem(stack.itemId).name}. ${gem.description}`, tone: "good" });
+    return true;
+  }
+
+  /** Tap one gem out of a worn item, back into the backpack. */
+  unsocketGem(slot: keyof CharacterSave["equipment"], gemIndex: number): boolean {
+    const stack = this.save.equipment[slot];
+    const instance = stack?.instance;
+    if (!stack || !instance?.gems || gemIndex < 0 || gemIndex >= instance.gems.length) return false;
+    const [gemId] = instance.gems.splice(gemIndex, 1);
+    if (!gemId) return false;
+    instance.gems = instance.gems.length ? instance.gems : undefined;
+    this.addItem(gemId, 1);
+    this.emit({ type: "log", text: `Took the ${getGem(gemId)?.name ?? "gem"} out of ${getItem(stack.itemId).name}.`, tone: "info" });
+    return true;
+  }
+
+  /** The gems sitting in the backpack, so the socket window can offer them. */
+  get backpackGems(): { slot: number; gemId: string; name: string; qty: number }[] {
+    const rows: { slot: number; gemId: string; name: string; qty: number }[] = [];
+    for (let i = 0; i < this.save.inventory.length; i += 1) {
+      const stack = this.save.inventory[i];
+      if (!stack || !isGem(stack.itemId)) continue;
+      rows.push({ slot: i, gemId: stack.itemId, name: getGem(stack.itemId)?.name ?? stack.itemId, qty: stack.qty });
+    }
+    return rows;
+  }
+
+  /** Which achievements the hero has earned but not yet been paid for. */
+  get claimableAchievements(): string[] {
+    const claimed = new Set(this.save.achievementClaims);
+    return this.save.achievements.filter((id) => !claimed.has(id));
+  }
+
+  /**
+   * Collect the reward for one earned achievement. Each one pays once, and the
+   * gold lands in the purse with a line in the log so it is obvious it happened.
+   */
+  claimAchievement(id: string): boolean {
+    if (!this.save.achievements.includes(id)) return false;
+    if (this.save.achievementClaims.includes(id)) return false;
+    const reward = achievementReward(id);
+    this.save.achievementClaims.push(id);
+    this.gainGold(reward.gold);
+    if (reward.xp > 0) this.gainXp(reward.xp);
+    const def = getItem(reward.itemId);
+    this.addItem(reward.itemId, 1);
+    this.emit({ type: "log", text: `Collected the reward for ${getAchievement(id)?.name ?? "the deed"}: ${reward.gold} gold, ${reward.xp} xp and a ${def.name}.`, tone: "good" });
+    return true;
+  }
+
+  /** Collect every waiting achievement reward in one press. */
+  claimAllAchievements(): number {
+    let paid = 0;
+    for (const id of [...this.claimableAchievements]) {
+      if (this.claimAchievement(id)) paid += 1;
+    }
+    if (paid === 0) this.emit({ type: "log", text: "No achievement rewards are waiting.", tone: "info" });
+    else this.emit({ type: "log", text: `Collected ${paid} achievement reward${paid === 1 ? "" : "s"}.`, tone: "good" });
+    return paid;
   }
 
   /** Reroll one affix on a backpack item. */

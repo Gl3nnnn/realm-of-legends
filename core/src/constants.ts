@@ -26,7 +26,17 @@ export const STASH_CAPACITIES = [24, 36, 48, 60] as const;
 export const STASH_UPGRADE_COSTS = [500, 1500, 4000] as const;
 export const MAX_CHARACTERS = 5;
 export const MAX_GOLD = 9_999_999;
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
+/** How many gems each rarity of gear can hold, in the order of the rarity ladder. */
+export const GEM_SOCKETS: Record<"common" | "uncommon" | "rare" | "epic" | "legendary", number> = {
+  common: 1,
+  uncommon: 2,
+  rare: 3,
+  epic: 4,
+  legendary: 5,
+};
+/** The highest Torment tier a hero can set. */
+export const TORMENT_MAX = 10;
 export const PLAYER_RADIUS = 9;
 export const PLAYER_SPEED = 96;
 export const INTERACT_RANGE = 58;

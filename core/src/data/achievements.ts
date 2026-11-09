@@ -155,6 +155,31 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 
 const BY_ID = new Map(ACHIEVEMENTS.map((achievement) => [achievement.id, achievement]));
 
+/**
+ * The small purse handed over when an achievement's reward is collected.
+ * It is paid once per achievement, and the gold is worth having at any level:
+ * a level-50 hero can still use it, and a level-3 hero gets a real head start.
+ */
+export interface AchievementReward {
+  gold: number;
+  xp: number;
+  /** A gem, so collecting rewards also feeds the sockets. */
+  itemId: string;
+}
+
+const REWARD_GEMS = ["gem_ruby", "gem_emerald", "gem_topaz", "gem_sapphire", "gem_diamond", "gem_opal", "gem_onyx", "gem_amber"];
+
+/** The reward for one achievement, fixed by its place in the list so it never moves. */
+export function achievementReward(id: string): AchievementReward {
+  const index = Math.max(0, ACHIEVEMENTS.findIndex((achievement) => achievement.id === id));
+  return {
+    gold: 120 + index * 40,
+    xp: 90 + index * 40,
+    itemId: REWARD_GEMS[index % REWARD_GEMS.length]!,
+  };
+}
+
+
 export const ACHIEVEMENT_IDS = ACHIEVEMENTS.map((achievement) => achievement.id);
 
 export function getAchievement(id: string): AchievementDef | undefined {

@@ -21,6 +21,23 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.9.0",
+    date: "November 12, 2026",
+    title: "The Shared Vault Update",
+    summary:
+      "The vault now belongs to you, not to one hero: store something with one character and the next character finds it waiting. Gems are in the world too, and any piece of gear has sockets to hold them. A Torment dial raises the whole realm for better pay, companions grow through four stages, and every achievement now pays gold, experience and a gem you can collect.",
+    changes: [
+      { tag: "new", text: "One shared vault: every hero on this device sees the same squares and the same gear. Best vault size and all stored items carry across." },
+      { tag: "new", text: "Gems: eight stones with different bonuses, bought from Mira or dropped by bosses and given as achievement rewards." },
+      { tag: "new", text: "Sockets: common gear holds one gem, legendary holds five, and gear upgraded to +3 opens one more. A set gem keeps working while the item is worn." },
+      { tag: "new", text: "Torment, ten tiers from +25% to 7.2x monster toughness, paying up to 4.2x gold and experience. Tiers open with level and the top ones need the Hollow King beaten." },
+      { tag: "new", text: "Companions grow through four stages: Hatchling, Youngling, Companion and Elder, each hitting harder and lending the hero a small bonus." },
+      { tag: "new", text: "Achievement rewards you collect: gold, experience and a gem for every achievement, once each, with a Collect all button." },
+      { tag: "improved", text: "The item card now names the gems set into a piece of gear, and worn gear can be re-gemmed or emptied at any time." },
+      { tag: "improved", text: "Old saves upgrade themselves to version 18, with no gem, Torment or claim data missing." },
+    ],
+  },
+  {
     version: "1.8.0",
     date: "November 9, 2026",
     title: "The Reckoning Update",

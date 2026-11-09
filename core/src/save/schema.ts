@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { INVENTORY_SIZE, LEVEL_CAP, MAX_GOLD, PLAYER_RADIUS, SAVE_VERSION, STASH_CAPACITIES, STASH_SIZE } from "../constants";
+import { INVENTORY_SIZE, LEVEL_CAP, MAX_GOLD, PLAYER_RADIUS, SAVE_VERSION, STASH_CAPACITIES, STASH_SIZE, TORMENT_MAX } from "../constants";
 import { getClass, CLASSES } from "../data/classes";
-import { AFFIX_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
+import { AFFIX_IDS, GEM_ITEM_IDS, ITEMS, MAX_UPGRADE, canClassUse, isEquippable } from "../data/items";
 import { getTalentChoice, talentTierChosen } from "../data/talents";
 import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
@@ -19,11 +19,14 @@ const BOSS_IDS = ["bone_warden", "miremother", "frost_revenant", "hollow_king"] 
 const DESCENT_RELIC_IDS = DESCENT_RELICS.map((relic) => relic.id) as [string, ...string[]];
 
 const affixIds = AFFIX_IDS as [string, ...string[]];
+const gemIds = GEM_ITEM_IDS as [string, ...string[]];
 
 const itemInstanceSchema = z.object({
   uid: z.string().min(1).max(80),
   affixes: z.array(z.enum(affixIds)).max(8),
   upgrade: z.number().int().min(0).max(MAX_UPGRADE),
+  /** Gems set into the item's sockets, at most one per square plus the upgrade bonus. */
+  gems: z.array(z.enum(gemIds)).max(9).optional(),
 });
 
 const itemStackSchema = z.object({
@@ -171,6 +174,10 @@ export const saveSchema = z.object({
   loadouts: z.array(loadoutSchema).max(3).default([]),
   stash: z.array(itemStackSchema.nullable()).length(STASH_SIZE).default(() => Array.from({ length: STASH_SIZE }, () => null)),
   stashTier: z.number().int().min(0).max(STASH_CAPACITIES.length - 1).default(0),
+  /** The Torment tier this hero plays on. */
+  torment: z.number().int().min(0).max(TORMENT_MAX).default(0),
+  /** Achievement rewards already collected, so each one pays once. */
+  achievementClaims: z.array(z.string().min(1).max(40)).max(ACHIEVEMENT_IDS.length).default([]),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -321,6 +328,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     loadouts: [],
     stash,
     stashTier: 0,
+    torment: 0,
+    achievementClaims: [],
   };
 }
 
@@ -532,6 +541,12 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.descentPact = 0;
     migrated.gauntletCleared = [];
     migrated.version = 17;
+  }
+  if (migrated.version === 17) {
+    // A shared vault for every hero, the Torment dial, and collectable achievement rewards.
+    migrated.torment = 0;
+    migrated.achievementClaims = [];
+    migrated.version = 18;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

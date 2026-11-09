@@ -63,6 +63,8 @@ export interface ItemInstance {
   uid: string;
   affixes: AffixId[];
   upgrade: number;
+  /** Gem ids set into the item's sockets. Each one keeps giving its bonus while worn. */
+  gems?: string[];
 }
 
 export interface BaseStats {
@@ -596,6 +598,10 @@ export interface CharacterSave {
   stash: (ItemStack | null)[];
   /** How many vault expansions have been bought (0-3). */
   stashTier: number;
+  /** The Torment tier the hero is playing on (0-10, see data/torment.ts). */
+  torment: number;
+  /** Achievements whose reward has already been collected, so it pays once. */
+  achievementClaims: string[];
 }
 
 /**
@@ -699,6 +705,7 @@ export type SimEvent =
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }
   | { type: "achievement"; id: string; name: string; title?: string }
+  | { type: "pet-stage"; stage: number; name: string }
   | { type: "boss-intro"; monsterId: string; name: string; text: string; warning: string; level: number }
   | { type: "treasure"; zone: ZoneId; x: number; y: number; claimX: number; claimY: number; hint: string }
   | { type: "error"; message: string };
