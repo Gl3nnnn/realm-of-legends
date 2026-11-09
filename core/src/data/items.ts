@@ -2,6 +2,8 @@ import type { AffixId, ClassId, Equipment, GearSetId, ItemDef, ItemInstance, Ite
 import type { Rng } from "../rng";
 import { GEM_SOCKETS } from "../constants";
 import { GEMS, gemStats } from "./gems";
+import { PET_GEAR } from "./companions";
+import { runewordFor } from "./runewords";
 
 type ItemInput = Omit<ItemDef, "sell"> & { sell?: number };
 
@@ -212,6 +214,25 @@ const gemItems: ItemDef[] = GEMS.map((gem) =>
 
 export const GEM_ITEM_IDS = gemItems.map(({ id }) => id);
 
+/**
+ * Companion gear, as ordinary materials so it can be bought, found, stored and
+ * sold. A worn collar leaves the bag and lives on the save instead.
+ */
+const petGearItems: ItemDef[] = PET_GEAR.map((gear) =>
+  item({
+    id: gear.id,
+    name: gear.name,
+    type: "material",
+    rarity: gear.requiresPetLevel >= 14 ? "epic" : gear.requiresPetLevel >= 6 ? "rare" : "uncommon",
+    icon: "pelt",
+    description: `${gear.description} A companion of level ${gear.requiresPetLevel} or higher can wear it.`,
+    stack: 5,
+    buy: gear.buy,
+  }),
+);
+
+export const PET_GEAR_ITEM_IDS = petGearItems.map(({ id }) => id);
+
 const classStarterWeapons = [
   item({ id: "starter_warden_hammer", name: "Warden's Hammer", type: "weapon", rarity: "common", icon: "mace", description: "A sturdy hammer built for guarding the village road. +5 attack, +2 defense.", stack: 1, buy: 55, classes: ["warden"], stats: { attack: 5, defense: 2 } }),
   item({ id: "starter_oracle_focus", name: "Sunstone Focus", type: "weapon", rarity: "common", icon: "staff", description: "A clear crystal focus for a new seer. +3 attack, +12 resource.", stack: 1, buy: 52, classes: ["oracle"], stats: { attack: 3, maxResource: 12 } }),
@@ -234,6 +255,7 @@ const defs: ItemDef[] = [
   ...expandedConsumables,
   ...expandedMaterials,
   ...gemItems,
+  ...petGearItems,
   item({
     id: "iron_sword",
     name: "Iron Sword",
@@ -851,6 +873,14 @@ export function itemStats(stack: ItemStack): StatBonus {
   const gems = gemStats(stack.instance?.gems);
   for (const [key, value] of Object.entries(gems) as [keyof StatBonus, number][]) {
     total[key] = Math.round(((total[key] ?? 0) + value) * 100) / 100;
+  }
+  // Three gems in the right combination spell a runeword, and the word's own
+  // bonus lands on top of what the three stones already give.
+  const word = runewordFor(stack.instance?.gems);
+  if (word) {
+    for (const [key, value] of Object.entries(word.stats) as [keyof StatBonus, number][]) {
+      total[key] = Math.round(((total[key] ?? 0) + value) * 100) / 100;
+    }
   }
   return total;
 }

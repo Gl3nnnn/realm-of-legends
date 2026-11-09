@@ -602,6 +602,40 @@ export interface CharacterSave {
   torment: number;
   /** Achievements whose reward has already been collected, so it pays once. */
   achievementClaims: string[];
+  /** How far each village building has been rebuilt (see data/village.ts). */
+  village: Record<string, number>;
+  /** The collar and charm the companion wears (see data/companions.ts). */
+  petGear: PetGearState;
+  /** The one passive skill the companion was taught. */
+  petSkill: string | null;
+  /** A hardcore hero dies for good: the save is moved to the memorial instead of carried on. */
+  hardcore: boolean;
+}
+
+/** The two worn companion items, kept on the save so they survive a reload. */
+export interface PetGearState {
+  collar: string | null;
+  charm: string | null;
+}
+
+/** A hero who fell in hardcore mode, kept on the memorial wall. */
+export interface MemorialEntry {
+  id: string;
+  name: string;
+  classId: ClassId;
+  level: number;
+  /** The zone the hero fell in, by its display name. */
+  zone: string;
+  /** Who did it, if the game knows. */
+  killer: string;
+  /** What killed them, in one short line. */
+  cause: string;
+  /** How long they were played, in seconds. */
+  playtime: number;
+  /** When they fell, as a timestamp. */
+  at: number;
+  /** Bosses they put down before the end. */
+  bosses: number;
 }
 
 /**
@@ -708,7 +742,9 @@ export type SimEvent =
   | { type: "pet-stage"; stage: number; name: string }
   | { type: "boss-intro"; monsterId: string; name: string; text: string; warning: string; level: number }
   | { type: "treasure"; zone: ZoneId; x: number; y: number; claimX: number; claimY: number; hint: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /** A hardcore hero has died for good; the shell writes the entry to the wall and removes the save. */
+  | { type: "hardcore-end"; entry: MemorialEntry };
 
 export interface InteractResult {
   kind: "npc" | "portal" | "chest" | "gather";

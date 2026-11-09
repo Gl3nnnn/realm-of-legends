@@ -4367,3 +4367,172 @@ html[data-contrast="high"] .journal-nav a {
   display: flex;
   gap: 5px;
 }
+
+/* ---- The village rebuild, companion gear, runewords and the memorial wall ---- */
+.village-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.village-summary span {
+  white-space: nowrap;
+}
+
+.village-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.village-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid var(--building-color, #c9a96a);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.village-card.forged {
+  border-color: rgba(90, 220, 130, 0.5);
+  background: rgba(90, 220, 130, 0.08);
+}
+
+.village-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.village-dots {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.village-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.village-dot.on {
+  background: var(--building-color, #c9a96a);
+}
+
+.village-next {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+
+.skill-row.learned {
+  border-color: rgba(90, 220, 130, 0.45);
+  background: rgba(90, 220, 130, 0.07);
+}
+
+.gem-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.gem-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.gem-chip.ready {
+  border-color: rgba(90, 220, 130, 0.55);
+  color: #d6ffe2;
+  background: rgba(90, 220, 130, 0.12);
+}
+
+.memorial-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memorial-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #8a2f2f;
+  border-radius: 5px;
+  padding: 7px 10px;
+}
+
+.hc-badge {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 120, 120, 0.5);
+  color: #ff9fa0;
+  vertical-align: middle;
+}
+
+.hardcore-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+.hardcore-toggle input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.hardcore-toggle span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+}
+
+.select-links {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.row-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

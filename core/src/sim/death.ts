@@ -16,6 +16,10 @@ export function killPlayer(session: GameSession, _source: string, killerId = "")
   session.save.stats.deaths += 1;
   session.resetKillStreak();
   session.breakCombo();
+  // A hardcore hero does not come back: the wall keeps the name and the save is gone.
+  if (session.save.hardcore) {
+    session.emit({ type: "hardcore-end", entry: session.memorialEntry(killerId) });
+  }
   // A run in the Hollow Ring ends with the hero: the ring clears and starts again from wave one.
   session.arenaActive = false;
   session.arenaWaveNumber = 0;
@@ -30,11 +34,17 @@ export function killPlayer(session: GameSession, _source: string, killerId = "")
   session.save.bountyStreak = 0;
   writeDiary(session.save, "death", `Fell in ${session.zone.name} to ${_source || "the dark"}.`);
   session.emit({ type: "death", who: "player", x: session.save.x, y: session.save.y });
-  session.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
+  if (session.save.hardcore) {
+    session.emit({ type: "log", text: "Hardcore: this hero is gone for good. Their name goes on the memorial wall in the village.", tone: "bad" });
+  } else {
+    session.emit({ type: "log", text: "You have fallen. You will wake in Eldoria Village in a few seconds, fully healed. You lose no gold, items or experience.", tone: "bad" });
+  }
 }
 
 // Player respawn: back in Eldoria Village, fully healed, with no loss.
 export function respawn(session: GameSession): void {
+  // A hardcore hero never respawns: the shell takes them off the roster instead.
+  if (session.save.hardcore) return;
   const zone = ZONES.village;
   session.save.zone = "village";
   session.save.x = zone.spawn.x;

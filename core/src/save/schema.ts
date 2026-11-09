@@ -7,6 +7,7 @@ import { NPCS } from "../data/npcs";
 import { getZone, ZONES } from "../generated/world-data";
 import { getAchievement, ACHIEVEMENT_IDS, DEFAULT_TITLE } from "../data/achievements";
 import { DESCENT_RELICS } from "../data/descent";
+import { VILLAGE_MAX_TIER } from "../data/village";
 import type { CharacterSave, ClassId, ItemStack } from "../types";
 import { clampLevel, deriveStats } from "../progression";
 import { talentBonuses } from "../data/talents";
@@ -178,6 +179,17 @@ export const saveSchema = z.object({
   torment: z.number().int().min(0).max(TORMENT_MAX).default(0),
   /** Achievement rewards already collected, so each one pays once. */
   achievementClaims: z.array(z.string().min(1).max(40)).max(ACHIEVEMENT_IDS.length).default([]),
+  /** How far each village building has been rebuilt. */
+  village: z.record(z.string().min(1).max(24), z.number().int().min(0).max(VILLAGE_MAX_TIER)).default({}),
+  /** The companion's collar and charm, or null for an empty slot. */
+  petGear: z.object({
+    collar: z.string().min(1).max(40).nullable(),
+    charm: z.string().min(1).max(40).nullable(),
+  }).default({ collar: null, charm: null }),
+  /** The one passive skill the companion was taught. */
+  petSkill: z.string().min(1).max(40).nullable().default(null),
+  /** A hero who dies for good and moves to the memorial wall. */
+  hardcore: z.boolean().default(false),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -252,7 +264,7 @@ export function starterEquipment(classId: ClassId): CharacterSave["equipment"] {
   return weaponId ? { weapon: { itemId: weaponId, qty: 1 } } : {};
 }
 
-export function createCharacter(name: string, classId: ClassId, options: { id?: string; now?: number } = {}): CharacterSave {
+export function createCharacter(name: string, classId: ClassId, options: { id?: string; now?: number; hardcore?: boolean } = {}): CharacterSave {
   const clean = sanitizeName(name);
   if (!isValidName(clean)) throw new Error("Name must be 2-16 letters, numbers, spaces, or simple punctuation.");
   if (!CLASSES[classId]) throw new Error(`Unknown class: ${classId}`);
@@ -330,6 +342,10 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     stashTier: 0,
     torment: 0,
     achievementClaims: [],
+    village: {},
+    petGear: { collar: null, charm: null },
+    petSkill: null,
+    hardcore: options.hardcore === true,
   };
 }
 
@@ -547,6 +563,14 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.torment = 0;
     migrated.achievementClaims = [];
     migrated.version = 18;
+  }
+  if (migrated.version === 18) {
+    // The village rebuild, companion gear, runewords and hardcore heroes arrived together.
+    migrated.village = {};
+    migrated.petGear = { collar: null, charm: null };
+    migrated.petSkill = null;
+    migrated.hardcore = false;
+    migrated.version = 19;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;

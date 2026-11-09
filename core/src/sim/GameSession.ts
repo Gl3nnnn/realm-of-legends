@@ -35,10 +35,13 @@ import {
   socketedGems,
 } from "../data/items";
 import { getGem, isGem } from "../data/gems";
+import { getVillageBuilding, villageEffects, villageLevel, villageRows, VILLAGE_MAX_TIER } from "../data/village";
+import { getPetGear, getPetSkill, petLoadoutBonus, petSkillsAvailable, type PetGearSlot } from "../data/companions";
+import { forgedRunewords, runewordRows } from "../data/runewords";
 import { petStageFor, nextPetStage } from "../data/pets";
 import { achievementReward, getAchievement } from "../data/achievements";
 import { TORMENT_TIERS, tormentTier, unlockedTorment } from "../data/torment";
-import { getMonster } from "../data/monsters";
+import { MONSTERS, getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { pendingAchievements, availableTitles } from "../data/achievements";
 import { findReaction, REACTIONS, statusElement } from "../data/reactions";
@@ -98,6 +101,7 @@ import { LEVEL_CAP } from "../constants";
 import type {
   AbilityDef,
   AbilityEffect,
+  MemorialEntry,
   BuffInstance,
   CharacterSave,
   ChestSpawn,
@@ -295,9 +299,9 @@ export class GameSession {
     return 140 - (this.save.petXp % 140);
   }
 
-  /** How much the companion's own hits grow with its level and its stage. */
+  /** How much the companion's own hits grow with its level, its stage and what it wears. */
   get petPower(): number {
-    return (1 + (this.petLevel - 1) * 0.08) * petStageFor(this.petLevel).power;
+    return (1 + (this.petLevel - 1) * 0.08) * petStageFor(this.petLevel).power * this.villageEffects.petPower * this.petLoadout.power;
   }
 
   /** The stage the companion has reached, and what it gives its hero. */
@@ -329,9 +333,9 @@ export class GameSession {
     return Math.min(15, Math.max(0, Math.floor(best / 2) * 5));
   }
 
-  /** Percent off shop prices, earned by being kind to the merchant. */
+  /** Percent off shop prices, earned by being kind to the merchant and by rebuilding the marketplace. */
   get shopDiscountPercent(): number {
-    return this.trustPercent("shop");
+    return Math.min(60, this.trustPercent("shop") + this.villageEffects.shopDiscountPct);
   }
 
   /** Percent off healing at the shrine, earned by being kind to the healer. */
@@ -636,11 +640,20 @@ export class GameSession {
     defense *= 1 + relics.defense / 100;
     maxHp *= 1 + relics.maxHp / 100;
     moveSpeed *= 1 + relics.moveSpeed / 100;
-    // A grown companion lends part of its strength to the hero it followed.
+    // A rebuilt village helps every hero on this account, so its bonus lands here too.
+    const village = this.villageEffects;
+    attack *= 1 + village.attackPct / 100;
+    defense += village.defenseFlat;
+    maxHp *= 1 + village.maxHpPct / 100;
+    moveSpeed *= 1 + village.moveSpeedPct / 100;
+    // A grown companion lends part of its strength to the hero it followed, and
+    // its collar, charm and taught skill add a little more on top.
     const pet = petStageFor(this.petLevel).bonus;
-    attack += pet.attack;
-    maxHp += pet.maxHp;
-    moveSpeed += pet.moveSpeed;
+    const petLoadout = this.petLoadout;
+    attack += pet.attack + petLoadout.attack;
+    maxHp += pet.maxHp + petLoadout.maxHp;
+    moveSpeed += pet.moveSpeed + petLoadout.moveSpeed;
+    defense += petLoadout.defense;
     return {
       maxHp: Math.floor(maxHp),
       maxResource: base.maxResource,
@@ -2261,6 +2274,227 @@ export class GameSession {
     return paid;
   }
 
+  // ---------------------------------------------------------------------------
+  // The village rebuild
+  // ---------------------------------------------------------------------------
+
+  /** How far one village building has been rebuilt, 0 to 5. */
+  villageLevel(buildingId: string): number {
+    return villageLevel(this.save.village, buildingId);
+  }
+
+  /** Everything the rebuilt village gives the hero, added up. */
+  get villageEffects() {
+    return villageEffects(this.save.village);
+  }
+
+  /** The rows the village panel draws, with what each stage costs and whether it can be paid. */
+  get villageRows() {
+    const rows = villageRows(this.save.village);
+    for (const row of rows) {
+      if (!row.next) continue;
+      const enoughGold = this.save.gold >= row.next.gold;
+      const enoughMaterials = !row.next.materials || this.countItem(row.next.materials.itemId) >= row.next.materials.qty;
+      row.affordable = enoughGold && enoughMaterials;
+    }
+    return rows;
+  }
+
+  /** Raise one building by a stage, paying gold and whatever it asks for. */
+  rebuildVillage(buildingId: string): boolean {
+    if (this.dead) return false;
+    const building = getVillageBuilding(buildingId);
+    if (!building) return false;
+    const level = villageLevel(this.save.village, buildingId);
+    if (level >= VILLAGE_MAX_TIER) {
+      this.emit({ type: "log", text: `${building.name} is already fully rebuilt.`, tone: "info" });
+      return false;
+    }
+    const tier = building.tiers[level];
+    if (!tier) return false;
+    if (this.save.gold < tier.gold) {
+      this.emit({ type: "log", text: `The next stage of ${building.name} costs ${tier.gold} gold.`, tone: "bad" });
+      return false;
+    }
+    if (tier.materials && this.countItem(tier.materials.itemId) < tier.materials.qty) {
+      const material = getItem(tier.materials.itemId);
+      this.emit({ type: "log", text: `${building.name} also needs ${tier.materials.qty}x ${material.name}, and you have ${this.countItem(tier.materials.itemId)}.`, tone: "bad" });
+      return false;
+    }
+    this.save.gold -= tier.gold;
+    if (tier.materials) this.removeItem(tier.materials.itemId, tier.materials.qty);
+    this.save.village = { ...this.save.village, [buildingId]: level + 1 };
+    // Health may have just gone up, so nothing is left over its new maximum.
+    this.save.hp = Math.min(this.stats.maxHp, this.save.hp);
+    writeDiary(this.save, "quest", `Rebuilt ${building.name} to stage ${level + 1}.`);
+    this.emit({ type: "log", text: `${building.name} is now stage ${level + 1} of ${VILLAGE_MAX_TIER}: ${tier.benefit}.`, tone: "good" });
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Companion gear and skills
+  // ---------------------------------------------------------------------------
+
+  /** True when the egg has hatched into a companion that can wear things. */
+  get hasCompanion(): boolean {
+    return Boolean(this.save.companion?.hatched);
+  }
+
+  /** The gear the companion is wearing, with what each piece asks of it. */
+  get petGearRow(): { slot: "collar" | "charm"; itemId: string | null; name: string; description: string }[] {
+    return (["collar", "charm"] as const).map((slot) => {
+      const itemId = this.save.petGear?.[slot] ?? null;
+      const def = getPetGear(itemId);
+      return {
+        slot,
+        itemId: def ? itemId : null,
+        name: def?.name ?? `No ${slot}`,
+        description: def?.description ?? (slot === "collar" ? "An empty collar slot." : "An empty charm slot."),
+      };
+    });
+  }
+
+  /** Everything the companion's worn gear and taught skill give. */
+  get petLoadout() {
+    return petLoadoutBonus(this.save.petGear, this.save.petSkill);
+  }
+
+  /** Put a collar or charm from the bag onto the companion. */
+  wearPetGear(itemId: string): boolean {
+    const def = getPetGear(itemId);
+    if (!def) return false;
+    if (!this.hasCompanion) {
+      this.emit({ type: "log", text: "Hatch your egg first: only a companion can wear these.", tone: "bad" });
+      return false;
+    }
+    if (this.countItem(itemId) < 1) {
+      this.emit({ type: "log", text: `You have no ${def.name}.`, tone: "bad" });
+      return false;
+    }
+    if (this.petLevel < def.requiresPetLevel) {
+      this.emit({ type: "log", text: `${def.name} needs a companion of level ${def.requiresPetLevel}.`, tone: "bad" });
+      return false;
+    }
+    this.removeItem(itemId, 1);
+    const previous = this.save.petGear?.[def.slot] ?? null;
+    if (previous) this.addItem(previous, 1);
+    this.save.petGear = { collar: this.save.petGear?.collar ?? null, charm: this.save.petGear?.charm ?? null };
+    this.save.petGear[def.slot] = itemId;
+    this.emit({ type: "log", text: `Your companion wears the ${def.name}. ${def.description}`, tone: "good" });
+    return true;
+  }
+
+  /** Take the collar or charm back off the companion into the bag. */
+  removePetGear(slot: PetGearSlot): boolean {
+    const itemId = this.save.petGear?.[slot] ?? null;
+    if (!itemId) return false;
+    if (!this.canAdd(itemId, 1)) {
+      this.emit({ type: "log", text: "Your bag is too full to take that off right now.", tone: "bad" });
+      return false;
+    }
+    this.addItem(itemId, 1);
+    this.save.petGear = { collar: this.save.petGear?.collar ?? null, charm: this.save.petGear?.charm ?? null };
+    this.save.petGear[slot] = null;
+    const def = getPetGear(itemId);
+    this.emit({ type: "log", text: `Took the ${def?.name ?? "gear"} back off your companion.`, tone: "info" });
+    return true;
+  }
+
+  /** The passive skills on offer, and which one the companion already knows. */
+  get petSkillList(): { id: string; name: string; description: string; available: boolean; learned: boolean }[] {
+    return petSkillsAvailable(this.petLevel).map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      available: this.hasCompanion,
+      learned: this.save.petSkill === skill.id,
+    }));
+  }
+
+  /** Teach the companion one passive skill, replacing whatever it knew. */
+  teachPetSkill(skillId: string): boolean {
+    const skill = getPetSkill(skillId);
+    if (!skill) return false;
+    if (!this.hasCompanion) {
+      this.emit({ type: "log", text: "Hatch your egg first: there is nobody to teach.", tone: "bad" });
+      return false;
+    }
+    if (this.petLevel < skill.requiresPetLevel) {
+      this.emit({ type: "log", text: `${skill.name} needs a companion of level ${skill.requiresPetLevel}.`, tone: "bad" });
+      return false;
+    }
+    this.save.petSkill = skillId;
+    this.emit({ type: "log", text: `Your companion learns ${skill.name}. ${skill.description}`, tone: "good" });
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Runewords
+  // ---------------------------------------------------------------------------
+
+  /** The gems held in the bag, counted by id, so a runeword panel knows what can be spelled. */
+  private gemCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const stack of this.save.inventory) {
+      if (!stack || !isGem(stack.itemId)) continue;
+      counts[stack.itemId] = (counts[stack.itemId] ?? 0) + stack.qty;
+    }
+    return counts;
+  }
+
+  /** Every gem list that could spell a runeword: worn gear straight away, bagged gear as a target. */
+  private allGemLists(): string[][] {
+    const lists: string[][] = [];
+    for (const stack of Object.values(this.save.equipment)) {
+      if (stack) lists.push(socketedGems(stack));
+    }
+    for (const stack of this.save.inventory) {
+      if (stack?.instance) lists.push(socketedGems(stack));
+    }
+    return lists;
+  }
+
+  /** The runewords already spelled by gear the hero wears right now. */
+  get activeRunewords(): string[] {
+    const lists = Object.values(this.save.equipment).filter((stack): stack is ItemStack => Boolean(stack)).map((stack) => socketedGems(stack));
+    return [...forgedRunewords(lists)].map((id) => id);
+  }
+
+  /** The runeword rows the village or journal panel draws. */
+  get runewordRows() {
+    return runewordRows(this.gemCounts(), forgedRunewords(this.allGemLists()));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hardcore heroes and the memorial wall
+  // ---------------------------------------------------------------------------
+
+  /** True when this hero dies for good. */
+  get isHardcore(): boolean {
+    return Boolean(this.save.hardcore);
+  }
+
+  /**
+   * The wall entry for a hardcore hero who has just fallen. The save itself is
+   * removed by the shell, so this is the only thing that survives.
+   */
+  memorialEntry(killerId = ""): MemorialEntry {
+    // getMonster throws on an unknown id, and a hardcore death must never crash the sim.
+    const killer = MONSTERS[killerId];
+    return {
+      id: this.save.id,
+      name: this.save.name,
+      classId: this.save.classId,
+      level: this.save.level,
+      zone: this.zone.name,
+      killer: killer?.name ?? "",
+      cause: this.deathRecap?.tip ?? "",
+      playtime: this.save.playtime,
+      at: Date.now(),
+      bosses: this.save.defeatedBosses.length,
+    };
+  }
+
   /** Reroll one affix on a backpack item. */
   rerollInventoryAffix(slotIndex: number, affixIndex: number): boolean {
     const stack = this.save.inventory[slotIndex];
@@ -2388,8 +2622,15 @@ export class GameSession {
     this.hatchlingAttackTimer = 1.6;
     this.hatchlingHitting = true;
     // The companion grows with the hero: its level raises its damage.
-    this.hitMonster(target, (4 + this.save.level) * this.petPower, false, "physical", []);
+    this.hitMonster(target, (4 + this.save.level) * this.petPower, false, "physical", this.petHitStatuses());
     this.hatchlingHitting = false;
+  }
+
+  /** The status a taught companion skill leaves on whatever it bites. */
+  private petHitStatuses(): StatusInstance[] {
+    const skill = getPetSkill(this.save.petSkill);
+    if (!skill?.status) return [];
+    return [{ kind: skill.status.kind, remaining: skill.status.seconds, value: skill.status.value }];
   }
 
   private updatePets(dt: number): void {
@@ -2545,7 +2786,9 @@ export class GameSession {
 
   gainGold(amount: number): number {
     if (!Number.isFinite(amount)) return 0;
-    const gained = Math.max(0, Math.min(MAX_GOLD - this.save.gold, Math.floor(amount)));
+    // The Workshop and the hero's own luck raise what the world pays out.
+    const raised = amount * (1 + this.villageEffects.goldPct / 100);
+    const gained = Math.max(0, Math.min(MAX_GOLD - this.save.gold, Math.floor(raised)));
     if (gained > 0) {
       this.save.gold += gained;
       this.save.stats.goldEarned += gained;
@@ -2556,8 +2799,10 @@ export class GameSession {
 
   gainXp(amount: number): void {
     if (this.save.level >= LEVEL_CAP || amount <= 0) return;
-    this.save.xp += amount;
-    this.emit({ type: "xp", amount });
+    // The Archive makes every hour spent in the world worth a little more.
+    const raised = Math.floor(amount * (1 + this.villageEffects.xpPct / 100));
+    this.save.xp += raised;
+    this.emit({ type: "xp", amount: raised });
     while (this.save.level < LEVEL_CAP) {
       const needed = xpToNext(this.save.level);
       if (this.save.xp < needed) break;
@@ -3312,6 +3557,8 @@ export class GameSession {
       if (!stack) continue;
       const def = ITEMS[stack.itemId];
       if (!def || def.type !== "material") continue;
+      // Gems and companion gear are not junk: they go into sockets and onto the pet.
+      if (isGem(stack.itemId) || getPetGear(stack.itemId)) continue;
       gold += itemSellValue(stack) * stack.qty;
       sold += stack.qty;
       this.save.inventory[i] = null;
@@ -3405,8 +3652,10 @@ export class GameSession {
     }
     this.potionCooldown = POTION_COOLDOWN;
     this.save.stats.potionsUsed += 1;
-    if (def.heal) this.healPlayer(def.heal);
-    if (def.restore) this.save.resource = Math.min(this.stats.maxResource, this.save.resource + def.restore);
+    // The chapel brews every potion stronger, so a rebuilt village heals more per sip.
+    const brew = 1 + this.villageEffects.potionPct / 100;
+    if (def.heal) this.healPlayer(Math.floor(def.heal * brew));
+    if (def.restore) this.save.resource = Math.min(this.stats.maxResource, this.save.resource + Math.floor(def.restore * brew));
     stack.qty -= 1;
     if (stack.qty <= 0) this.save.inventory[slotIndex] = null;
     this.emit({ type: "pickup", itemId: def.id, qty: 1 });

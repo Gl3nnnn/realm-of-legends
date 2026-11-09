@@ -1,5 +1,5 @@
 import type { NpcDef, ShopDef } from "../types";
-import { CLASS_STARTER_WEAPON_IDS, EXPANSION_GEAR_IDS, EXPANSION_SUPPLY_IDS, EXPANSION_WEAPON_IDS } from "./items";
+import { CLASS_STARTER_WEAPON_IDS, EXPANSION_GEAR_IDS, EXPANSION_SUPPLY_IDS, EXPANSION_WEAPON_IDS, PET_GEAR_ITEM_IDS } from "./items";
 import { SIDE_QUESTS } from "./side-quests";
 
 /** Quest ids for one giver, taken from the side-quest list so the two never drift apart. */
@@ -165,6 +165,7 @@ export const SHOPS: Record<string, ShopDef> = {
       "gem_sapphire",
       "gem_emerald",
       "gem_topaz",
+      ...PET_GEAR_ITEM_IDS,
       ...EXPANSION_SUPPLY_IDS,
     ],
   },

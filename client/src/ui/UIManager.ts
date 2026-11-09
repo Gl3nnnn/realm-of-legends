@@ -18,11 +18,14 @@ import {
   type CharacterSave,
   type ClassId,
   type GameSession,
+  type MemorialEntry,
   type SimEvent,
 } from "@realm/core";
 import type { MusicTheme, Sfx } from "../audio/sfx";
 import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/db";
+import { addMemorialEntry, readMemorial } from "../persistence/memorial";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
+import { downloadShareCard } from "./shareCard";
 import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText, bountyLabel } from "./helpers";
 import { LATEST_UPDATE, hasUnreadUpdates, markUpdatesSeen, unreadUpdateCount, updateBoardHtml } from "./changelog";
 import { t } from "./text";
@@ -41,6 +44,10 @@ import {
   shopPanelHtml,
   stashPanelHtml,
   talentsPanelHtml,
+  villageSection,
+  companionSection,
+  runewordSection,
+  memorialSection,
   type InventoryFilter,
   type InventorySort,
 } from "./screens";
@@ -67,7 +74,11 @@ type PanelState =
   | { kind: "controls" }
   | { kind: "npc"; id: string }
   | { kind: "shop"; id: string }
-  | { kind: "stash" };
+  | { kind: "stash" }
+  | { kind: "village" }
+  | { kind: "companion" }
+  | { kind: "runewords" }
+  | { kind: "memorial" };
 
 interface UIOptions {
   repo: SaveRepository;
@@ -113,6 +124,11 @@ export class UIManager {
   private panel: PanelState | null = null;
   private saves: CharacterSave[] = [];
   private selectedClass: ClassId = "warrior";
+  private hardcoreChoice = false;
+  /** The hardcore hero who just died, if it happened this session. */
+  private hardcoreEnded: MemorialEntry | null = null;
+  /** True once the hardcore death card has been filled in. */
+  private hardcoreShown = false;
   private classRoleFilter = "all";
   private classSearch = "";
   private bestiarySearch = "";
@@ -459,6 +475,11 @@ export class UIManager {
       this.handleEvents(this.session.drainEvents());
     });
 
+    this.dom.charSelect.addEventListener("click", (event) => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action='open-memorial']");
+      if (!target) return;
+      this.openPanel("memorial");
+    });
     this.dom.saveList.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
       if (!target) return;
@@ -493,6 +514,11 @@ export class UIManager {
     // Clicking the dim backdrop behind the box cancels, like Escape does.
     this.dom.confirm.addEventListener("click", (event) => {
       if (event.target === this.dom.confirm) this.closeConfirm();
+    });
+    // A hardcore hero never respawns, so the death card carries its own way out.
+    this.dom.death.addEventListener("click", (event) => {
+      const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action='hardcore-done']");
+      if (target) void this.showCharacterSelect();
     });
     this.dom.updateBoard.addEventListener("click", (event) => {
       if (event.target === this.dom.updateBoard) this.closeUpdateBoard();
@@ -1096,7 +1122,9 @@ export class UIManager {
   }
 
   private renderCreate(name: string): void {
-    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter, this.classSearch);
+    this.dom.createPanel.innerHTML = createPanelHtml(this.selectedClass, this.classRoleFilter, this.classSearch, this.hardcoreChoice);
+    const hardcore = this.dom.createPanel.querySelector<HTMLInputElement>("#char-hardcore");
+    if (hardcore) hardcore.addEventListener("change", () => { this.hardcoreChoice = hardcore.checked; });
     const input = this.dom.createPanel.querySelector<HTMLInputElement>("#char-name");
     if (input) {
       input.value = name;
@@ -1113,7 +1141,7 @@ export class UIManager {
     const error = this.dom.createPanel.querySelector<HTMLElement>("#create-error");
     const name = input?.value ?? "";
     try {
-      const save = createCharacter(name, this.selectedClass);
+      const save = createCharacter(name, this.selectedClass, { hardcore: this.hardcoreChoice });
       await this.repo.put(save);
       this.sfx.quest();
       this.dom.charSelect.classList.add("hidden");
@@ -1170,7 +1198,7 @@ export class UIManager {
   }
 
   openPanel(kind: PanelState["kind"], id?: string): void {
-    if (!this.session && kind !== "settings" && kind !== "controls") return;
+    if (!this.session && kind !== "settings" && kind !== "controls" && kind !== "memorial") return;
     if (!this.panel) this.panelOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (kind === "npc" && id) this.panel = { kind, id };
     else if (kind === "shop" && id) this.panel = { kind, id };
@@ -1178,6 +1206,10 @@ export class UIManager {
     else if (kind === "quests") this.panel = { kind };
     else if (kind === "talents") this.panel = { kind };
     else if (kind === "stash") this.panel = { kind: "stash" };
+    else if (kind === "village") this.panel = { kind: "village" };
+    else if (kind === "companion") this.panel = { kind: "companion" };
+    else if (kind === "runewords") this.panel = { kind: "runewords" };
+    else if (kind === "memorial") this.panel = { kind: "memorial" };
     else if (kind === "controls") this.panel = { kind: "controls" };
     else this.panel = { kind: "settings" };
     this.selectedSlot = null;
@@ -1238,6 +1270,22 @@ export class UIManager {
     } else if (this.panel.kind === "stash" && this.session) {
       title = "Mira's Vault";
       body = stashPanelHtml(this.session);
+    } else if (this.panel.kind === "village" && this.session) {
+      title = "Rebuild Eldoria";
+      body = villageSection(this.session);
+      narrow = true;
+    } else if (this.panel.kind === "companion" && this.session) {
+      title = "Companion";
+      body = companionSection(this.session);
+      narrow = true;
+    } else if (this.panel.kind === "runewords" && this.session) {
+      title = "Runewords";
+      body = runewordSection(this.session);
+      narrow = true;
+    } else if (this.panel.kind === "memorial") {
+      title = "Memorial Wall";
+      body = memorialSection(readMemorial());
+      narrow = true;
     } else if (this.panel.kind === "controls") {
       title = "Controls";
       body = controlsPanelHtml(this.preferences);
@@ -1368,6 +1416,13 @@ export class UIManager {
       }
       return;
     }
+    if (action === "share-card") {
+      if (this.session) {
+        downloadShareCard(this.session.snapshot());
+        this.toast("Share card saved as a picture. Post it anywhere.", "good");
+      }
+      return;
+    }
     if (action === "export-all") {
       const saves = await this.repo.list();
       downloadJson("realm-of-legends-saves.json", { version: 1, saves });
@@ -1485,6 +1540,27 @@ export class UIManager {
       } else if (action === "stash-upgrade") {
         changed = session.upgradeStash();
         if (changed) this.sfx.coin();
+      }
+      if (changed) this.sfx.ui();
+      this.renderPanel();
+    } else if (this.panel?.kind === "village") {
+      if (action === "rebuild-village" && target.dataset.village) {
+        changed = session.rebuildVillage(target.dataset.village);
+        if (changed) this.sfx.coin();
+      } else if (action === "open-runewords") {
+        this.openPanel("runewords");
+        return;
+      }
+      if (changed) this.sfx.ui();
+      this.renderPanel();
+    } else if (this.panel?.kind === "companion") {
+      if (action === "wear-pet-gear" && target.dataset.item) {
+        changed = session.wearPetGear(target.dataset.item);
+      } else if (action === "remove-pet-gear" && target.dataset.slot) {
+        changed = session.removePetGear(target.dataset.slot as "collar" | "charm");
+      } else if (action === "teach-pet-skill" && target.dataset.skill) {
+        changed = session.teachPetSkill(target.dataset.skill);
+        if (changed) this.sfx.level();
       }
       if (changed) this.sfx.ui();
       this.renderPanel();
@@ -1811,7 +1887,7 @@ export class UIManager {
       this.lastMinimap = now;
       if (!this.minimapCollapsed) this.drawMinimap();
     }
-    if (dt !== undefined && this.session.dead) {
+    if (dt !== undefined && this.session.dead && !this.session.isHardcore) {
       this.dom.deathTimer.textContent = String(Math.max(0, Math.ceil(this.session.respawnTimer)));
     }
   }
@@ -1884,6 +1960,7 @@ export class UIManager {
     this.updateBoss();
     this.updatePrompt();
     this.dom.death.classList.toggle("hidden", !session.dead);
+    if (session.dead && this.hardcoreEnded) this.showHardcoreEnd();
   }
 
   /**
@@ -1939,6 +2016,19 @@ export class UIManager {
         this.dom.bossIntro.classList.remove("leaving");
       }, 420);
     }, 4200);
+  }
+
+  /** A hardcore death has no respawn, so the death card gets a different last line. */
+  private showHardcoreEnd(): void {
+    const session = this.session;
+    if (!session) return;
+    // The card is redrawn every frame while the hero is down, so this is written once.
+    if (this.hardcoreShown) return;
+    this.hardcoreShown = true;
+    this.dom.deathTimer.textContent = "";
+    this.dom.deathRecap.innerHTML = `${this.dom.deathRecap.innerHTML}
+      <p class="death-tip" style="color:#ff9fa0"><strong>Hardcore.</strong> This hero is gone for good. Their name is on the memorial wall, and the roster is back on the character screen.</p>
+      <button class="btn" data-action="hardcore-done">Back to heroes</button>`;
   }
 
   /** Fill the death card with what killed the hero and one thing to try next time. */
@@ -2620,6 +2710,16 @@ export class UIManager {
         case "error":
           this.toast(event.message, "bad");
           break;
+        case "hardcore-end": {
+          // The wall keeps the name; the save itself is gone, as a death in hardcore means.
+          addMemorialEntry(event.entry);
+          this.hardcoreEnded = event.entry;
+          this.hardcoreShown = false;
+          void this.repo.delete(event.entry.id).catch(() => undefined);
+          this.sfx.death();
+          this.toast(`${event.entry.name} has fallen for good. Their name joins the memorial wall.`, "bad");
+          break;
+        }
         default:
           break;
       }

@@ -21,6 +21,24 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.10.0",
+    date: "November 16, 2026",
+    title: "The Rebuilt Village Update",
+    summary:
+      "Gold finally has somewhere to go. Seven village buildings can be rebuilt five times each, and every stage helps every hero on this device. Companions now wear a collar and a charm and learn a skill, three gems in one piece of gear spell a runeword, a hardcore hero can be forged who dies for good, and one button draws your hero as a picture you can post.",
+    changes: [
+      { tag: "new", text: "Rebuild Eldoria: the forge, the chapel, the gatehouse, the marketplace, the stable, the archive and the workshop, five stages each, paid in gold and materials and kept forever." },
+      { tag: "new", text: "Village bonuses that help every hero on this account: more attack, health, defense, experience, gold, cheaper shops and stronger potions." },
+      { tag: "new", text: "Companion gear: a collar and a charm, sold by Mira and found in the world, each making the companion hit harder and lending the hero a little more." },
+      { tag: "new", text: "Companion skills: Guard, Venom Fang, Chilling Bite, Ember Fang, Hunter's Mark and Frenzy. One is taught at a time and every bite carries it." },
+      { tag: "new", text: "Runewords: seven three-gem combinations, from Emberheart to Starforge, that wake a power no single gem gives. Set them into any gear with three sockets." },
+      { tag: "new", text: "Hardcore heroes: tick the box when you forge one and a single death ends them for good. Their name goes on a memorial wall you can open from the character screen." },
+      { tag: "new", text: "Share card: one button draws your hero, class, title, level and best runs as a PNG picture to post anywhere." },
+      { tag: "improved", text: "Sell all materials now leaves gems and companion gear alone, so a press of the broom cannot throw away a runeword." },
+      { tag: "improved", text: "Old saves upgrade themselves to version 19, with the village unbuilt and the companion slots empty." },
+    ],
+  },
+  {
     version: "1.9.0",
     date: "November 12, 2026",
     title: "The Shared Vault Update",
