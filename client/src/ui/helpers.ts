@@ -153,12 +153,12 @@ export function itemDetailHtml(stack: ItemStack | null, compareTo: ItemStack | n
       : "";
   const set = def.set ? GEAR_SETS[def.set] : null;
   const affixes = (stack.instance?.affixes ?? []).map((id) => `Affix: ${AFFIXES[id]?.name ?? id}`).join(" · ");
-  return `<div class="item-detail">
+  return `<div class="item-detail rarity-${def.rarity}">
     <div style="display:flex;gap:12px;align-items:center">
       <div class="item-icon" style="width:48px;height:48px;display:grid;place-items:center">${itemIconHtml(def.icon, 40)}</div>
       <div>
         <h3 class="rarity-${def.rarity}">${esc(itemDisplayName(stack))}</h3>
-        <div class="muted small">${esc(def.type)} · ${esc(def.rarity)}${stack.qty > 1 ? ` · x${stack.qty}` : ""}${stack.instance?.upgrade ? ` · +${stack.instance.upgrade}` : ""}</div>
+        <div class="muted small">${esc(def.type)} · <span class="rarity-${def.rarity}">${esc(def.rarity)}</span>${stack.qty > 1 ? ` · x${stack.qty}` : ""}${stack.instance?.upgrade ? ` · +${stack.instance.upgrade}` : ""}</div>
       </div>
     </div>
     <p class="desc">${esc(def.description)}</p>

@@ -27,6 +27,7 @@ import {
   isEquippable,
   itemDisplayName,
   itemSellValue,
+  itemStats,
   loreBySubject,
   medalClock,
   monsterGuide,
@@ -242,12 +243,14 @@ export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z"
     .join("");
 }
 
-function stackCell(stack: ItemStack | null, index: number, selected: boolean, compareHint = ""): string {
+function stackCell(stack: ItemStack | null, index: number, selected: boolean, compareHint = "", verdict: "up" | "down" | "" = ""): string {
   if (!stack) return `<button class="inv-slot empty" data-slot="${index}" aria-label="Empty slot"></button>`;
   const def = getItem(stack.itemId);
   const title = `${itemDisplayName(stack)}${compareHint ? ` - ${compareHint}` : ""}`;
-  return `<button class="inv-slot ${selected ? "selected" : ""}" data-slot="${index}" title="${esc(title)}">
+  return `<button class="inv-slot rarity-${def.rarity} ${selected ? "selected" : ""}" data-slot="${index}" title="${esc(title)}">
     <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
+    <span class="slot-rarity"></span>
+    ${verdict ? `<span class="slot-verdict ${verdict}" aria-hidden="true">${verdict === "up" ? "\u25b2" : "\u25bc"}</span>` : ""}
     ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
   </button>`;
 }
@@ -259,6 +262,9 @@ const FILTERS: { id: InventoryFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "weapon", label: "Weapons" },
   { id: "armor", label: "Armor" },
+  { id: "helm", label: "Helms" },
+  { id: "boots", label: "Boots" },
+  { id: "trinket", label: "Trinkets" },
   { id: "consumable", label: "Potions" },
   { id: "material", label: "Materials" },
 ];
@@ -291,27 +297,76 @@ export function inventoryPanelHtml(
       // without clicking it first. The full coloured breakdown is still in the detail panel.
       const compare = session.compareToEquipped(stack);
       const hint = compare && compare.lines.length ? compare.lines.join(", ") : compare ? "same as worn" : "";
-      return stackCell(stack, index, selectedSlot === index, hint);
+      // One mark per slot: more winning stats than losing ones counts as an upgrade, so a
+      // piece that trades a little health for attack still reads as a gain.
+      const gains = compare ? compare.lines.filter((line) => line.startsWith("+")).length : 0;
+      const losses = compare ? compare.lines.filter((line) => line.startsWith("-")).length : 0;
+      const verdict: "up" | "down" | "" = gains > losses ? "up" : losses > gains ? "down" : "";
+      return stackCell(stack, index, selectedSlot === index, hint, verdict);
     })
     .join("");
   const fillers = Array.from({ length: Math.max(0, 24 - entries.length) }, () => `<div class="inv-slot empty" aria-hidden="true"></div>`).join("");
+  // Counts on the filter chips: an empty filter is a dead button, a counted one is a shortcut.
+  const typeCounts = save.inventory.reduce<Record<string, number>>((map, slot) => {
+    if (!slot) return map;
+    const type = getItem(slot.itemId).type;
+    map[type] = (map[type] ?? 0) + 1;
+    map.all = (map.all ?? 0) + 1;
+    return map;
+  }, {});
   const filterButtons = FILTERS.map(
-    (entry) => `<button class="chip-btn ${filter === entry.id ? "active" : ""}" data-action="inv-filter" data-value="${entry.id}">${entry.label}</button>`,
+    (entry) => {
+      const count = typeCounts[entry.id] ?? 0;
+      return `<button class="chip-btn ${filter === entry.id ? "active" : ""} ${count === 0 && entry.id !== "all" ? "chip-empty" : ""}" data-action="inv-filter" data-value="${entry.id}">${entry.label}<span class="chip-count">${count}</span></button>`;
+    },
   ).join("");
   const sortButtons = SORTS.map(
     (entry) => `<button class="chip-btn ${sort === entry.id ? "active" : ""}" data-action="inv-sort" data-value="${entry.id}">${entry.label}</button>`,
   ).join("");
   const equipSlots: (keyof CharacterSave["equipment"])[] = ["weapon", "armor", "helm", "boots", "trinket"];
+  const slotNames: Record<string, string> = { weapon: "Weapon", armor: "Armour", helm: "Helm", boots: "Boots", trinket: "Trinket" };
   const equipment = equipSlots
     .map((slot) => {
-      const stack = save.equipment[slot];
-      const def = stack ? getItem(stack.itemId) : null;
-      return `<button class="equip-slot ${stack ? "filled" : ""}" data-equip="${slot}" title="${stack ? esc(itemDisplayName(stack)) : `Empty ${slot} slot`}">
-        ${stack ? itemIconHtml(def!.icon, 34) : `<span style="font-size:16px;color:#5f5668">Â·</span>`}
-        <span>${slot}</span>
+      const wornStack = save.equipment[slot];
+      const wornDef = wornStack ? getItem(wornStack.itemId) : null;
+      const socketFill = wornStack ? socketedGems(wornStack).length : 0;
+      const socketCap = wornStack ? socketCount(wornStack) : 0;
+      const wearLine = wornDef ? `${wornDef.type} - ${wornDef.rarity}` : "no piece";
+      return `<button class="gear-card ${wornStack ? "filled" : "empty"} ${wornDef ? `rarity-${wornDef.rarity}` : ""} ${selectedEquip === slot ? "selected" : ""}" data-equip="${slot}" title="${wornStack ? esc(itemDisplayName(wornStack)) : `Empty ${slotNames[slot]} slot`}">
+        <span class="gear-frame">
+          ${wornStack ? itemIconHtml(wornDef!.icon, 36) : `<span class="gear-ghost">${slotNames[slot].charAt(0)}</span>`}
+          ${wornStack?.instance?.upgrade ? `<span class="gear-plus">+${wornStack.instance.upgrade}</span>` : ""}
+          ${socketCap ? `<span class="gear-gems">${socketFill}/${socketCap}</span>` : ""}
+        </span>
+        <span class="gear-meta">
+          <span class="gear-slot-name">${slotNames[slot]}</span>
+          <span class="gear-item-name">${wornStack ? esc(itemDisplayName(wornStack)) : "Empty"}</span>
+          <span class="gear-wear">${wearLine}</span>
+        </span>
       </button>`;
     })
     .join("");
+  // A character sheet only reads well with its totals, so the five slot stats are added up.
+  const gearTotals = equipSlots.reduce(
+    (sum, slot) => {
+      const worn = save.equipment[slot];
+      if (!worn) return sum;
+      const stats = itemStats(worn);
+      return {
+        attack: sum.attack + (stats.attack ?? 0),
+        defense: sum.defense + (stats.defense ?? 0),
+        maxHp: sum.maxHp + (stats.maxHp ?? 0),
+        crit: sum.crit + (stats.crit ?? 0),
+      };
+    },
+    { attack: 0, defense: 0, maxHp: 0, crit: 0 },
+  );
+  const gearStats = `<div class="gear-totals">
+    <span class="gear-total"><strong>${Math.round(gearTotals.attack)}</strong> Attack</span>
+    <span class="gear-total"><strong>${Math.round(gearTotals.defense)}</strong> Defence</span>
+    <span class="gear-total"><strong>${Math.round(gearTotals.maxHp)}</strong> Health</span>
+    <span class="gear-total"><strong>${Math.round(gearTotals.crit * 100)}%</strong> Crit</span>
+  </div>`;
   const stack = selectedEquip ? save.equipment[selectedEquip as keyof CharacterSave["equipment"]] ?? null : selectedSlot !== null ? save.inventory[selectedSlot] : null;
   const selectedDef = stack ? getItem(stack.itemId) : null;
   const compareTo =
@@ -374,38 +429,53 @@ export function inventoryPanelHtml(
         .map((line) => `<span class="compare-line ${line.startsWith("+") ? "up" : "down"}">${esc(line)}</span>`)
         .join("")}</div>`
     : "";
-  return `<div class="panel-columns">
-    <div style="display:grid;gap:16px">
-      <div>
-        <div class="section-title">Backpack Â· ${formatNumber(save.gold)} gold</div>
+  const usedSquares = save.inventory.reduce((count, slot) => (slot ? count + 1 : count), 0);
+  const bagTone = usedSquares >= 24 ? "full" : usedSquares >= 20 ? "tight" : "";
+  return `<div class="panel-columns bag-layout">
+    <div class="bag-main">
+      <div class="bag-block">
+        <div class="bag-head">
+          <div class="section-title">Backpack</div>
+          <div class="bag-head-meta">
+            <span class="gold-line">${formatNumber(save.gold)} g</span>
+            <span class="bag-count ${bagTone}">${usedSquares} of 24</span>
+          </div>
+        </div>
+        <div class="bag-meter ${bagTone}" role="progressbar" aria-valuenow="${usedSquares}" aria-valuemin="0" aria-valuemax="24"><span style="width:${Math.round((usedSquares / 24) * 100)}%"></span></div>
         <div class="inv-toolbar">
           <div class="chip-row">${filterButtons}</div>
-          <div class="chip-row">${sortButtons}</div>
+          <div class="chip-row sort-row"><span class="chip-label">Sort</span>${sortButtons}</div>
         </div>
         <div class="bag-tools">
-          <button class="btn ghost small" data-action="quick-sort">Tidy backpack</button>
-          <button class="btn ghost small" data-action="equip-best">Wear best gear</button>
+          <button class="btn ghost small" data-action="quick-sort">Tidy</button>
+          <button class="btn ghost small" data-action="equip-best">Wear best</button>
           <button class="chip-btn ${session.autoSalvageJunk ? "active" : ""}" data-action="toggle-junk-filter" title="Common and uncommons for your class turn into ore the moment they are picked up">Junk filter ${session.autoSalvageJunk ? "on" : "off"}</button>
-          <span class="small muted">${entries.length} of 24 squares used</span>
         </div>
         <div class="inv-grid">${grid}${fillers}</div>
         ${entries.length === 0 ? `<div class="small muted" style="margin-top:8px">No items match this filter.</div>` : ""}
       </div>
-      <div>
-        <div class="section-title">Equipped</div>
-        <div class="equip-grid">${equipment}</div>
+      <div class="gear-block">
+        <div class="section-title">Equipment</div>
+        <div class="gear-board">
+          <div class="gear-doll">
+            ${classPortrait(save.classId, 76)}
+            <div class="doll-name">${esc(save.name)}</div>
+            <div class="small muted">Level ${save.level} ${esc(getClass(save.classId).name)}</div>
+          </div>
+          <div class="gear-grid">${equipment}</div>
+        </div>
+        ${gearStats}
       </div>
     </div>
-    <div style="display:grid;gap:12px;align-content:start">
+    <div class="bag-detail">
       ${itemDetailHtml(stack, compareTo)}
       ${compareHtml}
       <div class="detail-actions">${actions}</div>
       ${gemFuseSection(session)}
-      <div class="small muted">Consumables can be bound to Z or X. Equipment changes apply immediately; comparison lines show gains and losses against your equipped item.</div>
+      <div class="small muted">Consumables bind to Z or X. Hover a slot to see its numbers against what you wear.</div>
     </div>
   </div>`;
 }
-
 function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
   const stats = statLines(def.stats).slice(0, 2).join(" Â· ");

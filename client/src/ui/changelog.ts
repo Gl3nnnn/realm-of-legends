@@ -21,6 +21,22 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.13.0",
+    date: "November 25, 2026",
+    title: "The Field Kit Update",
+    summary:
+      "The backpack stopped being a plain box. It is now a character sheet: the bag on the left, your five worn pieces as cards beside it with their totals underneath, filter chips that tell you how many of each thing you hold, a rarity stripe on every slot, and a green or red mark on gear that beats or loses to what you wear.",
+    changes: [
+      { tag: "improved", text: "Backpack and equipment share one screen with the same look. Each worn piece is a card showing its icon, slot, name, rarity and how many sockets are filled, and the bag sits right beside it." },
+      { tag: "new", text: "Gear totals at the foot of the equipment panel add up Attack, Defence, Health and Crit across all five slots, so the sheet answers the question you actually ask." },
+      { tag: "improved", text: "Every slot shows a rarity stripe along its bottom edge, so the good drops stand out without reading names." },
+      { tag: "new", text: "A green up arrow marks gear that beats what you wear and a red down arrow marks gear that loses, right on the slot - judged before you click." },
+      { tag: "improved", text: "Filter chips count what is in the bag, and a filter with nothing in it fades out instead of inviting a click. Helm, boots and trinket filters were added too." },
+      { tag: "improved", text: "A fill meter runs under the backpack header and turns amber at 20 squares, red when full, so a full bag is noticed before a drop is lost." },
+      { tag: "improved", text: "The item card wears its rarity on a coloured edge, and the compare strip shows gains and losses in one tidy box." },
+    ],
+  },
+  {
     version: "1.12.0",
     date: "November 16, 2026",
     title: "The Red Sky Update",
