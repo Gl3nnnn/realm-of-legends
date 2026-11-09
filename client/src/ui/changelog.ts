@@ -21,6 +21,27 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.8.0",
+    date: "November 9, 2026",
+    title: "The Reckoning Update",
+    summary:
+      "Shards finally buy something that lasts. Seven relics stay with you forever, a risk dial pays triple for the brave, and every story boss now stands together in one gauntlet. The roads also keep a few surprises: a purse imp that runs for its life, buried chests with a coin to follow, and a training dummy that tells you exactly how hard you hit.",
+    changes: [
+      { tag: "new", text: "Relics: seven permanent upgrades bought with shards. They never reset, so a bad run still leaves you stronger." },
+      { tag: "new", text: "The risk dial: four levels of handicap, from a plain run to the Long Dark, paying up to triple shards." },
+      { tag: "new", text: "The Gauntlet: all four story bosses back to back with no waves between. Finishing it pays 3,000 gold and 50 shards." },
+      { tag: "new", text: "Descent boons that change the fight, not just a number: life steal, healing on kills, spiked hide, and a finisher for wounded foes." },
+      { tag: "new", text: "A purse imp that bolts when it is hit. Catch it before the timer runs out and its fat purse is yours." },
+      { tag: "new", text: "Buried treasure hunts: a coin and a plain-words direction lead you to a chest that was not there before." },
+      { tag: "new", text: "The training dummy in the village now measures your hits, with records for the hardest blow and the longest combo." },
+      { tag: "new", text: "The Turning Week: a weekly mood over every zone and a daily chest that rewards a streak." },
+      { tag: "improved", text: "Fights feel heavier: a brief freeze on big hits, slow motion on a boss kill, and rumble on a gamepad." },
+      { tag: "improved", text: "Sell all junk gear in one press, so a full bag no longer means a trip to three different merchants." },
+      { tag: "improved", text: "New settings for aim assist, phone vibration, and a lighter performance mode for older devices." },
+      { tag: "improved", text: "Old saves upgrade themselves to version 17, so nobody is left behind by the shard shop." },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "November 5, 2026",
     title: "The Vault Update",
