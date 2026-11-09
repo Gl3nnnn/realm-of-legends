@@ -6,6 +6,8 @@ export * from "./data/classes";
 export * from "./data/achievements";
 export * from "./data/items";
 export * from "./data/gems";
+export * from "./data/medals";
+export * from "./data/friends";
 export * from "./data/torment";
 export * from "./data/village";
 export * from "./data/companions";

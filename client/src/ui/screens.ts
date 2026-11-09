@@ -237,10 +237,11 @@ export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z"
     .join("");
 }
 
-function stackCell(stack: ItemStack | null, index: number, selected: boolean): string {
+function stackCell(stack: ItemStack | null, index: number, selected: boolean, compareHint = ""): string {
   if (!stack) return `<button class="inv-slot empty" data-slot="${index}" aria-label="Empty slot"></button>`;
   const def = getItem(stack.itemId);
-  return `<button class="inv-slot ${selected ? "selected" : ""}" data-slot="${index}" title="${esc(itemDisplayName(stack))}">
+  const title = `${itemDisplayName(stack)}${compareHint ? ` - ${compareHint}` : ""}`;
+  return `<button class="inv-slot ${selected ? "selected" : ""}" data-slot="${index}" title="${esc(title)}">
     <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
     ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
   </button>`;
@@ -279,7 +280,15 @@ export function inventoryPanelHtml(
   if (sort === "rarity") entries.sort((a, b) => itemRarityOrder(getItem(b.stack.itemId).rarity) - itemRarityOrder(getItem(a.stack.itemId).rarity));
   else if (sort === "name") entries.sort((a, b) => getItem(a.stack.itemId).name.localeCompare(getItem(b.stack.itemId).name));
   else if (sort === "type") entries.sort((a, b) => getItem(a.stack.itemId).type.localeCompare(getItem(b.stack.itemId).type));
-  const grid = entries.map(({ stack, index }) => stackCell(stack, index, selectedSlot === index)).join("");
+  const grid = entries
+    .map(({ stack, index }) => {
+      // Hover read the name only; now it reads the numbers too, so a drop can be judged
+      // without clicking it first. The full coloured breakdown is still in the detail panel.
+      const compare = session.compareToEquipped(stack);
+      const hint = compare && compare.lines.length ? compare.lines.join(", ") : compare ? "same as worn" : "";
+      return stackCell(stack, index, selectedSlot === index, hint);
+    })
+    .join("");
   const fillers = Array.from({ length: Math.max(0, 24 - entries.length) }, () => `<div class="inv-slot empty" aria-hidden="true"></div>`).join("");
   const filterButtons = FILTERS.map(
     (entry) => `<button class="chip-btn ${filter === entry.id ? "active" : ""}" data-action="inv-filter" data-value="${entry.id}">${entry.label}</button>`,
@@ -371,6 +380,7 @@ export function inventoryPanelHtml(
         <div class="bag-tools">
           <button class="btn ghost small" data-action="quick-sort">Tidy backpack</button>
           <button class="btn ghost small" data-action="equip-best">Wear best gear</button>
+          <button class="chip-btn ${session.autoSalvageJunk ? "active" : ""}" data-action="toggle-junk-filter" title="Common and uncommons for your class turn into ore the moment they are picked up">Junk filter ${session.autoSalvageJunk ? "on" : "off"}</button>
           <span class="small muted">${entries.length} of 24 squares used</span>
         </div>
         <div class="inv-grid">${grid}${fillers}</div>
@@ -385,6 +395,7 @@ export function inventoryPanelHtml(
       ${itemDetailHtml(stack, compareTo)}
       ${compareHtml}
       <div class="detail-actions">${actions}</div>
+      ${gemFuseSection(session)}
       <div class="small muted">Consumables can be bound to Z or X. Equipment changes apply immediately; comparison lines show gains and losses against your equipped item.</div>
     </div>
   </div>`;
@@ -655,7 +666,53 @@ export function arenaSection(session: GameSession): string {
     ${arena.active
       ? `<button class="btn ghost" data-action="leave-arena">Leave the ring</button>`
       : `<button class="btn" data-action="enter-arena">Enter the ring</button>`}
+    ${medalsSection(session)}
     ${gauntletCard(session)}
+  </div>`;
+}
+
+/**
+ * Timed medals: the fastest run at each depth, with the clock of the run in progress.
+ * A run used to be measured only by how deep it got, so there was never a reason to
+ * go back and clear the same wave quicker. This is the board that gives a run a target.
+ */
+export function medalsSection(session: GameSession): string {
+  const medals = session.medalStatus;
+  const live = medals.live
+    .map((run) => {
+      const target = run.tier ? `${run.tier} pace` : `gold at ${run.gold}s`;
+      return `<div class="run-row"><span>${esc(run.label)}</span><strong>${run.clock}</strong><span class="small muted">depth ${run.depth} \u00b7 ${esc(target)}</span></div>`;
+    })
+    .join("");
+  const rows = medals.rows
+    .slice(0, 8)
+    .map((row) => `<div class="run-row"><span>${esc(row.modeLabel)} ${row.depth}</span><strong class="${row.tier ? `medal-${row.tier}` : ""}">${row.tier ? esc(row.tier) : "-"}</strong><span class="small muted">${row.clock}${row.nearGold ? " \u00b7 that is close" : ""}</span></div>`)
+    .join("");
+  const counts = `Gold ${medals.counts.gold} \u00b7 silver ${medals.counts.silver} \u00b7 bronze ${medals.counts.bronze}`;
+  return `<div class="medal-card">
+    <div class="qtitle small-title">Timed Medals</div>
+    <div class="small muted">Clear a depth quickly and the run earns a medal. A faster repeat replaces a slower one; a slower one never wipes a good run.</div>
+    <div class="small muted">${counts}</div>
+    ${live ? `<div class="run-list">${live}</div>` : ""}
+    ${rows ? `<div class="run-list">${rows}</div>` : `<div class="small muted">No times on the board yet. The clock only runs while you are in the Ring, the Descent or the Gauntlet.</div>`}
+  </div>`;
+}
+
+/** Three gems of a kind into one better stone: the ladder a bag full of gems was missing. */
+function gemFuseSection(session: GameSession): string {
+  const rows = session.gemFuseRows;
+  if (rows.length === 0) return "";
+  const list = rows
+    .map((row) => {
+      const ready = row.qty >= 3 && row.target;
+      const label = row.target ? `Fuse 3 into ${esc(row.targetName)}` : "Already flawless";
+      return `<div class="run-row"><span>${esc(row.name)}</span><strong>${row.qty}</strong><button class="btn ghost small" data-action="fuse-gem" data-gem="${esc(row.gemId)}" ${ready ? "" : "disabled"}>${label}</button></div>`;
+    })
+    .join("");
+  return `<div class="medal-card">
+    <div class="qtitle small-title">Gem Ladder</div>
+    <div class="small muted">Three rough gems make a cut one, three cut make a flawless one. A better stone keeps its socket and its whole bonus.</div>
+    <div class="run-list">${list}</div>
   </div>`;
 }
 
@@ -1239,6 +1296,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
   </div>
   <div class="dialogue">"${esc(dialogue)}"</div>
   ${choices}
+  ${friendSection(session, npcId)}
   ${questRows ? `<div style="display:grid;gap:9px"><div class="section-title">Quests</div>${questRows}</div>` : ""}
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1248,6 +1306,30 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
     <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
   </div>
   ${npc.healer ? blessingSection(session) : ""}`;
+}
+
+/**
+ * Village friends: hearts, the gift they want and the keepsake behind three hearts.
+ * The standing was always on the save, but a player could never see it or spend it.
+ */
+function friendSection(session: GameSession, npcId: string): string {
+  const row = session.friendRows.find((entry) => entry.npcId === npcId);
+  if (!row) return "";
+  const giftName = getItem(row.gift.itemId).name;
+  const ready = row.have >= row.gift.qty;
+  const keepsake = row.keepsakeClaimed
+    ? `<span class="small muted">Keepsake given.</span>`
+    : row.canClaim
+      ? `<button class="btn small" data-action="claim-keepsake" data-npc="${esc(row.npcId)}">Take the keepsake</button>`
+      : `<span class="small muted">${row.heartsToKeepsake} more heart${row.heartsToKeepsake === 1 ? "" : "s"} to a keepsake.</span>`;
+  return `<div class="friend-card">
+    <div class="friend-head"><strong>${row.heartText}</strong><span class="small muted">standing ${row.relationship}</span></div>
+    <div class="small muted">${esc(row.name)} likes ${esc(giftName)}: ${row.gift.qty} of them, and you carry ${row.have}.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn small" data-action="friend-gift" data-npc="${esc(row.npcId)}" ${ready ? "" : "disabled"}>Give ${row.gift.qty}x ${esc(giftName)}</button>
+      ${keepsake}
+    </div>
+  </div>`;
 }
 
 /**

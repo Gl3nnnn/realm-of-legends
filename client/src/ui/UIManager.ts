@@ -1524,6 +1524,14 @@ export class UIManager {
         changed = gained > 0;
         if (changed) this.toast(`Swept the junk gear out for ${gained} gold.`, "good");
         else this.toast("No junk gear in the bag. " + "Everything left is worn or worth keeping.", "info");
+      } else if (action === "toggle-junk-filter") {
+        session.autoSalvageJunk = !session.autoSalvageJunk;
+        changed = true;
+        this.toast(session.autoSalvageJunk ? "Junk filter on: commons and uncommons turn into ore as they drop." : "Junk filter off: everything drops into the bag again.", "info");
+      } else if (action === "fuse-gem" && target.dataset.gem) {
+        const made = session.fuseGems(target.dataset.gem);
+        changed = made !== null;
+        if (changed) this.toast("Three stones became one better one.", "good");
       }
       if (changed) this.sfx.coin();
       this.renderPanel();
@@ -1687,6 +1695,12 @@ export class UIManager {
         if (changed) this.sfx.level();
       } else if (action === "npc-choice" && target.dataset.npc && target.dataset.choice) {
         changed = session.pickNpcChoice(target.dataset.npc, target.dataset.choice as "kind" | "rude");
+        if (changed) this.sfx.level();
+      } else if (action === "friend-gift" && target.dataset.npc) {
+        changed = session.giveFriendGift(target.dataset.npc);
+        if (changed) this.sfx.level();
+      } else if (action === "claim-keepsake" && target.dataset.npc) {
+        changed = session.claimKeepsake(target.dataset.npc);
         if (changed) this.sfx.level();
       } else if (action === "heal") {
         changed = session.healAtNpc();

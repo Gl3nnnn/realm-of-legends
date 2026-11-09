@@ -491,6 +491,8 @@ export interface SaveStats {
   bestDummyHit: number;
   /** The longest clean chain landed on the training dummy. */
   bestDummyCombo: number;
+  /** Gems fused three-into-one, the "did you ever climb the ladder" counter. */
+  gemsFused: number;
 }
 
 export interface BountyProgress {
@@ -610,6 +612,10 @@ export interface CharacterSave {
   petSkill: string | null;
   /** A hardcore hero dies for good: the save is moved to the memorial instead of carried on. */
   hardcore: boolean;
+  /** The fastest time per Ring, Descent or gauntlet depth, keyed like "ring:12" (see data/medals.ts). */
+  medals: Record<string, number>;
+  /** Keepsakes already handed over by a villager at three hearts, so each pays once. */
+  keepsakeClaims: string[];
 }
 
 /** The two worn companion items, kept on the save so they survive a reload. */

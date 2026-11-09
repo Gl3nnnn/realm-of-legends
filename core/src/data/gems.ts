@@ -80,23 +80,80 @@ export const GEMS: GemDef[] = [
 
 const GEM_BY_ID = new Map(GEMS.map((gem) => [gem.id, gem]));
 
+/**
+ * The three steps a stone climbs.
+ *
+ * Gems used to be the one thing with no way up: a ruby found at level 3 was the
+ * same ruby at level 30, and a bag full of them was just a bag full of shop stock.
+ * Now three of a kind make one better one, the way the old games did it: three
+ * rough rubies become a cut ruby, three cut rubies a flawless one. The tiers are
+ * ids rather than a field, so three of them cost no new save data.
+ */
+export type GemTier = "rough" | "cut" | "flawless";
+
+export const GEM_TIERS: Record<GemTier, { label: string; scale: number; next: GemTier | null }> = {
+  rough: { label: "Rough", scale: 1, next: "cut" },
+  cut: { label: "Cut", scale: 2, next: "flawless" },
+  flawless: { label: "Flawless", scale: 3, next: null },
+};
+
+/** The base id of a gem, with any tier suffix stripped: "gem_ruby_flawless" -> "gem_ruby". */
+export function baseGemId(itemId: string): string {
+  for (const tier of Object.keys(GEM_TIERS) as GemTier[]) {
+    if (tier === "rough") continue;
+    const suffix = `_${tier}`;
+    if (itemId.endsWith(suffix)) return itemId.slice(0, -suffix.length);
+  }
+  return itemId;
+}
+
+/** The tier a gem id names, or "rough" for a plain stone. */
+export function gemTierOf(itemId: string): GemTier {
+  for (const tier of ["flawless", "cut"] as GemTier[]) {
+    if (itemId.endsWith(`_${tier}`)) return tier;
+  }
+  return "rough";
+}
+
 export function getGem(itemId: string): GemDef | undefined {
-  return GEM_BY_ID.get(itemId);
+  const base = GEM_BY_ID.get(baseGemId(itemId));
+  if (!base) return undefined;
+  const tier = gemTierOf(itemId);
+  if (tier === "rough") return base;
+  return { ...base, name: `${GEM_TIERS[tier].label} ${base.name}` };
 }
 
 /** True when the item id names a gem, so the UI knows it can be socketed. */
 export function isGem(itemId: string): boolean {
-  return GEM_BY_ID.has(itemId);
+  return GEM_BY_ID.has(baseGemId(itemId));
+}
+
+/** Every gem id in the game, rough through flawless, in tier order. */
+export const ALL_GEM_ITEM_IDS: string[] = GEMS.flatMap((gem) => [
+  gem.id,
+  `${gem.id}_cut`,
+  `${gem.id}_flawless`,
+]);
+
+/** The stone three of this one make, or null when it is already flawless. */
+export function gemFuseTarget(gemId: string): string | null {
+  const base = baseGemId(gemId);
+  if (!GEM_BY_ID.has(base)) return null;
+  const tier = gemTierOf(gemId);
+  const next = GEM_TIERS[tier].next;
+  if (!next) return null;
+  return next === "cut" ? `${base}_cut` : `${base}_flawless`;
 }
 
 /** The stat bonus every socketed gem on a piece of gear adds up to. */
 export function gemStats(gemIds: readonly string[] | undefined): StatBonus {
   const total: StatBonus = {};
   for (const id of gemIds ?? []) {
-    const gem = GEM_BY_ID.get(id);
+    const gem = GEM_BY_ID.get(baseGemId(id));
     if (!gem) continue;
+    const scale = GEM_TIERS[gemTierOf(id)].scale;
     for (const [key, value] of Object.entries(gem.stats) as [keyof StatBonus, number][]) {
-      total[key] = (total[key] ?? 0) + value;
+      total[key] = (total[key] ?? 0) + value * scale;
     }
   }
   return total;

@@ -4536,3 +4536,40 @@ html[data-contrast="high"] .journal-nav a {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* The timed-medal and gem-ladder cards, sitting in the Ring's journal section. */
+.medal-card {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line, #2a2434);
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.medal-gold { color: #ffd76e; }
+.medal-silver { color: #d6dbe6; }
+.medal-bronze { color: #d69a6e; }
+
+/* Village friends: five hearts and the gift a villager actually wants. */
+.friend-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  margin: 8px 0;
+  border: 1px solid var(--line, #2a2434);
+  border-radius: 10px;
+}
+
+.friend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.friend-head strong {
+  letter-spacing: 2px;
+  color: #ff8fa8;
+  font-size: 14px;
+}

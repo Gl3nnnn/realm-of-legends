@@ -34,13 +34,15 @@ import {
   socketCount,
   socketedGems,
 } from "../data/items";
-import { getGem, isGem } from "../data/gems";
+import { ALL_GEM_ITEM_IDS, gemFuseTarget, getGem, isGem } from "../data/gems";
 import { getVillageBuilding, villageEffects, villageLevel, villageRows, VILLAGE_MAX_TIER } from "../data/village";
 import { getPetGear, getPetSkill, petLoadoutBonus, petSkillsAvailable, type PetGearSlot } from "../data/companions";
 import { forgedRunewords, runewordRows } from "../data/runewords";
 import { petStageFor, nextPetStage } from "../data/pets";
 import { achievementReward, getAchievement } from "../data/achievements";
 import { TORMENT_TIERS, tormentTier, unlockedTorment } from "../data/torment";
+import { MEDAL_LABELS, MEDAL_MODES, medalClock, medalCounts, medalFor, medalKey, medalRank, medalRows, medalTargets, type MedalMode, type MedalRow, type MedalTier } from "../data/medals";
+import { FRIEND_GIFTS, FRIEND_KEEPSAKES, KEEPSAKE_HEARTS, KEEPSAKE_WORDS, friendRows, heartLevel, type FriendRow } from "../data/friends";
 import { MONSTERS, getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { pendingAchievements, availableTitles } from "../data/achievements";
@@ -231,6 +233,12 @@ export class GameSession {
   gauntletIndex = 0;
   gauntletAlive = 0;
   /** The chase in progress: a purse imp running for the zone edge. */
+  /** Seconds the run in progress has taken. A run's clock is what a medal is measured against. */
+  private ringClock = 0;
+  private descentClock = 0;
+  private gauntletClock = 0;
+  /** Junk filter: when on, gear that is not worth keeping turns into ore the moment it is picked up. */
+  autoSalvageJunk = true;
   private fleeTimer = 0;
   private treasureTimer = 0;
   /** The training dummy's meter: hits, total damage and clean chain since it was last reset. */
@@ -911,6 +919,10 @@ export class GameSession {
     }
 
     this.save.playtime += clamped;
+    // A run's clock only moves while that run is on, so a stroll in the village costs nothing.
+    if (this.arenaActive) this.ringClock += clamped;
+    if (this.descentActive) this.descentClock += clamped;
+    if (this.gauntletActive) this.gauntletClock += clamped;
     if (this.shieldRemaining > 0) {
       this.shieldRemaining = Math.max(0, this.shieldRemaining - clamped);
       if (this.shieldRemaining <= 1e-6) {
@@ -1700,6 +1712,7 @@ export class GameSession {
     }
     this.arenaActive = true;
     this.arenaWaveNumber = 0;
+    this.ringClock = 0;
     this.arenaAlive = 0;
     this.arenaAnnounced = -1;
     this.emit({ type: "log", text: "You step into the Hollow Ring. Nothing in here is on your side.", tone: "quest" });
@@ -1710,9 +1723,11 @@ export class GameSession {
   /** Leave the ring and take nothing that is still standing with you. */
   leaveArena(): boolean {
     if (!this.arenaActive) return false;
+    this.recordMedal("ring", this.arenaWaveNumber, this.ringClock);
     this.arenaActive = false;
     this.arenaWaveNumber = 0;
     this.arenaAlive = 0;
+    this.ringClock = 0;
     this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("arena_"));
     this.emit({ type: "log", text: "You step out of the ring. It will be waiting when you come back.", tone: "info" });
     return true;
@@ -1953,6 +1968,7 @@ export class GameSession {
     }
     this.descentActive = true;
     this.descentWaveNumber = 0;
+    this.descentClock = 0;
     this.descentAlive = 0;
     this.descentBoonIds = [];
     this.descentPendingBoons = [];
@@ -1968,9 +1984,11 @@ export class GameSession {
   /** Leave the Descent; the run ends, but its shards and best wave stay earned. */
   leaveDescent(): boolean {
     if (!this.descentActive) return false;
+    this.recordMedal("descent", this.descentWaveNumber, this.descentClock);
     this.descentActive = false;
     this.descentWaveNumber = 0;
     this.descentAlive = 0;
+    this.descentClock = 0;
     this.descentBoonIds = [];
     this.descentPendingBoons = [];
     this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("descent_"));
@@ -2053,6 +2071,7 @@ export class GameSession {
     this.gauntletActive = true;
     this.gauntletIndex = 0;
     this.gauntletAlive = 0;
+    this.gauntletClock = 0;
     this.emit({ type: "log", text: "The gauntlet begins. There is no wave to rest between: only the next name.", tone: "quest" });
     this.startGauntletRound();
     return true;
@@ -2061,9 +2080,11 @@ export class GameSession {
   /** Leave the gauntlet; the bosses it already paid for stay paid. */
   leaveGauntlet(): boolean {
     if (!this.gauntletActive) return false;
+    this.recordMedal("gauntlet", this.gauntletIndex, this.gauntletClock);
     this.gauntletActive = false;
     this.gauntletIndex = 0;
     this.gauntletAlive = 0;
+    this.gauntletClock = 0;
     this.monsters = this.monsters.filter((monster) => !monster.uid.startsWith("gauntlet_"));
     this.emit({ type: "log", text: "You leave the gauntlet. The names wait where they stood.", tone: "info" });
     return true;
@@ -2746,6 +2767,15 @@ export class GameSession {
       drop.ttl -= dt;
       const reach = PICKUP_RANGE + AUTOLOOT_RADIUS;
       if (dist2(this.save.x, this.save.y, drop.x, drop.y) <= reach * reach) {
+        // The junk filter pays junk out as ore on the spot, so the bag stops filling with
+        // gear that was always going to be sold the moment it was picked up.
+        const salvaged = this.autoSalvageJunk ? this.salvageInto(drop.itemId, drop.instance) : null;
+        if (salvaged) {
+          this.addItem(salvaged.itemId, salvaged.qty);
+          this.emit({ type: "pickup", itemId: salvaged.itemId, qty: salvaged.qty });
+          drop.ttl = 0;
+          continue;
+        }
         const leftover = this.addItem(drop.itemId, drop.qty, drop.instance);
         const collected = drop.qty - leftover;
         if (collected > 0) {
@@ -3744,6 +3774,142 @@ export class GameSession {
       lines.push(`${diff > 0 ? "+" : ""}${diff} ${labels[key]}`);
     }
     return { slot, lines };
+  }
+
+  /** What a junk drop turns into, or null when the drop is worth keeping. */
+  private salvageInto(itemId: string, instance?: ItemStack["instance"]): { itemId: string; qty: number } | null {
+    const def = ITEMS[itemId];
+    if (!def || def.type === "consumable" || def.type === "material") return null;
+    // A rolled item has affixes on it, which is never junk, and gems and pet gear are kept.
+    if (instance || isGem(itemId) || getPetGear(itemId)) return null;
+    // Only commons and uncommons are junk. Rare and better always goes in the bag, even for
+    // another class, because the vault can hand it to the hero who can wear it.
+    if (def.rarity !== "common" && def.rarity !== "uncommon") return null;
+    return { itemId: "iron_ore", qty: def.rarity === "common" ? 1 : 2 };
+  }
+
+  /** Put a run's clock on the board, and say so when it earns a medal or a faster one. */
+  private recordMedal(mode: MedalMode, depth: number, seconds: number): void {
+    if (depth < 1 || !Number.isFinite(seconds) || seconds <= 0) return;
+    const key = medalKey(mode, depth);
+    const previous = this.save.medals[key];
+    if (previous !== undefined && seconds >= previous) return;
+    const before = previous === undefined ? null : medalFor(mode, depth, previous);
+    const after = medalFor(mode, depth, seconds);
+    this.save.medals[key] = Math.round(seconds * 10) / 10;
+    if (medalRank(after) > medalRank(before) && after) {
+      const where = mode === "ring" ? "The Hollow Ring" : mode === "descent" ? "The Descent" : "The Gauntlet";
+      this.emit({ type: "log", text: `${MEDAL_LABELS[after]} medal: ${where}, depth ${depth} in ${medalClock(seconds)}.`, tone: "good" });
+    }
+  }
+
+  private liveMedal(mode: MedalMode, depth: number, seconds: number): { mode: MedalMode; label: string; depth: number; seconds: number; clock: string; tier: MedalTier | null; gold: number } {
+    const label = MEDAL_MODES.find((entry) => entry.id === mode)?.label ?? mode;
+    return {
+      mode,
+      label,
+      depth,
+      seconds,
+      clock: medalClock(seconds),
+      tier: medalFor(mode, Math.max(1, depth), seconds),
+      gold: medalTargets(mode, Math.max(1, depth)).gold,
+    };
+  }
+
+  /** Every stored medal, plus the clock of any run in progress. */
+  get medalStatus(): {
+    rows: MedalRow[];
+    counts: Record<MedalTier, number>;
+    live: { mode: MedalMode; label: string; depth: number; seconds: number; clock: string; tier: MedalTier | null; gold: number }[];
+  } {
+    const live: { mode: MedalMode; label: string; depth: number; seconds: number; clock: string; tier: MedalTier | null; gold: number }[] = [];
+    if (this.arenaActive) live.push(this.liveMedal("ring", this.arenaWaveNumber, this.ringClock));
+    if (this.descentActive) live.push(this.liveMedal("descent", this.descentWaveNumber, this.descentClock));
+    if (this.gauntletActive) live.push(this.liveMedal("gauntlet", this.gauntletIndex, this.gauntletClock));
+    return { rows: medalRows(this.save.medals), counts: medalCounts(this.save.medals), live };
+  }
+
+  /** Every villager with a gift list: their hearts, their present and their keepsake. */
+  get friendRows(): FriendRow[] {
+    return friendRows(Object.values(NPCS), this.save.relationships, this.save.keepsakeClaims, (id) => this.countItem(id));
+  }
+
+  /** Hand a villager the thing they actually want. Two points of standing per gift. */
+  giveFriendGift(npcId: string): boolean {
+    const gift = FRIEND_GIFTS[npcId];
+    const npc = NPCS[npcId];
+    if (!gift || !npc) return false;
+    if (this.countItem(gift.itemId) < gift.qty) {
+      const name = ITEMS[gift.itemId]?.name ?? gift.itemId;
+      this.emit({ type: "log", text: `${npc.name} wants ${gift.qty}x ${name}, and you have ${this.countItem(gift.itemId)}.`, tone: "bad" });
+      return false;
+    }
+    this.removeItem(gift.itemId, gift.qty);
+    const before = this.save.relationships[npcId] ?? 0;
+    const after = Math.min(10, before + 2);
+    this.save.relationships[npcId] = after;
+    this.emit({ type: "log", text: gift.thanks, tone: "good" });
+    if (heartLevel(after) > heartLevel(before)) {
+      this.emit({ type: "log", text: `${npc.name} is now ${heartLevel(after)} hearts with you. A keepsake waits at ${KEEPSAKE_HEARTS}.`, tone: "quest" });
+    }
+    return true;
+  }
+
+  /** Collect a villager's keepsake once three hearts are reached. It pays exactly once. */
+  claimKeepsake(npcId: string): boolean {
+    const itemId = FRIEND_KEEPSAKES[npcId];
+    const npc = NPCS[npcId];
+    if (!itemId || !npc) return false;
+    if (this.save.keepsakeClaims.includes(itemId)) return false;
+    if (heartLevel(this.save.relationships[npcId]) < KEEPSAKE_HEARTS) {
+      this.emit({ type: "log", text: `${npc.name} is not close enough yet: ${KEEPSAKE_HEARTS} hearts are needed.`, tone: "info" });
+      return false;
+    }
+    if (this.addItem(itemId, 1) > 0) {
+      this.emit({ type: "log", text: "No room for a keepsake. Free a square in the backpack first.", tone: "bad" });
+      return false;
+    }
+    this.save.keepsakeClaims.push(itemId);
+    this.emit({ type: "log", text: KEEPSAKE_WORDS[npcId] ?? `${npc.name} hands you something they have kept a long time.`, tone: "quest" });
+    return true;
+  }
+
+  /** Gems that can be fused right now, three of a kind into one better stone. */
+  get gemFuseRows(): { gemId: string; name: string; qty: number; target: string | null; targetName: string }[] {
+    return ALL_GEM_ITEM_IDS.filter((gemId) => this.countItem(gemId) >= 2).map((gemId) => {
+      const target = gemFuseTarget(gemId);
+      return {
+        gemId,
+        name: getGem(gemId)?.name ?? gemId,
+        qty: this.countItem(gemId),
+        target,
+        targetName: target ? getGem(target)?.name ?? target : "",
+      };
+    });
+  }
+
+  /** Three of one gem make the next tier up. Returns the stone three of them became. */
+  fuseGems(gemId: string): string | null {
+    const target = gemFuseTarget(gemId);
+    if (!target) {
+      this.emit({ type: "log", text: "That stone is already flawless. It cannot climb any higher.", tone: "info" });
+      return null;
+    }
+    const have = this.countItem(gemId);
+    if (have < 3) {
+      this.emit({ type: "log", text: `Three ${getGem(gemId)?.name ?? gemId}s make one better stone. You have ${have}.`, tone: "info" });
+      return null;
+    }
+    this.removeItem(gemId, 3);
+    if (this.addItem(target, 1) > 0) {
+      // The bag is full, so the three stones go back exactly where they came from.
+      this.addItem(gemId, 3);
+      this.emit({ type: "log", text: "No room for the better stone. Free a square in the backpack first.", tone: "bad" });
+      return null;
+    }
+    this.save.stats.gemsFused += 1;
+    this.emit({ type: "log", text: `Three ${getGem(gemId)?.name ?? gemId}s became one ${getGem(target)?.name ?? target}.`, tone: "good" });
+    return target;
   }
 
   unequip(slot: keyof CharacterSave["equipment"]): boolean {

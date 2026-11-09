@@ -1,7 +1,7 @@
 import type { AffixId, ClassId, Equipment, GearSetId, ItemDef, ItemInstance, ItemStack, Rarity, StatBonus } from "../types";
 import type { Rng } from "../rng";
 import { GEM_SOCKETS } from "../constants";
-import { GEMS, gemStats } from "./gems";
+import { ALL_GEM_ITEM_IDS, GEMS, GEM_TIERS, baseGemId, gemStats, gemTierOf, getGem } from "./gems";
 import { PET_GEAR } from "./companions";
 import { runewordFor } from "./runewords";
 
@@ -151,6 +151,24 @@ const expandedGear = [
   item({ id: "relic_trinket_crown_jewel", name: "Crown Jewel", type: "trinket", rarity: "legendary", icon: "ring", description: "The last bright jewel from the Hollow King's crown. +5 attack, +3% crit, +24 resource.", stack: 1, buy: 3900, requiresLevel: 22, stats: { attack: 5, crit: 0.03, maxResource: 24 } }),
 ];
 
+/**
+ * Keepsakes: what a villager hands over at three hearts.
+ *
+ * They are ordinary trinkets so they work everywhere a trinket already works,
+ * and they are deliberately cheap to sell: a keepsake is a memory, not stock.
+ */
+const friendKeepsakes: ItemDef[] = [
+  item({ id: "keepsake_rowan", name: "Rowan's Gate Token", type: "trinket", rarity: "rare", icon: "ring", description: "An iron token from the gate watch. +6 defense, +18 health.", stack: 1, requiresLevel: 1, stats: { defense: 6, maxHp: 18 } }),
+  item({ id: "keepsake_mira", name: "Mira's Copper Scale", type: "trinket", rarity: "rare", icon: "ring", description: "A palm scale that always weighs fair. +2 attack, +30 gold on every sale.", stack: 1, requiresLevel: 1, stats: { attack: 2, moveSpeed: 2 } }),
+  item({ id: "keepsake_borin", name: "Borin's Hammer Ring", type: "trinket", rarity: "rare", icon: "ring", description: "Worn thin by a hundred years of the same grip. +7 attack.", stack: 1, requiresLevel: 1, stats: { attack: 7 } }),
+  item({ id: "keepsake_elara", name: "Elara's Quiet Bell", type: "trinket", rarity: "rare", icon: "ring", description: "It rings once, softly, when you are hurt. +34 health, +18 resource.", stack: 1, requiresLevel: 1, stats: { maxHp: 34, maxResource: 18 } }),
+  item({ id: "keepsake_kael", name: "Kael's Lesson Cord", type: "trinket", rarity: "rare", icon: "ring", description: "A knot for each thing he never had to say twice. +4% crit, +12 resource.", stack: 1, requiresLevel: 1, stats: { crit: 0.04, maxResource: 12 } }),
+  item({ id: "keepsake_tobin", name: "Tobin's Stag Whistle", type: "trinket", rarity: "rare", icon: "ring", description: "Wade's, once. He wants you to have it. +5 move speed, +10 health.", stack: 1, requiresLevel: 1, stats: { moveSpeed: 5, maxHp: 10 } }),
+  item({ id: "keepsake_wenna", name: "Wenna's Marsh Marble", type: "trinket", rarity: "rare", icon: "ring", description: "Something green is still moving inside it. +26 resource, +3% crit.", stack: 1, requiresLevel: 1, stats: { maxResource: 26, crit: 0.03 } }),
+  item({ id: "keepsake_ysolde", name: "Ysolde's Frost Pin", type: "trinket", rarity: "rare", icon: "ring", description: "Cold to the touch, warm against the wrist. +5 defense, +4 move speed.", stack: 1, requiresLevel: 1, stats: { defense: 5, moveSpeed: 4 } }),
+  item({ id: "keepsake_aldric", name: "Aldric's Oath Ring", type: "trinket", rarity: "epic", icon: "ring", description: "The last honest thing his king ever gave him. +6 attack, +8 defense, +20 health.", stack: 1, requiresLevel: 1, stats: { attack: 6, defense: 8, maxHp: 20 } }),
+];
+
 const expandedConsumables = [
   item({ id: "relic_potion_health_1", name: "Forest Vitality Draught", type: "consumable", rarity: "uncommon", icon: "potion_red", description: "Restores 100 health.", stack: 20, buy: 42, heal: 100 }),
   item({ id: "relic_potion_health_2", name: "Marshheart Tonic", type: "consumable", rarity: "rare", icon: "potion_red", description: "Restores 260 health.", stack: 20, buy: 95, heal: 260 }),
@@ -199,18 +217,23 @@ export const EXPANSION_SUPPLY_IDS = [...expandedConsumables, ...expandedMaterial
  * The gems, as ordinary material items so they can be bought, sold, carried and
  * stored like ore. Their ids all begin with `gem_`.
  */
-const gemItems: ItemDef[] = GEMS.map((gem) =>
-  item({
-    id: gem.id,
-    name: `Uncut ${gem.name}`,
+const GEM_RARITY: Record<string, ItemDef["rarity"]> = { rough: "rare", cut: "epic", flawless: "legendary" };
+
+const gemItems: ItemDef[] = ALL_GEM_ITEM_IDS.map((itemId) => {
+  const tier = gemTierOf(itemId);
+  const gem = GEMS.find((entry) => entry.id === baseGemId(itemId)) ?? GEMS[0]!;
+  const scale = GEM_TIERS[tier].scale;
+  return item({
+    id: itemId,
+    name: `${GEM_TIERS[tier].label} ${gem.name}`,
     type: "material",
-    rarity: "rare",
+    rarity: GEM_RARITY[tier] ?? "rare",
     icon: "gem",
-    description: `${gem.description} Set it into a socketed piece of gear to use it.`,
+    description: `${gem.description}${scale > 1 ? ` At ${GEM_TIERS[tier].label.toLowerCase()} quality it gives ${scale}x as much.` : ""} Set it into a socketed piece of gear to use it.`,
     stack: 50,
-    buy: 180,
-  }),
-);
+    buy: 180 * scale * scale,
+  });
+});
 
 export const GEM_ITEM_IDS = gemItems.map(({ id }) => id);
 
@@ -256,6 +279,7 @@ const defs: ItemDef[] = [
   ...expandedMaterials,
   ...gemItems,
   ...petGearItems,
+  ...friendKeepsakes,
   item({
     id: "iron_sword",
     name: "Iron Sword",
@@ -897,6 +921,11 @@ export function socketCount(stack: ItemStack): number {
 /** The gems currently set into a piece of gear. */
 export function socketedGems(stack: ItemStack): string[] {
   return stack.instance?.gems ?? [];
+}
+
+/** A gem id as a readable name, for tooltips and logs. */
+export function gemName(itemId: string): string {
+  return getGem(itemId)?.name ?? itemId;
 }
 
 /** True when this stack has a free socket waiting for a gem. */

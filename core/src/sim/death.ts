@@ -21,9 +21,8 @@ export function killPlayer(session: GameSession, _source: string, killerId = "")
     session.emit({ type: "hardcore-end", entry: session.memorialEntry(killerId) });
   }
   // A run in the Hollow Ring ends with the hero: the ring clears and starts again from wave one.
-  session.arenaActive = false;
-  session.arenaWaveNumber = 0;
-  session.arenaAlive = 0;
+  // Leaving properly puts the clock on the board first, so a death is still a run worth timing.
+  if (session.arenaActive) session.leaveArena();
   // The Descent run also ends here, but the shards and deepest wave already earned stay.
   if (session.descentActive) session.leaveDescent();
   // The thing that did it becomes the hero's rival: a grudge worth settling later.

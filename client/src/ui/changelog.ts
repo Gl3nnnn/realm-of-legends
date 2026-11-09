@@ -21,6 +21,21 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.11.0",
+    date: "November 16, 2026",
+    title: "The Sharpened Edge Update",
+    summary:
+      "The small things that made every session a little more work than play. Junk gear now turns into ore the moment it drops, three gems of a kind become one better stone, every run gets a clock and a medal for beating your own best, and the villagers have a standing you can see, raise with gifts and be rewarded for at three hearts.",
+    changes: [
+      { tag: "new", text: "Junk filter: commons and uncommons your class cannot use become ore the second they drop, so the bag stops filling with gear you were going to sell anyway. Toggle it in the backpack." },
+      { tag: "new", text: "Gem ladder: three rough gems fuse into one cut one, three cut into one flawless. Flawless stones give three times the bonus of a rough one." },
+      { tag: "new", text: "Timed medals: the Hollow Ring, the Descent and the Gauntlet now run a clock. Clear a depth quickly for gold, silver or bronze, and a faster run replaces a slower one." },
+      { tag: "new", text: "Village hearts: every villager carries five hearts, raised by giving them the thing they actually want. At three hearts each one hands over a keepsake trinket that only pays once." },
+      { tag: "improved", text: "Leaving the Ring, the Descent or the Gauntlet now records the time. Dying in the Ring records it too, so even a bad run can earn a medal." },
+      { tag: "improved", text: "Old saves upgrade themselves to version 20, with an empty medal board and no keepsakes claimed." },
+    ],
+  },
+  {
     version: "1.10.0",
     date: "November 16, 2026",
     title: "The Rebuilt Village Update",

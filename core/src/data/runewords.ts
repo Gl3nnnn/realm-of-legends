@@ -1,4 +1,5 @@
 import type { StatBonus } from "../types";
+import { baseGemId } from "./gems";
 
 /**
  * Runewords: three gems in one piece of gear, in the right combination, wake a
@@ -89,7 +90,9 @@ function wordKey(gems: readonly string[]): string {
  */
 export function runewordFor(gemIds: readonly string[] | undefined): Runeword | undefined {
   if (!gemIds || gemIds.length !== 3) return undefined;
-  return RUNEWORD_BY_KEY.get(wordKey(gemIds));
+  // A cut or flawless stone still spells the word its base stone spells, so a
+  // better gem never breaks a combination a player has already built.
+  return RUNEWORD_BY_KEY.get(wordKey(gemIds.map(baseGemId)));
 }
 
 /** Every runeword, with whether the game can be spelled from the gems on hand. */

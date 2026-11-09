@@ -78,6 +78,7 @@ const statsSchema = z.object({
   weaknessHits: z.number().int().min(0).default(0),
   bestDummyHit: z.number().int().min(0).default(0),
   bestDummyCombo: z.number().int().min(0).default(0),
+  gemsFused: z.number().int().min(0).default(0),
 });
 
 /** The monster with a grudge: one species that beat the hero and grows with them. */
@@ -190,6 +191,10 @@ export const saveSchema = z.object({
   petSkill: z.string().min(1).max(40).nullable().default(null),
   /** A hero who dies for good and moves to the memorial wall. */
   hardcore: z.boolean().default(false),
+  /** Fastest time per Ring, Descent or gauntlet depth, keyed like "ring:12". */
+  medals: z.record(z.string().min(1).max(24), z.number().finite().min(0).max(86400)).default({}),
+  /** Keepsakes already handed over by a villager at three hearts. */
+  keepsakeClaims: z.array(z.string().min(1).max(40)).max(16).default([]),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -307,7 +312,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
-    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0, bestDummyHit: 0, bestDummyCombo: 0 },
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0, bestDummyHit: 0, bestDummyCombo: 0, gemsFused: 0 },
     achievements: [],
     waypoints: ["village"],
     petXp: 0,
@@ -346,6 +351,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     petGear: { collar: null, charm: null },
     petSkill: null,
     hardcore: options.hardcore === true,
+    medals: {},
+    keepsakeClaims: [],
   };
 }
 
@@ -571,6 +578,12 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.petSkill = null;
     migrated.hardcore = false;
     migrated.version = 19;
+  }
+  if (migrated.version === 19) {
+    // Timed medals for the Ring and the Descent, and keepsakes handed over at three hearts.
+    migrated.medals = {};
+    migrated.keepsakeClaims = [];
+    migrated.version = 20;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;
