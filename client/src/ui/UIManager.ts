@@ -29,6 +29,7 @@ import { downloadShareCard } from "./shareCard";
 import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText, bountyLabel } from "./helpers";
 import { LATEST_UPDATE, hasUnreadUpdates, markUpdatesSeen, unreadUpdateCount, updateBoardHtml } from "./changelog";
 import { t } from "./text";
+import { medalClock } from "../../../core/src/data/medals";
 import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
   abilityBarHtml,
@@ -43,6 +44,7 @@ import {
   controlsPanelHtml,
   shopPanelHtml,
   stashPanelHtml,
+  gamblePanelHtml,
   talentsPanelHtml,
   villageSection,
   companionSection,
@@ -78,7 +80,8 @@ type PanelState =
   | { kind: "village" }
   | { kind: "companion" }
   | { kind: "runewords" }
-  | { kind: "memorial" };
+  | { kind: "memorial" }
+  | { kind: "gamble"; id: string };
 
 interface UIOptions {
   repo: SaveRepository;
@@ -1209,6 +1212,7 @@ export class UIManager {
     else if (kind === "village") this.panel = { kind: "village" };
     else if (kind === "companion") this.panel = { kind: "companion" };
     else if (kind === "runewords") this.panel = { kind: "runewords" };
+    else if (kind === "gamble" && id) this.panel = { kind: "gamble", id };
     else if (kind === "memorial") this.panel = { kind: "memorial" };
     else if (kind === "controls") this.panel = { kind: "controls" };
     else this.panel = { kind: "settings" };
@@ -1285,6 +1289,10 @@ export class UIManager {
     } else if (this.panel.kind === "memorial") {
       title = "Memorial Wall";
       body = memorialSection(readMemorial());
+      narrow = true;
+    } else if (this.panel.kind === "gamble" && this.session) {
+      title = NPCS[this.panel.id]?.name ?? "Gambler";
+      body = gamblePanelHtml(this.session, this.panel.id);
       narrow = true;
     } else if (this.panel.kind === "controls") {
       title = "Controls";
@@ -1717,6 +1725,12 @@ export class UIManager {
       } else if (action === "open-shop" && target.dataset.shop) {
         this.openPanel("shop", target.dataset.shop);
         return;
+      } else if (action === "open-gamble" && target.dataset.npc) {
+        this.openPanel("gamble", target.dataset.npc);
+        return;
+      } else if (action === "gamble" && target.dataset.kind) {
+        changed = session.gamble(target.dataset.kind as "weapon" | "armor" | "trinket");
+        if (changed) this.sfx.level();
       } else if (action === "open-stash") {
         this.openPanel("stash");
         return;
@@ -2711,6 +2725,22 @@ export class UIManager {
           shouldPersist = true;
           break;
         }
+        case "run-recap":
+          // A finished run gets its card straight away; the Journal keeps it after that.
+          this.toast(event.tier ? `${event.tier.toUpperCase()} medal · depth ${event.depth} · ${medalClock(event.seconds)}` : `Run ended at depth ${event.depth} · ${medalClock(event.seconds)}`, event.tier ? "good" : "info");
+          this.pushLog(event.tier ? `Run card: ${event.tier} medal, depth ${event.depth}, ${medalClock(event.seconds)}.` : `Run card: depth ${event.depth}, ${medalClock(event.seconds)}, no medal.`, event.tier ? "good" : "info");
+          if (event.tier) this.sfx.level();
+          shouldPersist = true;
+          break;
+        case "blood-moon":
+          if (event.phase === "warning") {
+            this.toast("A red haze gathers. The Blood Moon is coming.", "bad");
+          } else {
+            this.toast("The Blood Moon rises. Thicker packs, fatter purses.", "quest");
+            this.sfx.quest();
+          }
+          shouldPersist = true;
+          break;
         case "interact":
           if (event.kind === "npc") {
             this.openPanel("npc", event.id);

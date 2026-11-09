@@ -21,6 +21,21 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.12.0",
+    date: "November 16, 2026",
+    title: "The Red Sky Update",
+    summary:
+      "Four things a fight and a run were missing: enemies that warn you before a heavy blow, a card that tells you what a run actually earned, chests that sometimes bite, and a red sky that thickens packs and fattens purses. Gold also has somewhere to go now, because Gideon sells rolls.",
+    changes: [
+      { tag: "new", text: "Attack tells: slimes, wolves, skeletons and the rest wind up a named heavy attack with a shape on the ground first. Step out of the shape and the blow misses entirely, and the game counts every one you dodge." },
+      { tag: "new", text: "Run recap card: leaving the Ring, the Descent or the Gauntlet now shows a card with the depth reached, the clock, the kills, what it paid, the medal and the boons taken. It stays in the Journal after a reload." },
+      { tag: "new", text: "The Blood Moon: every so often a red haze gathers, then the sky turns for two and a half minutes. Packs are thicker, everything hits 15% harder and pays half again as much gold, with more experience and more drops." },
+      { tag: "new", text: "Mimics: some chests out in the world are not chests. Open one and a Chest Mimic wakes up and bites. Killing it leaves the loot the chest would have held, and then some." },
+      { tag: "new", text: "Gideon the Gambler: a new face at the village market who sells no goods at all. Pay 260 gold for a weapon, a piece of armour or a trinket, and the dice decide the rarity." },
+      { tag: "improved", text: "Old saves upgrade themselves to version 21, with the Blood Moon clock, the recap card and the new counters all starting clean." },
+    ],
+  },
+  {
     version: "1.11.0",
     date: "November 16, 2026",
     title: "The Sharpened Edge Update",

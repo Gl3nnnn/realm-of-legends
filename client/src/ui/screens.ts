@@ -3,9 +3,12 @@ import {
   FLAGSHIP_CLASSES,
   ITEMS,
   AFFIXES,
+  GAMBLE_PRICE,
+  DESCENT_BOONS,
   LORE_ENTRIES,
   MAX_CHARACTERS,
   MAX_UPGRADE,
+  MEDAL_LABELS,
   MONSTERS,
   NG_PLUS_DIALOGUE,
   NPCS,
@@ -15,6 +18,7 @@ import {
   SIDE_QUEST_WHISPERS,
   STASH_CAPACITIES,
   ZONES,
+  bloodMoonClock,
   canClassUse,
   deriveStats,
   getClass,
@@ -24,6 +28,7 @@ import {
   itemDisplayName,
   itemSellValue,
   loreBySubject,
+  medalClock,
   monsterGuide,
   revealedLore,
   starterEquipment,
@@ -736,6 +741,87 @@ function gauntletCard(session: GameSession): string {
   </div>`;
 }
 
+/** The sky: how long until the next Blood Moon, and what it pays while it is up. */
+export function bloodMoonSection(session: GameSession): string {
+  const moon = session.bloodMoon;
+  const phases = moon.active
+    ? "Packs +60% · gold +50% · XP +35% · drops +45%"
+    : moon.phase === "warning"
+      ? "The haze is already on the ridge. Packs thicken the moment it rises."
+      : "Quiet. Good weather for gathering and forging.";
+  const color = moon.active ? "var(--bad)" : moon.phase === "warning" ? "#d9a44a" : "var(--muted)";
+  return `<div class="journal-section" id="journal-bloodmoon">
+    <div class="qtitle">The Blood Moon</div>
+    <div class="arena-stats">
+      <div><span class="small muted">Sky</span><strong style="color:${color}">${esc(moon.label)}</strong></div>
+      <div><span class="small muted">${moon.active ? "Time left" : "Next one"}</span><strong>${esc(bloodMoonClock(moon.active ? moon.remaining : moon.nextIn))}</strong></div>
+      <div><span class="small muted">Seen</span><strong>${session.save.bloodMoonSeen}</strong></div>
+      <div><span class="small muted">Now</span><strong>${esc(phases)}</strong></div>
+    </div>
+    <div class="small muted">${esc(moon.blurb)} It rides the game clock, so it comes to every hero in turn.</div>
+  </div>`;
+}
+
+/**
+ * The card a run leaves behind: how deep, how fast, what it paid, and the medal it earned.
+ * A finished run is worth remembering; a line in the log was not enough.
+ */
+export function runRecapSection(session: GameSession, mode: "ring" | "descent" | "gauntlet"): string {
+  const card = session.lastRunCard;
+  if (!card || card.mode !== mode) return "";
+  const where = mode === "ring" ? "the Hollow Ring" : mode === "descent" ? "the Descent" : "the Gauntlet";
+  const depthLabel = mode === "gauntlet" ? `boss ${card.depth}` : `depth ${card.depth}`;
+  const tierLine = card.tier ? `<strong class="medal-${card.tier}">${esc(MEDAL_LABELS[card.tier])} medal</strong>` : `<span class="small muted">no medal this time</span>`;
+  const boons = mode === "descent" && card.boons.length > 0
+    ? `<div class="small muted">Boons taken: ${card.boons.map((id) => esc(DESCENT_BOONS.find((boon) => boon.id === id)?.name ?? id)).join(", ")}</div>`
+    : "";
+  return `<div class="medal-card" id="journal-recap">
+    <div class="qtitle small-title">Last run: ${esc(where)}</div>
+    <div class="arena-stats">
+      <div><span class="small muted">Reached</span><strong>${esc(depthLabel)}</strong></div>
+      <div><span class="small muted">Time</span><strong>${esc(medalClock(card.seconds))}</strong></div>
+      <div><span class="small muted">Kills</span><strong>${card.kills}</strong></div>
+      <div><span class="small muted">Paid</span><strong>${card.gold}g${card.shards > 0 ? ` · ${card.shards} shards` : ""}</strong></div>
+    </div>
+    <div style="margin-top:6px">${tierLine}</div>
+    ${boons}
+    <div class="small muted">Best ${mode === "gauntlet" ? "clear" : "depth"}: ${card.bestWave}</div>
+  </div>`;
+}
+
+/** Gideon's table: a price, a kind and the dice. */
+export function gamblePanelHtml(session: GameSession, npcId: string): string {
+  const status = session.gambleStatus;
+  const npc = NPCS[npcId];
+  const canPay = status.gold >= status.price;
+  const strengths = status.kinds.map((kind) => `${kind.label.toLowerCase()}`).join(", ");
+  const rolls = status.rolls === 0
+    ? `<div class="small muted">No rolls yet. The crate has never been opened for you.</div>`
+    : `<div class="small muted">You have rolled ${status.rolls} time${status.rolls === 1 ? "" : "s"} and spent ${status.spent} gold at this table.</div>`;
+  return `<div class="npc-head">
+    ${charIconHtml(npc?.sprite ?? "merchant", 56)}
+    <div>
+      <h2 style="font-size:14px;color:${esc(npc?.color ?? "#7d4a9c")}">${esc(npc?.name ?? "Gideon the Gambler")}</h2>
+      <div class="muted">${esc(npc?.role ?? "Gambler")}</div>
+    </div>
+  </div>
+  <div class="dialogue">"${esc(status.blurb)}"</div>
+  <div class="arena-stats">
+    <div><span class="small muted">Price</span><strong>${status.price}g</strong></div>
+    <div><span class="small muted">Your coin</span><strong>${status.gold}g</strong></div>
+    <div><span class="small muted">Odds</span><strong>${esc(status.odds)}</strong></div>
+    <div><span class="small muted">Streak luck</span><strong>${status.luck > 0 ? `+${status.luck}%` : "none"}</strong></div>
+  </div>
+  <div style="display:grid;gap:8px;margin-top:10px">
+    ${status.kinds.map((kind) => `<div class="run-row"><span>${esc(kind.label)}<br><span class="small muted">${esc(kind.blurb)}</span></span><button class="btn small" data-action="gamble" data-kind="${esc(kind.id)}" ${canPay ? "" : "disabled"}>Roll ${status.price}g</button></div>`).join("")}
+  </div>
+  ${rolls}
+  <div class="small muted">Three crates, one price of ${GAMBLE_PRICE} gold: ${esc(strengths)}. ${esc(status.odds)}.</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
+  </div>`;
+}
+
 /** The daily chest and the weekly modifier, shown together because they share a rhythm. */
 export function seasonSection(session: GameSession): string {
   const weekly = session.weeklyModifier;
@@ -880,6 +966,8 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
       ${journeySection(session)}
       ${deedsSection(session)}
+      ${bloodMoonSection(session)}
+      ${runRecapSection(session, "descent")}
     ${arenaSection(session)}
     ${descentSection(session)}
     ${seasonSection(session)}
@@ -916,6 +1004,8 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
     <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
     ${journeySection(session)}
     ${deedsSection(session)}
+    ${bloodMoonSection(session)}
+    ${runRecapSection(session, "descent")}
     ${arenaSection(session)}
       ${descentSection(session)}
       ${seasonSection(session)}
@@ -1301,6 +1391,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
   ${trainer}
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
+    ${npc.gamble ? `<button class="btn" data-action="open-gamble" data-npc="${esc(npc.id)}">Sit at the table</button>` : ""}
     ${npc.stash ? `<button class="btn" data-action="open-stash">Open vault</button>` : ""}
     ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="small" style="color:var(--good);align-self:center">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
     <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>

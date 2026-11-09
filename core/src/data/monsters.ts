@@ -466,6 +466,30 @@ const mechanicMonsters: MonsterDef[] = [
     radius: 9,
     sprite: "familiar",
   },
+  {
+    id: "mimic",
+    name: "Chest Mimic",
+    level: 9,
+    maxHp: 300,
+    attack: 24,
+    defense: 11,
+    speed: 52,
+    aggroRadius: 150,
+    leashRadius: 380,
+    attackRange: 30,
+    attackCooldown: 1.2,
+    xp: 240,
+    goldMin: 90,
+    goldMax: 180,
+    loot: [
+      { itemId: "gemstone", chance: 0.8, min: 1, max: 3 },
+      { itemId: "greater_health_potion", chance: 0.4, min: 1, max: 1 },
+      { itemId: "iron_ore", chance: 0.35, min: 1, max: 2 },
+    ],
+    respawn: 0,
+    radius: 11,
+    sprite: "familiar",
+  },
 ];
 
 for (const monster of mechanicMonsters) {

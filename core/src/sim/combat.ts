@@ -115,8 +115,8 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
   const gold = Math.round(s.rng.int(def.goldMin, def.goldMax) * s.difficultyScale.gold * eliteReward);
   if (gold > 0) s.gainGold(gold);
   const drops: ItemStack[] = [];
-  // Rain and ash make the beasts leave a little more behind.
-  const weatherDrop = 1 + s.weather.effects.dropBonus / 100;
+  // Rain and ash make the beasts leave a little more behind, and a red sky leaves more still.
+  const weatherDrop = (1 + s.weather.effects.dropBonus / 100) * (1 + s.bloodMoonEffects.dropBonus);
   for (const entry of def.loot) {
     const dropChance = (monster.elite ? Math.min(1, entry.chance * 1.5) : entry.chance) * weatherDrop;
     if (!s.rng.chance(dropChance)) continue;

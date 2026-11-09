@@ -66,6 +66,7 @@ export const ZONES = {
       { id: "blacksmith", x: 152, y: 200 },
       { id: "healer", x: 152, y: 568 },
       { id: "trainer", x: 696, y: 568 },
+      { id: "gambler", x: 400, y: 560 },
     ],
     monsterSpawns: [
       { id: "training_dummy", x: 648, y: 280 },

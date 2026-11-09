@@ -26,6 +26,7 @@ import {
   getRecipe,
   itemSellValue,
   ITEMS,
+  ITEM_LIST,
   MAX_UPGRADE,
   canClassUse,
   isEquippable,
@@ -43,6 +44,9 @@ import { achievementReward, getAchievement } from "../data/achievements";
 import { TORMENT_TIERS, tormentTier, unlockedTorment } from "../data/torment";
 import { MEDAL_LABELS, MEDAL_MODES, medalClock, medalCounts, medalFor, medalKey, medalRank, medalRows, medalTargets, type MedalMode, type MedalRow, type MedalTier } from "../data/medals";
 import { FRIEND_GIFTS, FRIEND_KEEPSAKES, KEEPSAKE_HEARTS, KEEPSAKE_WORDS, friendRows, heartLevel, type FriendRow } from "../data/friends";
+import { monsterTell } from "../data/tells";
+import { GAMBLE_BLURB, GAMBLE_KINDS, GAMBLE_ODDS, GAMBLE_PRICE, gambleLuckBonus, gambleOddsLine, type GambleKind } from "../data/gamble";
+import { BLOOD_MOON_ENDED, BLOOD_MOON_EFFECTS, BLOOD_MOON_RISING, BLOOD_MOON_WARNING, bloodMoonClock, bloodMoonState, type BloodMoonState } from "../data/bloodmoon";
 import { MONSTERS, getMonster } from "../data/monsters";
 import { HEAL_COST_PER_HP, HEAL_MIN_COST, NPCS, SHOPS } from "../data/npcs";
 import { pendingAchievements, availableTitles } from "../data/achievements";
@@ -115,6 +119,7 @@ import type {
   InputState,
   InteractResult,
   ItemStack,
+  LastRunRecord,
   MonsterInstance,
   NpcSpawn,
   PetInstance,
@@ -248,6 +253,16 @@ export class GameSession {
   dummyBestHit = 0;
   private dummyTimer = 0;
   private descentAnnounced = -1;
+  /** Counters for the run in progress, so the recap card can report real numbers. */
+  runGold = 0;
+  runXp = 0;
+  runKills = 0;
+  runShards = 0;
+  /** Blood Moons the hero has lived through, and the last run they finished. */
+  bloodMoonSeen = 0;
+  lastRun: LastRunRecord | null = null;
+  /** The Blood Moon phase the log last spoke about, so each change prints once. */
+  private bloodMoonPhase: "calm" | "warning" | "rising" = "calm";
   private zoneStates = new Map<string, { monsters: MonsterInstance[]; loot: GroundLoot[] }>();
   private zoneLoaded = false;
 
@@ -919,6 +934,8 @@ export class GameSession {
     }
 
     this.save.playtime += clamped;
+    // The sky runs on its own clock, and the hero only hears about it when it changes.
+    this.updateBloodMoon();
     // A run's clock only moves while that run is on, so a stroll in the village costs nothing.
     if (this.arenaActive) this.ringClock += clamped;
     if (this.descentActive) this.descentClock += clamped;
@@ -1290,7 +1307,9 @@ export class GameSession {
         } else if (monster.attackTimer <= 0) {
           monster.attackTimer = def.attackCooldown;
           const modeScale = this.descentActive && monster.uid.startsWith("descent_") ? 1 + this.pact.attack / 100 : 1;
-          const raw = def.attack * this.difficultyScale.attack * modeScale * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
+          // Everything hits harder under a red sky, which is what makes the fatter purse fair.
+          const moonDanger = 1 + this.bloodMoonEffects.dangerBonus;
+          const raw = def.attack * this.difficultyScale.attack * modeScale * moonDanger * this.rng.between(0.85, 1.15) * (marked ? 1.2 : 1);
           if (def.role === "support") {
             const ally = this.monsters
               .filter((candidate) =>
@@ -1313,6 +1332,15 @@ export class GameSession {
           } else if (def.role === "ranged") {
             this.spawnTelegraph(monster.x, monster.y, def.attackRange, raw, 0.75, "line", Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "enemy", monster.uid);
           } else {
+            // Every ordinary fighting family has one heavy attack, and it is always announced first.
+            // Elites keep their own affix swing, so a venomous or volatile elite still hits the way it did.
+            const tell = monster.elite ? undefined : monsterTell(def.id);
+            if (tell && this.rng.chance(tell.chance)) {
+              monster.attackTimer = def.attackCooldown + tell.delay;
+              this.spawnTelegraph(player.x, player.y, tell.radius, raw * tell.damageMult, tell.delay, tell.shape, Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "tell", monster.uid);
+              this.emit({ type: "log", text: `${def.name} winds up a ${tell.name}. Move out of the shape.`, tone: "bad" });
+              continue;
+            }
             const poison = monster.elite === "venomous"
               ? { kind: "poison" as const, remaining: 3, value: def.attack * 0.12 }
               : undefined;
@@ -1420,6 +1448,10 @@ export class GameSession {
       if (telegraph.remaining <= 0) {
         const source = telegraph.sourceUid ? this.monsters.find((monster) => monster.uid === telegraph.sourceUid) : undefined;
         if (source?.state === "dead") continue;
+        // A shape the hero stepped out of is the whole point of a tell: count it.
+        if (telegraph.kind === "tell" && !this.telegraphHits(telegraph)) {
+          this.save.stats.tellsDodged += 1;
+        }
         if (this.telegraphHits(telegraph)) {
           const wasInvulnerable = this.invulnerable > 0;
           this.damagePlayer(telegraph.damage, telegraph.source ?? "Bone Warden", telegraph.damageType ?? "physical", telegraph.sourceUid ?? "");
@@ -1516,6 +1548,7 @@ export class GameSession {
    * the Ring, the Descent and the gauntlet all count their own kills whichever blow landed.
    */
   onModeKill(monster: MonsterInstance): void {
+    this.runKills += 1;
     if (monster.uid.startsWith("arena_")) this.onArenaKill();
     if (monster.uid.startsWith("descent_")) this.onDescentKill();
     if (monster.uid.startsWith("gauntlet_")) this.onGauntletKill();
@@ -1715,6 +1748,7 @@ export class GameSession {
     this.ringClock = 0;
     this.arenaAlive = 0;
     this.arenaAnnounced = -1;
+    this.resetRunCounters();
     this.emit({ type: "log", text: "You step into the Hollow Ring. Nothing in here is on your side.", tone: "quest" });
     this.startArenaWave();
     return true;
@@ -1724,6 +1758,7 @@ export class GameSession {
   leaveArena(): boolean {
     if (!this.arenaActive) return false;
     this.recordMedal("ring", this.arenaWaveNumber, this.ringClock);
+    this.finishRun("ring", this.arenaWaveNumber, this.ringClock);
     this.arenaActive = false;
     this.arenaWaveNumber = 0;
     this.arenaAlive = 0;
@@ -1970,6 +2005,7 @@ export class GameSession {
     this.descentWaveNumber = 0;
     this.descentClock = 0;
     this.descentAlive = 0;
+    this.resetRunCounters();
     this.descentBoonIds = [];
     this.descentPendingBoons = [];
     this.descentAnnounced = -1;
@@ -1985,6 +2021,7 @@ export class GameSession {
   leaveDescent(): boolean {
     if (!this.descentActive) return false;
     this.recordMedal("descent", this.descentWaveNumber, this.descentClock);
+    this.finishRun("descent", this.descentWaveNumber, this.descentClock);
     this.descentActive = false;
     this.descentWaveNumber = 0;
     this.descentAlive = 0;
@@ -2001,7 +2038,9 @@ export class GameSession {
     const wave = descentWave(this.descentWaveNumber + 1);
     this.descentWaveNumber = wave.wave;
     this.descentAlive = 0;
-    for (let index = 0; index < wave.count; index += 1) {
+    // A red sky sends more down the shaft, so a Blood Moon descent is a different run.
+    const count = wave.count + (this.bloodMoonEffects.descentExtra > 0 ? BLOOD_MOON_EFFECTS.descentExtra : 0);
+    for (let index = 0; index < count; index += 1) {
       const species = wave.species[index % wave.species.length]!;
       const angle = (Math.PI * 2 * index) / Math.max(1, wave.count) + this.rng.between(0, 6) / 10;
       const radius = 110 + this.rng.between(0, 70);
@@ -2034,6 +2073,7 @@ export class GameSession {
     this.gainXp(Math.round(wave.xp * weekly.xp));
     const shards = Math.round((wave.shards + (wave.boss ? 3 : 0)) * (1 + this.pact.shards / 100 + this.fightSpecials.shardBonus / 100));
     this.save.descentShards = Math.min(1_000_000, this.save.descentShards + shards);
+    this.runShards += shards;
     this.recordDescentScore(wave.wave);
     this.emit({ type: "log", text: `Descent wave ${wave.wave} cleared. +${gold} gold, +${shards} shards.`, tone: "good" });
     if (wave.wave % 2 === 0) {
@@ -2081,6 +2121,7 @@ export class GameSession {
   leaveGauntlet(): boolean {
     if (!this.gauntletActive) return false;
     this.recordMedal("gauntlet", this.gauntletIndex, this.gauntletClock);
+    this.finishRun("gauntlet", this.gauntletIndex, this.gauntletClock);
     this.gauntletActive = false;
     this.gauntletIndex = 0;
     this.gauntletAlive = 0;
@@ -2817,11 +2858,14 @@ export class GameSession {
   gainGold(amount: number): number {
     if (!Number.isFinite(amount)) return 0;
     // The Workshop and the hero's own luck raise what the world pays out.
-    const raised = amount * (1 + this.villageEffects.goldPct / 100);
+    // The Blood Moon pays half again on top of that while it is up.
+    const moonBonus = this.bloodMoonEffects.goldBonus;
+    const raised = amount * (1 + this.villageEffects.goldPct / 100) * (1 + moonBonus);
     const gained = Math.max(0, Math.min(MAX_GOLD - this.save.gold, Math.floor(raised)));
     if (gained > 0) {
       this.save.gold += gained;
       this.save.stats.goldEarned += gained;
+      if (this.arenaActive || this.descentActive || this.gauntletActive) this.runGold += gained;
       this.emit({ type: "gold", amount: gained });
     }
     return gained;
@@ -2830,8 +2874,10 @@ export class GameSession {
   gainXp(amount: number): void {
     if (this.save.level >= LEVEL_CAP || amount <= 0) return;
     // The Archive makes every hour spent in the world worth a little more.
-    const raised = Math.floor(amount * (1 + this.villageEffects.xpPct / 100));
+    // The Blood Moon makes a red night worth more than a quiet one.
+    const raised = Math.floor(amount * (1 + this.villageEffects.xpPct / 100) * (1 + this.bloodMoonEffects.xpBonus));
     this.save.xp += raised;
+    if (this.arenaActive || this.descentActive || this.gauntletActive) this.runXp += raised;
     this.emit({ type: "xp", amount: raised });
     while (this.save.level < LEVEL_CAP) {
       const needed = xpToNext(this.save.level);
@@ -3827,6 +3873,227 @@ export class GameSession {
     if (this.descentActive) live.push(this.liveMedal("descent", this.descentWaveNumber, this.descentClock));
     if (this.gauntletActive) live.push(this.liveMedal("gauntlet", this.gauntletIndex, this.gauntletClock));
     return { rows: medalRows(this.save.medals), counts: medalCounts(this.save.medals), live };
+  }
+
+  /** Reset the counters a recap card reports, so a run starts from nothing. */
+  private resetRunCounters(): void {
+    this.runGold = 0;
+    this.runXp = 0;
+    this.runKills = 0;
+    this.runShards = 0;
+  }
+
+  /**
+   * The card a run leaves behind. It is written to the save, so the player can reopen
+   * it after a reload, and it is emitted once so the UI can pop it right away.
+   */
+  private finishRun(mode: "ring" | "descent" | "gauntlet", depth: number, seconds: number): void {
+    if (depth < 1) {
+      this.resetRunCounters();
+      return;
+    }
+    const tier = medalFor(mode, depth, seconds);
+    const bestKey = medalKey(mode, depth);
+    const bestBefore = this.save.medals[bestKey];
+    const record = {
+      mode,
+      depth,
+      seconds: Math.round(seconds * 10) / 10,
+      tier,
+      gold: this.runGold,
+      xp: this.runXp,
+      shards: this.runShards,
+      kills: this.runKills,
+      bestWave: mode === "descent" ? this.save.descentBest : mode === "ring" ? this.save.arenaBest : this.save.gauntletCleared.length,
+      boons: [...this.descentBoonIds],
+      endedOn: Date.now(),
+    };
+    this.save.lastRun = record;
+    this.emit({
+      type: "run-recap",
+      mode,
+      depth,
+      seconds: record.seconds,
+      tier,
+      gold: record.gold,
+      xp: record.xp,
+      shards: record.shards,
+      kills: record.kills,
+      bestWave: record.bestWave,
+    });
+    const isNewBest = bestBefore === undefined || record.seconds < bestBefore;
+    if (isNewBest) {
+      // A new fastest time is worth its own line in the log, not just a card.
+      const where = mode === "ring" ? "the Ring" : mode === "descent" ? "the Descent" : "the gauntlet";
+      this.emit({ type: "log", text: `Fastest clear of ${where} at depth ${depth}: ${medalClock(record.seconds)}.`, tone: "good" });
+    }
+    this.resetRunCounters();
+  }
+
+  /**
+   * The sky as the journal shows it: what phase the Blood Moon is in, how long is left,
+   * and what it changes while it is up.
+   */
+  get bloodMoon(): BloodMoonState {
+    const state = bloodMoonState(this.save.playtime);
+    return {
+      ...state,
+      nextIn: state.nextIn,
+    };
+  }
+
+  /** Everything the Blood Moon multiplies while it is up, in one place for the journal. */
+  get bloodMoonEffects(): typeof BLOOD_MOON_EFFECTS {
+    return this.bloodMoon.active ? BLOOD_MOON_EFFECTS : { extraSpawn: 0, goldBonus: 0, xpBonus: 0, dropBonus: 0, descentExtra: 0, dangerBonus: 0 };
+  }
+
+  /** A countdown line for the journal, like "Blood Moon in 3m 12s". */
+  get bloodMoonLine(): string {
+    const state = this.bloodMoon;
+    if (state.active) return `Blood Moon: ${bloodMoonClock(state.remaining)} left`;
+    return `${state.label}: ${bloodMoonClock(state.nextIn)}`;
+  }
+
+  /** The last run's card, or null when nothing has been finished yet. */
+  get lastRunCard(): LastRunRecord | null {
+    return this.save.lastRun;
+  }
+
+  /**
+   * A chest that is really a mimic. It only happens out in the world, never to a hunt chest
+   * or a village chest, and never twice for the same chest.
+   */
+  trySpringMimic(chest: ChestSpawn): boolean {
+    if (chest.id.startsWith("hunt_")) return false;
+    if (this.save.zone === "village") return false;
+    if (this.save.openedChests.includes(chest.id)) return false;
+    if (!this.rng.chance(0.09)) return false;
+    this.save.openedChests.push(chest.id);
+    // The mimic takes the chest's place: same square, new owner.
+    this.zone.chests = this.zone.chests.filter((entry) => entry.id !== chest.id);
+    const mimic = this.makeMonster({ id: "mimic", x: chest.x, y: chest.y }, `mimic_${this.nextUid("k")}`);
+    mimic.state = "chase";
+    this.monsters.push(mimic);
+    this.save.stats.mimicsSprung += 1;
+    this.emit({ type: "log", text: "The chest yawns open a row of teeth. It was never a chest.", tone: "bad" });
+    return true;
+  }
+
+  /**
+   * Put Gideon at the market stall. His table only sells rolls, and the gold is the price.
+   */
+  get gamblerHere(): boolean {
+    return this.zone.npcs.some((npc) => npc.id === "gambler");
+  }
+
+  /** Where the hero's own sky is: a warning first, then the rising itself. */
+  private updateBloodMoon(): void {
+    const state = this.bloodMoon;
+    const phase = state.phase;
+    if (phase === this.bloodMoonPhase) return;
+    this.bloodMoonPhase = phase;
+    if (phase === "warning") {
+      this.emit({ type: "log", text: BLOOD_MOON_WARNING, tone: "bad" });
+      this.emit({ type: "blood-moon", phase: "warning", remaining: state.remaining });
+      return;
+    }
+    if (phase === "rising") {
+      this.save.bloodMoonSeen = Math.min(99_999, this.save.bloodMoonSeen + 1);
+      this.save.stats.bloodMoons += 1;
+      this.emit({ type: "log", text: BLOOD_MOON_RISING, tone: "quest" });
+      this.emit({ type: "blood-moon", phase: "rising", remaining: state.remaining });
+      return;
+    }
+    this.emit({ type: "log", text: BLOOD_MOON_ENDED, tone: "info" });
+  }
+
+  /** Everything Gideon sells, with today's luck already applied. */
+  get gambleStatus(): {
+    price: number;
+    odds: string;
+    luck: number;
+    blurb: string;
+    kinds: { id: GambleKind; label: string; blurb: string }[];
+    rolls: number;
+    spent: number;
+    gold: number;
+  } {
+    return {
+      price: GAMBLE_PRICE,
+      odds: gambleOddsLine(),
+      luck: Math.round(gambleLuckBonus(this.killStreak) * 100),
+      blurb: GAMBLE_BLURB,
+      kinds: GAMBLE_KINDS,
+      rolls: this.save.stats.gambledItems,
+      spent: this.save.stats.gambledGold,
+      gold: this.save.gold,
+    };
+  }
+
+  /** Pay Gideon, roll the dice, and put whatever turns up in the backpack. */
+  gamble(kind: GambleKind): boolean {
+    if (this.save.gold < GAMBLE_PRICE) {
+      this.emit({ type: "log", text: `Gideon wants ${GAMBLE_PRICE} gold up front.`, tone: "bad" });
+      return false;
+    }
+    if (this.freeSlots() <= 0) {
+      this.emit({ type: "log", text: "No room for a roll. Free a square in the backpack first.", tone: "bad" });
+      return false;
+    }
+    const itemId = this.rollGambleItem(kind);
+    if (!itemId) {
+      this.emit({ type: "log", text: "Gideon shrugs: nothing in his crates fits that kind today.", tone: "bad" });
+      return false;
+    }
+    this.save.gold -= GAMBLE_PRICE;
+    this.save.stats.gambledGold += GAMBLE_PRICE;
+    const def = ITEMS[itemId];
+    if (!def) return false;
+    const instance = isEquippable(def) ? createItemInstance(itemId, this.rng) : undefined;
+    const leftover = this.addItem(itemId, 1, instance);
+    if (leftover > 0) {
+      this.save.gold += GAMBLE_PRICE;
+      this.save.stats.gambledGold -= GAMBLE_PRICE;
+      this.emit({ type: "log", text: "No room for a roll after all. Gideon keeps his coin.", tone: "bad" });
+      return false;
+    }
+    this.save.stats.gambledItems += 1;
+    this.emit({ type: "pickup", itemId, qty: 1 });
+    this.emit({ type: "log", text: `Gideon sets a ${def.name} (${def.rarity}) on the table. ${GAMBLE_PRICE} gold, gone.`, tone: def.rarity === "legendary" || def.rarity === "epic" ? "good" : "info" });
+    writeDiary(this.save, "loot", `Gambled ${GAMBLE_PRICE} gold and drew a ${def.name}.`);
+    return true;
+  }
+
+  /** The roll itself: a rarity by weight, then a wearable item of that rarity for the kind asked. */
+  private rollGambleItem(kind: GambleKind): string | undefined {
+    const luck = gambleLuckBonus(this.killStreak);
+    // Luck shifts weight upward rather than inventing items: the top tier gets heavier.
+    const weighted = GAMBLE_ODDS.map((entry) => ({
+      rarity: entry.rarity,
+      weight: entry.rarity === "legendary" || entry.rarity === "epic" ? entry.weight * (1 + luck * 4) : entry.weight,
+    }));
+    const total = weighted.reduce((sum, entry) => sum + entry.weight, 0) || 1;
+    let roll = this.rng.next() * total;
+    let rarity = weighted[weighted.length - 1]!.rarity;
+    for (const entry of weighted) {
+      roll -= entry.weight;
+      if (roll <= 0) {
+        rarity = entry.rarity;
+        break;
+      }
+    }
+    const slot = kind === "weapon" ? "weapon" : kind === "armor" ? this.rng.pick(["armor", "helm", "boots"] as const) : "trinket";
+    const pool = ITEM_LIST
+      .filter((def) => isEquippable(def) && def.type === slot && def.rarity === rarity && canClassUse(def, this.save.classId))
+      .map((def) => def.id);
+    if (pool.length === 0) {
+      // A rarity with nothing for this class falls back to anything wearable of that slot.
+      const fallback = ITEM_LIST
+        .filter((def) => isEquippable(def) && def.type === slot && canClassUse(def, this.save.classId))
+        .map((def) => def.id);
+      return fallback.length > 0 ? this.rng.pick(fallback) : undefined;
+    }
+    return this.rng.pick(pool);
   }
 
   /** Every villager with a gift list: their hearts, their present and their keepsake. */

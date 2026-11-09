@@ -339,7 +339,7 @@ export interface TelegraphInstance {
   remaining: number;
   total: number;
   damage: number;
-  kind: "boss" | "enemy" | "trap";
+  kind: "boss" | "enemy" | "trap" | "tell";
   shape?: "ring" | "line" | "cone" | "spot";
   angle?: number;
   /** Name of the boss that cast this telegraph, so the damage message names the right boss. */
@@ -456,6 +456,8 @@ export interface NpcDef {
   trainer?: boolean;
   /** This NPC keeps the village vault and can open it from their conversation. */
   stash?: boolean;
+  /** This NPC takes gold for a roll instead of selling goods. */
+  gamble?: boolean;
   sprite: string;
   color: string;
 }
@@ -493,6 +495,16 @@ export interface SaveStats {
   bestDummyCombo: number;
   /** Gems fused three-into-one, the "did you ever climb the ladder" counter. */
   gemsFused: number;
+  /** Heavy attacks stepped out of before they landed, the "you were paying attention" counter. */
+  tellsDodged: number;
+  /** Chests that turned out to be a mimic. */
+  mimicsSprung: number;
+  /** Blood Moons lived through, the "was the sky ever red for you" counter. */
+  bloodMoons: number;
+  /** Gold handed to Gideon's table. */
+  gambledGold: number;
+  /** Items Gideon handed over, good and bad. */
+  gambledItems: number;
 }
 
 export interface BountyProgress {
@@ -616,6 +628,25 @@ export interface CharacterSave {
   medals: Record<string, number>;
   /** Keepsakes already handed over by a villager at three hearts, so each pays once. */
   keepsakeClaims: string[];
+  /** Blood Moons the hero has lived through, so the journal can count them. */
+  bloodMoonSeen: number;
+  /** The last run the hero finished, kept so the recap card reopens after a reload. */
+  lastRun: LastRunRecord | null;
+}
+
+/** What the recap card shows after a Ring, Descent or gauntlet run ends. */
+export interface LastRunRecord {
+  mode: "ring" | "descent" | "gauntlet";
+  depth: number;
+  seconds: number;
+  tier: "gold" | "silver" | "bronze" | null;
+  gold: number;
+  xp: number;
+  shards: number;
+  kills: number;
+  bestWave: number;
+  boons: string[];
+  endedOn: number;
 }
 
 /** The two worn companion items, kept on the save so they survive a reload. */
@@ -742,6 +773,8 @@ export type SimEvent =
       icon: string;
     }
   | { type: "telegraph"; x: number; y: number; radius: number; remaining: number; shape?: "ring" | "line" | "cone" | "spot"; angle?: number }
+  | { type: "run-recap"; mode: "ring" | "descent" | "gauntlet"; depth: number; seconds: number; tier: "gold" | "silver" | "bronze" | null; gold: number; xp: number; shards: number; kills: number; bestWave: number }
+  | { type: "blood-moon"; phase: "warning" | "rising"; remaining: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }
   | { type: "respawn" }
   | { type: "achievement"; id: string; name: string; title?: string }

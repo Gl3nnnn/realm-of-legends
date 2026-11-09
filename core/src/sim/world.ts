@@ -42,6 +42,8 @@ export function openChest(session: GameSession, id: string): void {
   const chest = session.zone.chests.find((c) => c.id === id);
   if (!chest) return;
   if (session.save.openedChests.includes(id)) return;
+  // Some chests are not chests. A mimic wakes up instead of opening, and the loot is its corpse.
+  if (session.trySpringMimic(chest)) return;
   session.save.openedChests.push(id);
   session.save.stats.chestsOpened += 1;
   // A chest found by following a treasure coin pays far more than the one by the road.

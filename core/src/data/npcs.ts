@@ -1,5 +1,6 @@
 import type { NpcDef, ShopDef } from "../types";
 import { CLASS_STARTER_WEAPON_IDS, EXPANSION_GEAR_IDS, EXPANSION_SUPPLY_IDS, EXPANSION_WEAPON_IDS, PET_GEAR_ITEM_IDS } from "./items";
+import { GAMBLE_BLURB, GAMBLER_ID, GAMBLER_NAME } from "./gamble";
 import { SIDE_QUESTS } from "./side-quests";
 
 /** Quest ids for one giver, taken from the side-quest list so the two never drift apart. */
@@ -8,6 +9,19 @@ function sideQuestsFor(npcId: string): string[] {
 }
 
 export const NPCS: Record<string, NpcDef> = {
+  [GAMBLER_ID]: {
+    id: GAMBLER_ID,
+    name: GAMBLER_NAME,
+    role: "Gambler",
+    sprite: "merchant",
+    color: "#7d4a9c",
+    dialogue: [
+      "Coin up front, stranger. What comes out of the crate is between you and the gods.",
+      GAMBLE_BLURB,
+      "I have never sold a bad item. I have sold a great many unlucky ones.",
+    ],
+    gamble: true,
+  },
   guard: {
     id: "guard",
     name: "Captain Rowan",

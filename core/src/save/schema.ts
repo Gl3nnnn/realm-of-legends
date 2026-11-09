@@ -79,6 +79,11 @@ const statsSchema = z.object({
   bestDummyHit: z.number().int().min(0).default(0),
   bestDummyCombo: z.number().int().min(0).default(0),
   gemsFused: z.number().int().min(0).default(0),
+  tellsDodged: z.number().int().min(0).default(0),
+  mimicsSprung: z.number().int().min(0).default(0),
+  bloodMoons: z.number().int().min(0).default(0),
+  gambledGold: z.number().int().min(0).default(0),
+  gambledItems: z.number().int().min(0).default(0),
 });
 
 /** The monster with a grudge: one species that beat the hero and grows with them. */
@@ -195,6 +200,22 @@ export const saveSchema = z.object({
   medals: z.record(z.string().min(1).max(24), z.number().finite().min(0).max(86400)).default({}),
   /** Keepsakes already handed over by a villager at three hearts. */
   keepsakeClaims: z.array(z.string().min(1).max(40)).max(16).default([]),
+  /** Blood Moons the hero has lived through. */
+  bloodMoonSeen: z.number().int().min(0).max(99_999).default(0),
+  /** The last run the hero left, so the recap card can reopen it after a reload. */
+  lastRun: z.object({
+    mode: z.enum(["ring", "descent", "gauntlet"]),
+    depth: z.number().int().min(0).max(10_000),
+    seconds: z.number().finite().min(0).max(86_400),
+    tier: z.enum(["gold", "silver", "bronze"]).nullable(),
+    gold: z.number().int().min(0).max(MAX_GOLD),
+    xp: z.number().int().min(0).max(MAX_GOLD),
+    shards: z.number().int().min(0).max(1_000_000),
+    kills: z.number().int().min(0).max(100_000),
+    bestWave: z.number().int().min(0).max(10_000),
+    boons: z.array(z.string().min(1).max(40)).max(32),
+    endedOn: z.number().int().min(0).max(1_000_000_000_000),
+  }).nullable().default(null),
 });
 
 export const MAX_NAME_LENGTH = 16;
@@ -312,7 +333,7 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     rngState: (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1,
     createdAt: now,
     updatedAt: now,
-    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0, bestDummyHit: 0, bestDummyCombo: 0, gemsFused: 0 },
+    stats: { monstersSlain: 0, bossesSlain: 0, deaths: 0, chestsOpened: 0, questsCompleted: 0, goldEarned: 0, itemsFound: 0, potionsUsed: 0, perfectDodges: 0, bestHit: 0, distanceWalked: 0, bestStreak: 0, bountyGold: 0, flawlessFights: 0, bestCombo: 0, weaknessHits: 0, bestDummyHit: 0, bestDummyCombo: 0, gemsFused: 0, tellsDodged: 0, mimicsSprung: 0, bloodMoons: 0, gambledGold: 0, gambledItems: 0 },
     achievements: [],
     waypoints: ["village"],
     petXp: 0,
@@ -353,6 +374,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     hardcore: options.hardcore === true,
     medals: {},
     keepsakeClaims: [],
+    bloodMoonSeen: 0,
+    lastRun: null,
   };
 }
 
@@ -584,6 +607,12 @@ export function migrateSave(input: unknown): CharacterSave {
     migrated.medals = {};
     migrated.keepsakeClaims = [];
     migrated.version = 20;
+  }
+  if (migrated.version === 20) {
+    // Attack tells, the Blood Moon clock, Gideon's table and the run recap card.
+    migrated.bloodMoonSeen = 0;
+    migrated.lastRun = null;
+    migrated.version = 21;
   }
   if (typeof migrated.gold === "number" && Number.isFinite(migrated.gold) && migrated.gold > MAX_GOLD) {
     migrated.gold = MAX_GOLD;
