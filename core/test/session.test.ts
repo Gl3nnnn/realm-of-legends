@@ -635,9 +635,13 @@ describe("combat", () => {
     wolf.spawnY = wolf.y;
     wolf.state = "attack";
     wolf.attackTimer = 0;
+    // The wind-up roll is chance, not certainty, so the test asks for the one outcome it is about.
+    // Re-rolling inside the wind-up means the timing under test stays exactly the same.
+    session.rng.state = 7;
     const hp = session.save.hp;
 
-    for (let i = 0; i < 5; i += 1) session.step(0.1, IDLE);
+    // A wolf's heavy wind-up takes 0.75s and its ordinary swing lands in 0.4s; step past both.
+    for (let i = 0; i < 12; i += 1) session.step(0.1, IDLE);
 
     expect(session.save.hp).toBeLessThan(hp);
   });

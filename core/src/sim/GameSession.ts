@@ -1337,7 +1337,13 @@ export class GameSession {
             const tell = monster.elite ? undefined : monsterTell(def.id);
             if (tell && this.rng.chance(tell.chance)) {
               monster.attackTimer = def.attackCooldown + tell.delay;
-              this.spawnTelegraph(player.x, player.y, tell.radius, raw * tell.damageMult, tell.delay, tell.shape, Math.atan2(player.y - monster.y, player.x - monster.x), def.name, "tell", monster.uid);
+              // A cone or a line radiates outward from the attacker, so its shape has to start at the
+              // attacker. Anchoring it on the hero's own feet left the cone's direction undefined and let
+              // a hero who never moved step out of it. A spot or a ring is a patch of ground aimed at the
+              // hero, so for those the hero's position is the right anchor.
+              const tellAngle = Math.atan2(player.y - monster.y, player.x - monster.x);
+              const coneLike = tell.shape === "cone" || tell.shape === "line";
+              this.spawnTelegraph(coneLike ? monster.x : player.x, coneLike ? monster.y : player.y, tell.radius, raw * tell.damageMult, tell.delay, tell.shape, tellAngle, def.name, "tell", monster.uid);
               this.emit({ type: "log", text: `${def.name} winds up a ${tell.name}. Move out of the shape.`, tone: "bad" });
               continue;
             }
@@ -1484,6 +1490,9 @@ export class GameSession {
     if (shape === "cone") {
       const distance = Math.hypot(dx, dy);
       if (distance > t.radius + PLAYER_RADIUS) return false;
+      // Standing on the shape's own origin is inside it. The angle to the hero is undefined at
+      // distance zero, and that undefined angle was what let a hero standing still escape a cone.
+      if (distance <= PLAYER_RADIUS) return true;
       const a = Math.atan2(dy, dx);
       let diff = Math.abs(a - (t.angle ?? 0));
       if (diff > Math.PI) diff = Math.PI * 2 - diff;
