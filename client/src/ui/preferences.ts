@@ -200,6 +200,10 @@ export function applyPreferences(preferences: GamePreferences): void {
   root.style.setProperty("--ui-scale", String(preferences.uiScale));
   root.style.setProperty("--text-scale", String(preferences.textSize));
   root.style.setProperty("--world-brightness", String(preferences.brightness));
+  // The CSS side of a preference lands at once, but the world is drawn on a canvas by
+  // the game scene, which cannot see a data attribute. Announcing the change lets the
+  // scene apply what it owns (camera zoom) without waiting for a zone reload.
+  window.dispatchEvent(new CustomEvent("realm:preferences", { detail: preferences }));
 }
 
 export function updatePreferences(patch: Partial<GamePreferences>): GamePreferences {

@@ -198,6 +198,16 @@ export class WorldScene extends Phaser.Scene {
     });
     this.aim = { x: session.save.x + 80, y: session.save.y + 40 };
 
+    // Camera zoom lives on the scene, not in CSS, so it follows the settings sheet live.
+    const onPreferences = (event: Event) => {
+      const next = (event as CustomEvent<GamePreferences>).detail;
+      if (next?.cameraZoom) this.cameras.main.setZoom(next.cameraZoom);
+    };
+    window.addEventListener("realm:preferences", onPreferences);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener("realm:preferences", onPreferences);
+    });
+
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       this.pointerMoved = true;
       const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y);

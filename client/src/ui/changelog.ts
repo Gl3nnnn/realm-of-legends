@@ -21,8 +21,104 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.20.0",
+    date: "November 9, 2026",
+    title: "The Last Shelves Update",
+    summary:
+      "Three pages were still the last plain ones in the game. The village vault was two loose columns with an unfinished button, the controls sheet was one undivided list of fifteen rows, and the memorial wall was a paragraph with a short list of names. All three now open on the same strip and cards as the backpack: vault and pack each in their own card with a fill meter and a click to move a piece, the controls sorted into Moving, Fighting, Using things, Getting around and Screens, and the wall showing how many heroes have fallen and how deep the best of them got.",
+    changes: [
+      { tag: "improved", text: "The vault opens on a strip showing your class, level, gold, how many squares are free in the pack and whether the vault can still grow, with Tidy vault and Deposit materials beside your purse." },
+      { tag: "improved", text: "Vault and pack are two cards with their own titles and counts, and a fill meter on the vault, so how close it is to full is a glance instead of a sum." },
+      { tag: "new", text: "The vault's next size is its own card, and when your purse is short it says exactly how much more gold you need." },
+      { tag: "improved", text: "The controls sheet is sorted into five groups - Moving, Fighting, Using things, Getting around and Screens - each with a heading and a plain note, instead of fifteen rows in one run." },
+      { tag: "improved", text: "Every control row is bordered and lights up on hover, so your eye can follow one line across its three columns." },
+      { tag: "improved", text: "The gamepad note sits in its own card at the end instead of trailing the list." },
+      { tag: "improved", text: "The memorial wall opens on a strip with how many hardcore heroes have fallen, the deepest level reached and the newest-first order, with the names kept in a proper card." },
+      { tag: "fixed", text: "The controls sheet never mentioned the gamepad until the last line; the strip now counts keyboard, mouse and gamepad together." },
+    ],
+  },
+  {
+    version: "1.19.0",
+    date: "November 9, 2026",
+    title: "The Notice Board Update",
+    summary:
+      "The update board has grown to sixteen patches and was still one long scroll of fully opened cards, so reading back to an old patch meant scrolling past every note in between. It now opens on a strip that says what the newest patch is and how much you have not read, then groups the history by month, and every patch folds into a one-line row you can open when you want the details. Inside each card the notes are sorted into New, Improved, Fixed and Balance instead of arriving in one mixed list.",
+    changes: [
+      { tag: "new", text: "The board opens on a strip showing the newest patch, its version and date, then chips for how many patches there are, how many you have not read, and how many notes sit in the newest one." },
+      { tag: "new", text: "Patches are grouped by month with a gold heading and a count, so November and October read as two chapters instead of one run." },
+      { tag: "improved", text: "Every patch is now a folded row: version chip, title, date and note count together, with a chevron that turns as it opens." },
+      { tag: "improved", text: "The newest patch and anything you have not read yet open themselves; patches you have already read stay folded." },
+      { tag: "improved", text: "Notes are sorted into New, Improved, Fixed and Balance groups, each with its own colour and a plain count, so a fix is no longer buried between two new features." },
+      { tag: "improved", text: "The Latest tag sits on the newest row beside its title instead of replacing the summary line." },
+    ],
+  },
+  {
+    version: "1.18.0",
+    date: "November 9, 2026",
+    title: "The Open Ledger Update",
+    summary:
+      "The quest log was the longest screen in the game and the least sorted: quests, bounties, the ring, the season, the story, the bestiary and the lore all ran down one column with nothing between them. It now opens on a hero strip that answers the question you came for - how much work is waiting - and puts that work into four named groups: Work, Trials, Your hero and Records. Every button is where it was; only the order and the headings are new.",
+    changes: [
+      { tag: "new", text: "The journal opens on a strip showing your class, level, zone and title, then chips for quests tracked, quests ready to hand in, bounties ready and deed points." },
+      { tag: "new", text: "The page is split into four groups - Work, Trials, Your hero and Records - each with a gold heading and a plain note about what is inside." },
+      { tag: "improved", text: "Quests that are ready to hand in come first, then the one you pinned, then open work, then the repeats you have already cleared." },
+      { tag: "improved", text: "Every quest card now carries a thin progress bar under its objectives, so you can see how far along it is without reading each line." },
+      { tag: "improved", text: "When no quest is tracked, the empty state sits inside the same card as the tracked list, so the page keeps its shape." },
+      { tag: "improved", text: "The tip about collect objectives no longer trails off the end of the page; it sits in its own small panel." },
+    ],
+  },
+  {
+    version: "1.17.0",
+    date: "November 9, 2026",
+    title: "The Field Bag Update",
+    summary:
+      "The backpack was still the one screen that read like a grid of squares with no plan. It now opens on the same hero strip the shop counters use - your class, level, gold, squares used and gems held - and puts the bag, the gear you wear and the piece you selected into three cards, each with a gold title and a plain note about what is inside. Nothing moved on the buttons themselves; every filter, sort and tool is still where the click handler expects it.",
+    changes: [
+      { tag: "new", text: "The screen opens on a hero strip showing your class, level, zone, gold, how many squares you have used and how many gems you hold.", },
+      { tag: "improved", text: "Bag, equipment and the selected piece now sit in three separate cards, so the screen reads in the same order as the shop counters.", },
+      { tag: "improved", text: "Tidy, Wear best and the junk filter moved up into the hero strip, next to your purse instead of below the grid.", },
+      { tag: "improved", text: "The bag card says how many squares are showing out of how many you carry, so a filter that hides things is never a mystery.", },
+      { tag: "improved", text: "The selected piece card names what you are looking at - worn or in the bag, and its rarity - before the item detail.", },
+      { tag: "fixed", text: "The worn-piece line under each gear card was written all in lower case; type and rarity now read properly.", },
+    ],
+  },
+  {
+    version: "1.16.0",
+    date: "November 9, 2026",
+    title: "The Clear Glass Update",
+    summary:
+      "The Settings sheet stopped being one long column of switches. It now opens as four cards, one for Screen, one for Comfort and access, one for Input and language, and one row of sheets worth opening once - each line a plain sentence about what the control does, with a real switch instead of a bare checkbox. Camera zoom also takes effect the moment you pick it, instead of waiting for the next zone.",
+    changes: [
+      { tag: "improved", text: "Settings is grouped into four cards, so Screen and Comfort are no longer mixed into the same pile." },
+      { tag: "improved", text: "Every line now says what it does in one plain sentence, under a bold name, instead of a short label." },
+      { tag: "improved", text: "On and off settings use a proper sliding switch, so an enabled setting is visible at a glance." },
+      { tag: "improved", text: "The three help pages - Controls sheet, Update board and Show the tutorial - sit together at the end, in one row." },
+      { tag: "fixed", text: "Camera zoom now changes the view immediately; before, it only took effect after walking into another zone." },
+    ],
+  },
+  {
+    version: "1.15.0",
+    date: "November 9, 2026",
+    title: "The Counter Update",
+    summary:
+      "Borin's Forge, Mira's Goods, Elara's Remedies and Gideon's table now look like four counters in one village instead of four unrelated screens. Each one opens on the person serving you, their line, your purse and your free squares; stock is grouped on named shelves with rarity tags and the exact reason a line is locked; selling from the pack shows what each square is worth; and Borin's bench puts the gear you wear beside the recipes you could forge, with the ore and coin you are short of turning red.",
+    changes: [
+      { tag: "new", text: "Every shop opens on a counter header showing the merchant, their greeting, your level, your gold and how many backpack squares are free." },
+      { tag: "improved", text: "Stock is sorted onto named shelves: Supplies, Gear, Gems and Companion kit, with gear listed by name instead of in an arbitrary order." },
+      { tag: "improved", text: "Each line of stock carries a rarity tag, a level tag, a stack-size tag and a coloured rarity flag, so a blue piece reads as blue before you read the name." },
+      { tag: "improved", text: "A line you cannot buy now says why in plain words on the button itself, and the price turns red when your purse is short." },
+      { tag: "improved", text: "The village trust discount is shown as a perk on the counter instead of a loose line of green text." },
+      { tag: "improved", text: "Selling shows the gold each square pays in its corner, with the bulk buttons moved up into the card header." },
+      { tag: "improved", text: "Borin's bench splits into what you wear and what you could make: each piece shows its temper rank as pips and the next cost as chips that turn green when you can pay and red when you cannot." },
+      { tag: "improved", text: "Each recipe shows a chip per material with have against need, and the price, so you can see the one thing you are missing at a glance." },
+      { tag: "improved", text: "Gideon's table is three crates rather than three rows: one price, the crate, a Roll button, and a line that says exactly how much more gold you need when you cannot pay." },
+      { tag: "improved", text: "The gamble odds are written out in a proper note instead of squeezed into a stat tile." },
+      { tag: "fixed", text: "The unused price import behind Gideon's old panel was removed, so the counter code is clean." },
+    ],
+  },
+  {
     version: "1.14.0",
-    date: "December 2, 2026",
+    date: "November 9, 2026",
     title: "The Town Ledger Update",
     summary:
       "Seven screens that were built one patch at a time finally speak the same language. The Journal has a grouped bar with badges for work that is waiting, the talent tree reads as a proper ladder, the village and the runeword book show progress you can see at a glance, your companion has a stage ladder and real gear slots, every villager opens on a portrait with their hearts showing, and Settings leads with your hero instead of a wall of sliders.",
@@ -42,7 +138,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.13.0",
-    date: "November 25, 2026",
+    date: "November 8, 2026",
     title: "The Field Kit Update",
     summary:
       "The backpack stopped being a plain box. It is now a character sheet: the bag on the left, your five worn pieces as cards beside it with their totals underneath, filter chips that tell you how many of each thing you hold, a rarity stripe on every slot, and a green or red mark on gear that beats or loses to what you wear.",
@@ -58,7 +154,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.12.0",
-    date: "November 16, 2026",
+    date: "November 8, 2026",
     title: "The Red Sky Update",
     summary:
       "Four things a fight and a run were missing: enemies that warn you before a heavy blow, a card that tells you what a run actually earned, chests that sometimes bite, and a red sky that thickens packs and fattens purses. Gold also has somewhere to go now, because Gideon sells rolls.",
@@ -73,7 +169,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.11.0",
-    date: "November 16, 2026",
+    date: "November 7, 2026",
     title: "The Sharpened Edge Update",
     summary:
       "The small things that made every session a little more work than play. Junk gear now turns into ore the moment it drops, three gems of a kind become one better stone, every run gets a clock and a medal for beating your own best, and the villagers have a standing you can see, raise with gifts and be rewarded for at three hearts.",
@@ -88,7 +184,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.10.0",
-    date: "November 16, 2026",
+    date: "November 7, 2026",
     title: "The Rebuilt Village Update",
     summary:
       "Gold finally has somewhere to go. Seven village buildings can be rebuilt five times each, and every stage helps every hero on this device. Companions now wear a collar and a charm and learn a skill, three gems in one piece of gear spell a runeword, a hardcore hero can be forged who dies for good, and one button draws your hero as a picture you can post.",
@@ -106,7 +202,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.9.0",
-    date: "November 12, 2026",
+    date: "November 6, 2026",
     title: "The Shared Vault Update",
     summary:
       "The vault now belongs to you, not to one hero: store something with one character and the next character finds it waiting. Gems are in the world too, and any piece of gear has sockets to hold them. A Torment dial raises the whole realm for better pay, companions grow through four stages, and every achievement now pays gold, experience and a gem you can collect.",
@@ -123,7 +219,7 @@ export const GAME_UPDATES: GameUpdate[] = [
   },
   {
     version: "1.8.0",
-    date: "November 9, 2026",
+    date: "November 6, 2026",
     title: "The Reckoning Update",
     summary:
       "Shards finally buy something that lasts. Seven relics stay with you forever, a risk dial pays triple for the brave, and every story boss now stands together in one gauntlet. The roads also keep a few surprises: a purse imp that runs for its life, buried chests with a coin to follow, and a training dummy that tells you exactly how hard you hit.",
@@ -259,26 +355,102 @@ export function markUpdatesSeen(): void {
   }
 }
 
-export function updateBoardHtml(): string {
-  return GAME_UPDATES.map((update, index) => {
-    const latest = index === 0;
-    const changes = update.changes
+const TAG_ORDER: UpdateTag[] = ["new", "improved", "fixed", "balance"];
+
+/** "November 9, 2026" -> "November 2026", so the board can group its patches by month. */
+function monthKey(date: string): string {
+  const parts = date.trim().split(/\s+/);
+  const month = parts[0] ?? date;
+  const year = parts.length > 1 ? parts[parts.length - 1] : "";
+  return year ? `${month} ${year}` : month;
+}
+
+/** One block per kind of note, so a patch reads as New / Improved / Fixed / Balance. */
+function changeGroupsHtml(update: GameUpdate): string {
+  return TAG_ORDER.map((tag) => {
+    const rows = update.changes.filter((change) => change.tag === tag);
+    if (rows.length === 0) return "";
+    const notes = rows
       .map(
-        (change) => `<li class="update-change">
-          <span class="update-tag tag-${change.tag}">${esc(TAG_LABELS[change.tag])}</span>
-          <span>${esc(change.text)}</span>
-        </li>`,
+        (row) =>
+          `<li class="update-change"><span class="update-mark" aria-hidden="true"></span><span>${esc(row.text)}</span></li>`,
       )
       .join("");
-    return `<article class="update-card ${latest ? "latest" : ""}">
-      <div class="update-meta">
-        <span class="update-version-chip">v${esc(update.version)}</span>
-        <span class="muted small">${esc(update.date)}</span>
-        ${latest ? `<span class="update-new">New</span>` : ""}
-      </div>
-      <h2>${esc(update.title)}</h2>
-      <p class="update-summary">${esc(update.summary)}</p>
-      <ul class="update-changes">${changes}</ul>
-    </article>`;
+    return `<div class="update-group tag-${tag}">
+          <div class="update-group-head">
+            <span class="update-group-label">${esc(TAG_LABELS[tag])}</span>
+            <span class="update-group-count">${rows.length} ${rows.length === 1 ? "note" : "notes"}</span>
+          </div>
+          <ul class="update-changes">${notes}</ul>
+        </div>`;
   }).join("");
+}
+
+export function updateBoardHtml(): string {
+  const unread = unreadUpdateCount();
+  const latest = LATEST_UPDATE;
+  const totalNotes = GAME_UPDATES.reduce((sum, update) => sum + update.changes.length, 0);
+
+  const strip = `<div class="update-sum">
+      <div class="update-sum-main">
+        <span class="update-kicker">Latest patch</span>
+        <strong class="update-sum-title">${esc(latest.title)}</strong>
+        <span class="update-sum-meta">v${esc(latest.version)} &middot; ${esc(latest.date)}</span>
+      </div>
+      <div class="update-sum-chips">
+        <span class="update-chip"><span class="update-chip-value">${GAME_UPDATES.length}</span><span class="update-chip-label">patches</span></span>
+        <span class="update-chip${unread > 0 ? " is-new" : ""}"><span class="update-chip-value">${unread}</span><span class="update-chip-label">unread</span></span>
+        <span class="update-chip"><span class="update-chip-value">${latest.changes.length}</span><span class="update-chip-label">notes here</span></span>
+        <span class="update-chip"><span class="update-chip-value">${totalNotes}</span><span class="update-chip-label">notes all told</span></span>
+      </div>
+    </div>`;
+
+  // The history runs down one column by version; month headings turn it into chapters.
+  const months = new Map<string, GameUpdate[]>();
+  for (const update of GAME_UPDATES) {
+    const key = monthKey(update.date);
+    const bucket = months.get(key);
+    if (bucket) bucket.push(update);
+    else months.set(key, [update]);
+  }
+
+  // At most three patches open at once: the newest, plus the ones you have not read yet.
+  // A fresh browser reports every patch as unread, and sixteen open cards is not a tidy board.
+  const openCount = unread > 0 ? Math.min(unread, 3) : 1;
+  let position = 0;
+  const sections: string[] = [];
+  for (const [month, updates] of months) {
+    const cards = updates
+      .map((update) => {
+        const isLatest = position === 0;
+        const isOpen = position < openCount;
+        position += 1;
+        const count = update.changes.length;
+        return `<details class="update-card${isLatest ? " latest" : ""}"${isOpen ? " open" : ""}>
+        <summary>
+          <span class="update-version-chip">v${esc(update.version)}</span>
+          <span class="update-card-title">
+            <strong>${esc(update.title)}</strong>
+            <span class="small muted">${esc(update.date)} &middot; ${count} ${count === 1 ? "note" : "notes"}</span>
+          </span>
+          ${isLatest ? `<span class="update-latest-tag">Latest</span>` : ""}
+          <span class="update-chevron" aria-hidden="true">&rsaquo;</span>
+        </summary>
+        <div class="update-card-body">
+          <p class="update-summary">${esc(update.summary)}</p>
+          <div class="update-groups">${changeGroupsHtml(update)}</div>
+        </div>
+      </details>`;
+      })
+      .join("");
+    sections.push(`<section class="update-month">
+        <div class="update-month-head">
+          <span class="update-month-title">${esc(month)}</span>
+          <span class="update-month-note">${updates.length} ${updates.length === 1 ? "patch" : "patches"}</span>
+        </div>
+        ${cards}
+      </section>`);
+  }
+
+  return `${strip}${sections.join("")}`;
 }

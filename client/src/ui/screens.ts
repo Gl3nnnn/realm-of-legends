@@ -3,7 +3,6 @@ import {
   FLAGSHIP_CLASSES,
   ITEMS,
   AFFIXES,
-  GAMBLE_PRICE,
   DESCENT_BOONS,
   LORE_ENTRIES,
   MAX_CHARACTERS,
@@ -332,7 +331,9 @@ export function inventoryPanelHtml(
       const wornDef = wornStack ? getItem(wornStack.itemId) : null;
       const socketFill = wornStack ? socketedGems(wornStack).length : 0;
       const socketCap = wornStack ? socketCount(wornStack) : 0;
-      const wearLine = wornDef ? `${wornDef.type} - ${wornDef.rarity}` : "no piece";
+      const wearLine = wornDef
+        ? `${wornDef.type.charAt(0).toUpperCase()}${wornDef.type.slice(1)} · ${wornDef.rarity}`
+        : "no piece";
       return `<button class="gear-card ${wornStack ? "filled" : "empty"} ${wornDef ? `rarity-${wornDef.rarity}` : ""} ${selectedEquip === slot ? "selected" : ""}" data-equip="${slot}" title="${wornStack ? esc(itemDisplayName(wornStack)) : `Empty ${slotNames[slot]} slot`}">
         <span class="gear-frame">
           ${wornStack ? itemIconHtml(wornDef!.icon, 36) : `<span class="gear-ghost">${slotNames[slot].charAt(0)}</span>`}
@@ -432,158 +433,344 @@ export function inventoryPanelHtml(
     : "";
   const usedSquares = save.inventory.reduce((count, slot) => (slot ? count + 1 : count), 0);
   const bagTone = usedSquares >= 24 ? "full" : usedSquares >= 20 ? "tight" : "";
-  return `<div class="panel-columns bag-layout">
-    <div class="bag-main">
-      <div class="bag-block">
-        <div class="bag-head">
-          <div class="section-title">Backpack</div>
-          <div class="bag-head-meta">
-            <span class="gold-line">${formatNumber(save.gold)} g</span>
-            <span class="bag-count ${bagTone}">${usedSquares} of 24</span>
-          </div>
+  const gemHeld = session.backpackGems.reduce((sum, row) => sum + row.qty, 0);
+  // The detail column said nothing about what was in it, so the card head carries the
+  // answer now: worn or in the bag, and which rarity you are looking at.
+  const selectionNote = stack
+    ? `${selectedEquip ? "Worn" : "In the bag"} · ${getItem(stack.itemId).rarity}`
+    : "Nothing selected";
+  return `<div class="inv-sheet">
+    <header class="inv-hero">
+      <div class="inv-hero-portrait">${classPortrait(save.classId, 56)}</div>
+      <div class="inv-hero-body">
+        <strong>${esc(save.name)}</strong>
+        <span class="small muted">${esc(getClass(save.classId).name)} · Level ${save.level} · ${esc(session.zone.name)}</span>
+        <div class="inv-hero-chips">
+          <span class="settings-chip gold">${formatNumber(save.gold)} gold</span>
+          <span class="settings-chip ${bagTone}">${usedSquares} of 24 squares</span>
+          <span class="settings-chip">${gemHeld} gem${gemHeld === 1 ? "" : "s"} held</span>
         </div>
-        <div class="bag-meter ${bagTone}" role="progressbar" aria-valuenow="${usedSquares}" aria-valuemin="0" aria-valuemax="24"><span style="width:${Math.round((usedSquares / 24) * 100)}%"></span></div>
-        <div class="inv-toolbar">
-          <div class="chip-row">${filterButtons}</div>
-          <div class="chip-row sort-row"><span class="chip-label">Sort</span>${sortButtons}</div>
-        </div>
-        <div class="bag-tools">
-          <button class="btn ghost small" data-action="quick-sort">Tidy</button>
-          <button class="btn ghost small" data-action="equip-best">Wear best</button>
-          <button class="chip-btn ${session.autoSalvageJunk ? "active" : ""}" data-action="toggle-junk-filter" title="Common and uncommons for your class turn into ore the moment they are picked up">Junk filter ${session.autoSalvageJunk ? "on" : "off"}</button>
-        </div>
-        <div class="inv-grid">${grid}${fillers}</div>
-        ${entries.length === 0 ? `<div class="small muted" style="margin-top:8px">No items match this filter.</div>` : ""}
       </div>
-      <div class="gear-block">
-        <div class="section-title">Equipment</div>
-        <div class="gear-board">
-          <div class="gear-doll">
-            ${classPortrait(save.classId, 76)}
-            <div class="doll-name">${esc(save.name)}</div>
-            <div class="small muted">Level ${save.level} ${esc(getClass(save.classId).name)}</div>
-          </div>
-          <div class="gear-grid">${equipment}</div>
-        </div>
-        ${gearStats}
+      <div class="bag-tools inv-hero-tools">
+        <button class="btn ghost small" data-action="quick-sort">Tidy</button>
+        <button class="btn ghost small" data-action="equip-best">Wear best</button>
+        <button class="chip-btn ${session.autoSalvageJunk ? "active" : ""}" data-action="toggle-junk-filter" title="Common and uncommons for your class turn into ore the moment they are picked up">Junk filter ${session.autoSalvageJunk ? "on" : "off"}</button>
       </div>
-    </div>
-    <div class="bag-detail">
-      ${itemDetailHtml(stack, compareTo)}
-      ${compareHtml}
-      <div class="detail-actions">${actions}</div>
-      ${gemFuseSection(session)}
-      <div class="small muted">Consumables bind to Z or X. Hover a slot to see its numbers against what you wear.</div>
+    </header>
+    <div class="panel-columns bag-layout">
+      <div class="bag-main">
+        <section class="inv-card">
+          <div class="inv-card-head">
+            <strong>What you carry</strong>
+            <span class="inv-card-note">Showing ${entries.length} of ${usedSquares} squares</span>
+          </div>
+          <div class="bag-meter ${bagTone}" role="progressbar" aria-valuenow="${usedSquares}" aria-valuemin="0" aria-valuemax="24"><span style="width:${Math.round((usedSquares / 24) * 100)}%"></span></div>
+          <div class="inv-toolbar">
+            <div class="chip-row">${filterButtons}</div>
+            <div class="chip-row sort-row"><span class="chip-label">Sort</span>${sortButtons}</div>
+          </div>
+          <div class="inv-grid">${grid}${fillers}</div>
+          ${entries.length === 0 ? `<div class="small muted" style="margin-top:8px">No items match this filter.</div>` : ""}
+        </section>
+        <section class="inv-card">
+          <div class="inv-card-head">
+            <strong>What you wear</strong>
+            <span class="inv-card-note">Five slots, their socket gems, and the totals they add up to</span>
+          </div>
+          <div class="gear-board">
+            <div class="gear-doll">
+              ${classPortrait(save.classId, 76)}
+              <div class="doll-name">${esc(save.name)}</div>
+              <div class="small muted">Level ${save.level} ${esc(getClass(save.classId).name)}</div>
+            </div>
+            <div class="gear-grid">${equipment}</div>
+          </div>
+          ${gearStats}
+        </section>
+      </div>
+      <div class="bag-detail">
+        <section class="inv-card">
+          <div class="inv-card-head">
+            <strong>Selected piece</strong>
+            <span class="inv-card-note">${esc(selectionNote)}</span>
+          </div>
+          ${itemDetailHtml(stack, compareTo)}
+          ${compareHtml}
+          <div class="detail-actions">${actions}</div>
+          <div class="small muted">Consumables bind to Z or X. Hover a square to see its numbers against what you wear.</div>
+        </section>
+        ${gemFuseSection(session)}
+      </div>
     </div>
   </div>`;
 }
+/**
+ * One village counter, whole.
+ *
+ * Borin, Mira and Elara sell three different things, but the screen is the same
+ * job: who is serving you, what they have, what it costs, and what you can hand
+ * back. This draws all of it the same way, so a player learns one layout in the
+ * village instead of three.
+ *
+ * Every button keeps the data-action the panel's click handler already answers
+ * to, so nothing behind this changed.
+ */
+
+/** Where a line of stock belongs on the shelf: supplies, then gear, gems, companion kit. */
+function stockGroup(itemId: string): { label: string; order: number } {
+  const def = getItem(itemId);
+  const kind = String(def.type);
+  if (itemId.startsWith("gem_")) return { label: "Gems", order: 2 };
+  if (kind === "material" || kind === "consumable") return { label: "Supplies", order: 0 };
+  if (kind === "pet_gear") return { label: "Companion kit", order: 3 };
+  return { label: "Gear", order: 1 };
+}
+
+/** A price written the way the rest of the game writes gold. */
+function goldAmount(value: number): string {
+  return `${formatNumber(value)} <span class="shop-coin">g</span>`;
+}
+
+/** The counter header: who is serving you, what you carry, what you can spend. */
+function shopHeroHtml(session: GameSession, shopId: string, shopName: string): string {
+  const host = Object.values(NPCS).find((entry) => entry.shop === shopId);
+  const colour = host?.color ?? "#e8c05a";
+  const openingLine = host?.dialogue?.[0] ?? "Everything on the counter is priced and ready.";
+  return `<header class="shop-hero" style="--shop-color:${esc(colour)}">
+    <div class="shop-hero-portrait">${charIconHtml(host?.sprite ?? "merchant", 54)}</div>
+    <div class="shop-hero-body">
+      <strong>${esc(host?.name ?? shopName)}</strong>
+      <span>${esc(host?.role ?? "Merchant")} · ${esc(shopName)}</span>
+      <span class="shop-hero-line">"${esc(openingLine)}"</span>
+    </div>
+    <div class="shop-hero-stats">
+      <div class="shop-stat"><span>Hero</span><strong>Level ${session.save.level}</strong></div>
+      <div class="shop-stat gold"><span>Purse</span><strong>${formatNumber(session.save.gold)} g</strong></div>
+      <div class="shop-stat"><span>Backpack</span><strong>${session.freeSlots()} free</strong></div>
+    </div>
+  </header>`;
+}
+
+/** One line of stock: the item, what it does, what it costs, and why you cannot buy it. */
 function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
-  const stats = statLines(def.stats).slice(0, 2).join(" · ");
   const price = Math.max(1, Math.ceil((def.buy ?? 0) * (1 - session.shopDiscountPercent / 100)));
   const canAfford = session.save.gold >= price;
   const canUse = canClassUse(def, session.save.classId);
   const levelMet = !def.requiresLevel || session.save.level >= def.requiresLevel;
   const hasSpace = session.canAdd(itemId, 1);
   const canBuy = canAfford && canUse && levelMet && hasSpace;
-  return `<div class="shop-row">
-    ${itemIconHtml(def.icon, 30)}
-    <div>
-      <div class="name rarity-${def.rarity}">${esc(def.name)}</div>
-      <div class="sub">${stats || esc(def.description.slice(0, 46))}</div>
+  const stats = statLines(def.stats).slice(0, 3).join(" · ");
+  const blocked = !canUse ? "Not for this class" : !levelMet ? `Requires level ${def.requiresLevel}` : !hasSpace ? "Backpack full" : "";
+  const note = blocked || stats || def.description;
+  return `<article class="stock-row${canBuy ? "" : " locked"}">
+    <div class="stock-icon">
+      ${itemIconHtml(def.icon, 30)}
+      <span class="rar-flag r-${def.rarity}"></span>
     </div>
-    <div style="display:grid;gap:5px;justify-items:end">
-      <span class="gold-line">${price} g${price < (def.buy ?? 0) ? ` <s class="small muted">${def.buy} g</s>` : ""}</span>
-      <button class="btn small" data-action="buy" data-item="${def.id}" ${canBuy ? "" : "disabled"}>${!canUse ? "Not for class" : !levelMet ? `Requires level ${def.requiresLevel}` : !hasSpace ? "Inventory full" : "Buy"}</button>
+    <div class="stock-body">
+      <div class="stock-name rarity-${def.rarity}">${esc(def.name)}</div>
+      <div class="stock-note">${esc(note)}</div>
+      <div class="stock-tags">
+        <span class="tag r-${def.rarity}">${esc(def.rarity)}</span>
+        ${def.requiresLevel ? `<span class="tag">Lv ${def.requiresLevel}</span>` : ""}
+        ${def.stack > 1 ? `<span class="tag">stacks ${def.stack}</span>` : ""}
+      </div>
     </div>
-  </div>`;
+    <div class="stock-buy">
+      <span class="stock-price${canAfford ? "" : " short"}">${goldAmount(price)}</span>
+      ${price < (def.buy ?? 0) ? `<span class="stock-was"><s>${formatNumber(def.buy ?? 0)} g</s></span>` : ""}
+      <button class="btn small" data-action="buy" data-item="${esc(def.id)}" ${canBuy ? "" : "disabled"}>${blocked ? "Locked" : "Buy"}</button>
+    </div>
+  </article>`;
 }
 
-function forgeSectionHtml(session: GameSession): string {
-  const equipSlots: (keyof CharacterSave["equipment"])[] = ["weapon", "armor", "helm", "boots", "trinket"];
-  const upgrades = equipSlots
+/** The buy side: every line on its shelf, with the shelf named. */
+function shopStockHtml(session: GameSession, shopId: string, shopName: string): string {
+  const shop = SHOPS[shopId];
+  const entries = shop.itemIds
+    .map((id) => ({ id, group: stockGroup(id) }))
+    .sort((a, b) => a.group.order - b.group.order || getItem(a.id).name.localeCompare(getItem(b.id).name));
+  const shelfParts: string[] = [];
+  let current = "";
+  let rows = "";
+  for (const entry of entries) {
+    if (entry.group.label !== current) {
+      if (rows) shelfParts.push(`<div class="stock-group">${esc(current)}</div>${rows}`);
+      current = entry.group.label;
+      rows = "";
+    }
+    rows += shopRow(session, entry.id);
+  }
+  if (rows) shelfParts.push(`<div class="stock-group">${esc(current)}</div>${rows}`);
+  const discount = session.shopDiscountPercent > 0
+    ? `<span class="shop-perk">Trust of the village: ${session.shopDiscountPercent}% off every line</span>`
+    : `<span class="small muted">Prices do not move. Buy what you can carry.</span>`;
+  return `<section class="shop-card">
+    <header class="shop-card-head">
+      <div>
+        <h4>On the counter <span class="shop-count">${shop.itemIds.length} lines</span></h4>
+        <span class="small muted">${esc(shopName)} keeps this stock.</span>
+      </div>
+      ${discount}
+    </header>
+    <div class="stock-shelves">${shelfParts.join("")}</div>
+  </section>`;
+}
+
+/** The sell side: your pack, priced per square, with the bulk buttons on top. */
+function shopSellHtml(session: GameSession): string {
+  const cells = session.save.inventory
+    .map((stack, i) => {
+      if (!stack) return `<div class="inv-slot empty" aria-hidden="true"></div>`;
+      const def = getItem(stack.itemId);
+      const worth = itemSellValue(stack);
+      return `<button class="inv-slot sell-slot" data-action="sell-slot" data-slot="${i}" title="Sell ${esc(itemDisplayName(stack))} for ${worth}g">
+        <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
+        ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
+        <span class="sell-worth">${formatNumber(worth)}g</span>
+      </button>`;
+    })
+    .join("");
+  return `<section class="shop-card sell-card">
+    <header class="shop-card-head">
+      <div>
+        <h4>Sell from the pack <span class="shop-count">${session.freeSlots()} free</span></h4>
+        <span class="small muted">Click a square to sell one. The small number is what it pays.</span>
+      </div>
+      <div class="sell-tools">
+        <button class="btn ghost small" data-action="sell-materials">Sell materials</button>
+        <button class="btn ghost small" data-action="sell-junk">Sell junk gear</button>
+      </div>
+    </header>
+    <div class="inv-grid sell-grid">${cells}</div>
+    <div class="small muted">Worn gear cannot be sold here, and quest items stay in the pack.</div>
+  </section>`;
+}
+
+/** A row of pips that fills up as a piece of gear is tempered. */
+function benchPips(level: number): string {
+  return `<div class="bench-pips">${Array.from({ length: MAX_UPGRADE }, (_, i) => `<span class="bench-pip${i < level ? " on" : ""}"></span>`).join("")}</div>`;
+}
+
+/** The gear you are wearing, one row each, with what the next temper costs. */
+function forgeUpgradesHtml(session: GameSession): string {
+  const slotLabels: Record<string, string> = { weapon: "Weapon", armor: "Armour", helm: "Helm", boots: "Boots", trinket: "Trinket" };
+  const slots: (keyof CharacterSave["equipment"])[] = ["weapon", "armor", "helm", "boots", "trinket"];
+  const rows = slots
     .map((slot) => {
       const stack = session.save.equipment[slot];
       if (!stack) return "";
       const cost = session.upgradeCost(slot);
-      const canAfford = Boolean(cost && session.save.gold >= cost.gold && session.countItem("iron_ore") >= cost.ore);
-      return `<div class="forge-row">
-        ${itemIconHtml(getItem(stack.itemId).icon, 26)}
-        <div>
-          <div class="name">${esc(itemDisplayName(stack))}</div>
-          <div class="sub">${cost ? `${cost.gold} gold · ${cost.ore}x Iron Ore` : "Masterwork"}</div>
+      const goldOk = Boolean(cost && session.save.gold >= cost.gold);
+      const oreOk = Boolean(cost && session.countItem("iron_ore") >= cost.ore);
+      const ready = Boolean(cost && goldOk && oreOk);
+      const level = cost ? cost.next - 1 : MAX_UPGRADE;
+      return `<article class="bench-row${ready ? " ready" : ""}">
+        <div class="bench-rank">
+          <span class="bench-plus">+${level}</span>
+          ${benchPips(level)}
         </div>
-        <button class="btn small" data-action="upgrade-slot" data-slot="${slot}" ${canAfford ? "" : "disabled"}>${cost ? `Upgrade +${cost.next}` : `+${MAX_UPGRADE}`}</button>
-      </div>`;
+        <div class="stock-icon">${itemIconHtml(getItem(stack.itemId).icon, 26)}</div>
+        <div class="bench-body">
+          <div class="stock-name rarity-${getItem(stack.itemId).rarity}">${esc(itemDisplayName(stack))}</div>
+          <span class="bench-slot">${esc(slotLabels[slot] ?? String(slot))}</span>
+          ${cost
+            ? `<div class="cost-chips">
+                <span class="cost-chip${goldOk ? " ok" : " short"}">${formatNumber(cost.gold)} g</span>
+                <span class="cost-chip${oreOk ? " ok" : " short"}">${cost.ore}x iron ore</span>
+              </div>`
+            : `<div class="cost-chips"><span class="cost-chip ok">Masterwork</span></div>`}
+        </div>
+        <div class="stock-buy">
+          <button class="btn small" data-action="upgrade-slot" data-slot="${slot}" ${ready ? "" : "disabled"}>${cost ? `Temper +${cost.next}` : "Maxed"}</button>
+        </div>
+      </article>`;
     })
     .join("");
-  const recipes = RECIPES.map((recipe) => {
-    const materials = recipe.materials.map((material) => `${session.countItem(material.itemId)}/${material.qty} ${esc(getItem(material.itemId).name)}`).join(" · ");
+  return `<div class="bench-col">
+    <header class="bench-head"><h5>What you wear</h5><span class="small muted">Each temper is permanent.</span></header>
+    <div class="bench-list">${rows || `<div class="small muted">Equip a weapon or a piece of armour and it can be tempered here.</div>`}</div>
+  </div>`;
+}
+
+/** The recipes, with a chip per material so you see the one you are short of. */
+function forgeRecipesHtml(session: GameSession): string {
+  const rows = RECIPES.map((recipe) => {
     const result = getItem(recipe.resultItemId);
-    const canCraft = session.save.gold >= recipe.gold
-      && recipe.materials.every((material) => session.countItem(material.itemId) >= material.qty)
+    const goldOk = session.save.gold >= recipe.gold;
+    const materialsOk = recipe.materials.every((material) => session.countItem(material.itemId) >= material.qty);
+    const canCraft = goldOk
+      && materialsOk
       && session.canAdd(recipe.resultItemId, 1)
       && canClassUse(result, session.save.classId)
       && (!result.requiresLevel || session.save.level >= result.requiresLevel);
-    return `<div class="forge-row">
-      ${itemIconHtml(getItem(recipe.resultItemId).icon, 26)}
-      <div>
-        <div class="name">${esc(recipe.name)}</div>
-        <div class="sub">${materials} · ${recipe.gold}g</div>
-        <div class="sub muted">Gather in ${esc(recipe.zone)}</div>
+    const chips = recipe.materials
+      .map((material) => {
+        const have = session.countItem(material.itemId);
+        const ok = have >= material.qty;
+        return `<span class="cost-chip${ok ? " ok" : " short"}">${have}/${material.qty} ${esc(getItem(material.itemId).name)}</span>`;
+      })
+      .join("");
+    return `<article class="bench-row${canCraft ? " ready" : ""}">
+      <div class="stock-icon">${itemIconHtml(result.icon, 26)}</div>
+      <div class="bench-body">
+        <div class="stock-name rarity-${result.rarity}">${esc(recipe.name)} <span class="tag r-${result.rarity}">${esc(result.rarity)}</span></div>
+        <span class="bench-slot">Gathered in ${esc(recipe.zone)}</span>
+        <div class="cost-chips">${chips}<span class="cost-chip${goldOk ? " ok" : " short"}">${formatNumber(recipe.gold)} g</span></div>
       </div>
-      <button class="btn small" data-action="craft" data-recipe="${recipe.id}" ${canCraft ? "" : "disabled"}>Craft</button>
-    </div>`;
+      <div class="stock-buy">
+        <button class="btn small" data-action="craft" data-recipe="${esc(recipe.id)}" ${canCraft ? "" : "disabled"}>Craft</button>
+      </div>
+    </article>`;
   }).join("");
-  return `<div class="forge-section">
-    <div class="section-title">Borin's Forge · Upgrade equipment</div>
-    <div class="forge-list">${upgrades || `<div class="small muted">Equip a weapon or armor to upgrade it.</div>`}</div>
-    <div class="section-title" style="margin-top:14px">Crafting recipes</div>
-    <div class="forge-list">${recipes}</div>
+  return `<div class="bench-col">
+    <header class="bench-head"><h5>Recipes</h5><span class="small muted">Bring the ore and the coin.</span></header>
+    <div class="bench-list">${rows}</div>
   </div>`;
+}
+
+/** The forge's second half: temper what you wear, or forge something new. */
+function forgeSectionHtml(session: GameSession): string {
+  return `<section class="shop-card bench-card">
+    <header class="shop-card-head">
+      <div>
+        <h4>Borin's bench <span class="shop-count">${session.countItem("iron_ore")} iron ore</span></h4>
+        <span class="small muted">Ore comes from salvage and from the wilds.</span>
+      </div>
+    </header>
+    <div class="bench-columns">
+      ${forgeUpgradesHtml(session)}
+      ${forgeRecipesHtml(session)}
+    </div>
+  </section>`;
 }
 
 export function shopPanelHtml(session: GameSession, shopId: string): string {
   const shop = SHOPS[shopId];
   if (!shop) return `<div class="empty-state">This shop is closed.</div>`;
-  const buy = shop.itemIds.map((id) => shopRow(session, id)).join("");
-  const sellGrid = session.save.inventory
-    .map((stack, i) => {
-      if (!stack) return `<div class="inv-slot empty"></div>`;
-      const def = getItem(stack.itemId);
-      return `<button class="inv-slot" data-action="sell-slot" data-slot="${i}" title="Sell ${esc(itemDisplayName(stack))} for ${itemSellValue(stack)}g">
-        <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${itemIconHtml(def.icon, 32)}</span>
-        ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
-      </button>`;
-    })
-    .join("");
-  return `<div class="shop-columns">
-    <div>
-      <div class="section-title">${esc(shop.name)} · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
-      ${session.shopDiscountPercent > 0 ? `<div class="small" style="color:var(--good)">Trust discount: ${session.shopDiscountPercent}% off everything here.</div>` : ""}
-      <div class="shop-list">${buy}</div>
+  return `<div class="shop-wrap">
+    ${shopHeroHtml(session, shopId, shop.name)}
+    <div class="shop-grid">
+      ${shopStockHtml(session, shopId, shop.name)}
+      ${shopSellHtml(session)}
     </div>
-    <div>
-      <div class="section-title">Sell from backpack</div>
-      <div class="inv-grid">${sellGrid}</div>
-      <div class="bag-tools">
-        <button class="btn ghost small" data-action="sell-materials">Sell all materials</button>
-        <button class="btn ghost small" data-action="sell-junk">Sell all junk gear</button>
-        <span class="small muted">Click an item to sell one</span>
-      </div>
-      <div class="small muted" style="margin-top:6px">Equipped gear cannot be sold here, and quest items stay in your pack.</div>
-    </div>
-  </div>
-  ${shopId === "forge" ? forgeSectionHtml(session) : ""}`;
+    ${shopId === "forge" ? forgeSectionHtml(session) : ""}
+  </div>`;
 }
 
+
+/** The village vault: a second grid that survives the trip into the wilds. */
+/** The village vault: a second grid that survives the trip into the wilds. */
 /** The village vault: a second grid that survives the trip into the wilds. */
 export function stashPanelHtml(session: GameSession): string {
+  const save = session.save;
   const capacity = session.stashCapacity;
   const used = session.stashUsed;
   const upgrade = session.stashUpgradeCost();
+  const fillPct = capacity > 0 ? Math.round((used / capacity) * 100) : 0;
   const vaultCells = Array.from({ length: capacity }, (_, index) => {
-    const stack = session.save.stash[index] ?? null;
+    const stack = save.stash[index] ?? null;
     if (!stack) return `<div class="inv-slot empty" aria-hidden="true"></div>`;
     const def = getItem(stack.itemId);
     return `<button class="inv-slot" data-action="stash-withdraw" data-slot="${index}" title="Take ${esc(itemDisplayName(stack))}">
@@ -591,7 +778,7 @@ export function stashPanelHtml(session: GameSession): string {
       ${stack.qty > 1 ? `<span class="qty">${stack.qty}</span>` : ""}
     </button>`;
   }).join("");
-  const bagCells = session.save.inventory.map((stack, index) => {
+  const bagCells = save.inventory.map((stack, index) => {
     if (!stack) return `<div class="inv-slot empty" aria-hidden="true"></div>`;
     const def = getItem(stack.itemId);
     return `<button class="inv-slot" data-action="stash-deposit" data-slot="${index}" title="Store ${esc(itemDisplayName(stack))}">
@@ -600,24 +787,65 @@ export function stashPanelHtml(session: GameSession): string {
     </button>`;
   }).join("");
   const nextCapacity = upgrade ? STASH_CAPACITIES[upgrade.nextTier] : capacity;
-  const upgradeHtml = upgrade
-    ? `<button class="btn small" data-action="stash-upgrade" ${session.save.gold >= upgrade.gold ? "" : "disabled"}>Expand to ${nextCapacity} squares · ${upgrade.gold}g</button>`
-    : `<span class="small muted">The vault is fully expanded.</span>`;
-  return `<div class="panel-columns">
-    <div>
-      <div class="section-title">Vault · ${used}/${capacity} squares · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
-      <div class="bag-tools">
+  const canAfford = upgrade ? save.gold >= upgrade.gold : false;
+  const upgradeCard = upgrade
+    ? `<section class="inv-card">
+          <div class="inv-card-head">
+            <strong>Next size</strong>
+            <span class="inv-card-note">${capacity} to ${nextCapacity} squares</span>
+          </div>
+          <div class="small muted">A bigger vault keeps what your pack cannot carry. Paid once, kept forever.</div>
+          <div class="detail-actions">
+            <button class="btn small" data-action="stash-upgrade" ${canAfford ? "" : "disabled"}>Expand to ${nextCapacity} squares \u00b7 ${upgrade.gold}g</button>
+            ${canAfford ? "" : `<span class="small" style="color:#ff9fa0;align-self:center">You need ${formatNumber(upgrade.gold - save.gold)} more gold</span>`}
+          </div>
+        </section>`
+    : `<section class="inv-card">
+          <div class="inv-card-head">
+            <strong>Next size</strong>
+            <span class="inv-card-note">Fully expanded</span>
+          </div>
+          <div class="small muted">The vault cannot grow any further. ${capacity} squares is the whole shelf.</div>
+        </section>`;
+  return `<div class="inv-sheet">
+    <header class="inv-hero">
+      <div class="inv-hero-portrait">${classPortrait(save.classId, 56)}</div>
+      <div class="inv-hero-body">
+        <strong>The village vault</strong>
+        <span class="small muted">${esc(getClass(save.classId).name)} \u00b7 Level ${save.level} \u00b7 ${used} of ${capacity} squares stored</span>
+        <div class="inv-hero-chips">
+          <span class="settings-chip gold">${formatNumber(save.gold)} gold</span>
+          <span class="settings-chip">${session.freeSlots()} free squares in the pack</span>
+          <span class="settings-chip">${upgrade ? `Next size ${nextCapacity}` : "Fully expanded"}</span>
+        </div>
+      </div>
+      <div class="bag-tools inv-hero-tools">
         <button class="btn ghost small" data-action="stash-sort">Tidy vault</button>
         <button class="btn ghost small" data-action="stash-materials">Deposit materials</button>
-        ${upgradeHtml}
       </div>
-      <div class="inv-grid">${vaultCells}</div>
-      <div class="small muted" style="margin-top:8px">Click an item to take it back. The vault keeps what your pack cannot carry.</div>
-    </div>
-    <div>
-      <div class="section-title">Backpack · ${session.freeSlots()} free squares</div>
-      <div class="inv-grid">${bagCells}</div>
-      <div class="small muted" style="margin-top:8px">Click an item to store it. Quest counters only count what you carry, so take quest items back out before turning them in.</div>
+    </header>
+    <div class="panel-columns bag-layout">
+      <div class="bag-main">
+        <section class="inv-card">
+          <div class="inv-card-head">
+            <strong>In the vault</strong>
+            <span class="inv-card-note">${used} of ${capacity} squares \u00b7 click a piece to take it back</span>
+          </div>
+          <div class="bag-meter" role="progressbar" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${capacity}"><span style="width:${fillPct}%"></span></div>
+          <div class="inv-grid">${vaultCells}</div>
+        </section>
+      </div>
+      <div class="bag-detail">
+        <section class="inv-card">
+          <div class="inv-card-head">
+            <strong>In your pack</strong>
+            <span class="inv-card-note">${session.freeSlots()} free squares \u00b7 click a piece to store it</span>
+          </div>
+          <div class="inv-grid">${bagCells}</div>
+          <div class="small muted">Quest counters only count what you carry, so take quest items back out before turning them in.</div>
+        </section>
+        ${upgradeCard}
+      </div>
     </div>
   </div>`;
 }
@@ -860,36 +1088,74 @@ export function runRecapSection(session: GameSession, mode: "ring" | "descent" |
   </div>`;
 }
 
-/** Gideon's table: a price, a kind and the dice. */
+/**
+ * Gideon's table.
+ *
+ * One price, three crates, and the odds written out in plain words, so a player
+ * spends 260 gold knowing what that buys instead of hoping quietly. The dice
+ * still decide; the table just stops pretending it is a shop.
+ */
 export function gamblePanelHtml(session: GameSession, npcId: string): string {
   const status = session.gambleStatus;
   const npc = NPCS[npcId];
+  const colour = npc?.color ?? "#a06ad9";
   const canPay = status.gold >= status.price;
-  const strengths = status.kinds.map((kind) => `${kind.label.toLowerCase()}`).join(", ");
-  const rolls = status.rolls === 0
-    ? `<div class="small muted">No rolls yet. The crate has never been opened for you.</div>`
-    : `<div class="small muted">You have rolled ${status.rolls} time${status.rolls === 1 ? "" : "s"} and spent ${status.spent} gold at this table.</div>`;
-  return `<div class="npc-head">
-    ${charIconHtml(npc?.sprite ?? "merchant", 56)}
-    <div>
-      <h2 style="font-size:14px;color:${esc(npc?.color ?? "#7d4a9c")}">${esc(npc?.name ?? "Gideon the Gambler")}</h2>
-      <div class="muted">${esc(npc?.role ?? "Gambler")}</div>
+  const shortfall = Math.max(0, status.price - status.gold);
+  const rollsLine = status.rolls === 0
+    ? "The crate has never been opened for you."
+    : `${status.rolls} roll${status.rolls === 1 ? "" : "s"} so far, ${formatNumber(status.spent)} gold spent at this table.`;
+  const crates = status.kinds
+    .map((kind) => `<article class="crate-card${canPay ? "" : " locked"}">
+      <div class="crate-mark" aria-hidden="true">?</div>
+      <div class="crate-body">
+        <strong>${esc(kind.label)}</strong>
+        <span class="crate-note">${esc(kind.blurb)}</span>
+      </div>
+      <div class="stock-buy">
+        <span class="stock-price${canPay ? "" : " short"}">${goldAmount(status.price)}</span>
+        <button class="btn small" data-action="gamble" data-kind="${esc(kind.id)}" ${canPay ? "" : "disabled"}>${canPay ? "Roll" : "Need gold"}</button>
+      </div>
+    </article>`)
+    .join("");
+  return `<div class="shop-wrap">
+    <header class="shop-hero gamble-hero" style="--shop-color:${esc(colour)}">
+      <div class="shop-hero-portrait">${charIconHtml(npc?.sprite ?? "merchant", 54)}</div>
+      <div class="shop-hero-body">
+        <strong>${esc(npc?.name ?? "Gideon the Gambler")}</strong>
+        <span>${esc(npc?.role ?? "Gambler")} · The only crate in Eldoria with no lid</span>
+        <span class="shop-hero-line">"${esc(status.blurb)}"</span>
+      </div>
+      <div class="shop-hero-stats">
+        <div class="shop-stat gold"><span>Purse</span><strong>${formatNumber(status.gold)} g</strong></div>
+        <div class="shop-stat"><span>A roll</span><strong>${formatNumber(status.price)} g</strong></div>
+        <div class="shop-stat"><span>Streak luck</span><strong>${status.luck > 0 ? `+${status.luck}%` : "none"}</strong></div>
+      </div>
+    </header>
+    <section class="shop-card">
+      <header class="shop-card-head">
+        <div>
+          <h4>What the dice do <span class="shop-count">${esc(status.odds)}</span></h4>
+          <span class="small muted">${status.luck > 0
+            ? "Your kill streak bends the table a little toward the good end."
+            : "A long kill streak bends the table toward the good end."}</span>
+        </div>
+        ${canPay ? "" : `<span class="shop-perk short">You need ${formatNumber(shortfall)} g more</span>`}
+      </header>
+      <div class="odds-note">${esc(status.odds)}</div>
+    </section>
+    <section class="shop-card">
+      <header class="shop-card-head">
+        <div>
+          <h4>Three crates <span class="shop-count">${formatNumber(status.price)} g each</span></h4>
+          <span class="small muted">${esc(rollsLine)}</span>
+        </div>
+      </header>
+      <div class="crate-grid">${crates}</div>
+    </section>
+    <div class="gamble-foot">
+      <span class="small muted">Gideon keeps the coin either way, and you keep whatever comes out of the crate.</span>
+      <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
     </div>
-  </div>
-  <div class="dialogue">"${esc(status.blurb)}"</div>
-  <div class="arena-stats">
-    <div><span class="small muted">Price</span><strong>${status.price}g</strong></div>
-    <div><span class="small muted">Your coin</span><strong>${status.gold}g</strong></div>
-    <div><span class="small muted">Odds</span><strong>${esc(status.odds)}</strong></div>
-    <div><span class="small muted">Streak luck</span><strong>${status.luck > 0 ? `+${status.luck}%` : "none"}</strong></div>
-  </div>
-  <div style="display:grid;gap:8px;margin-top:10px">
-    ${status.kinds.map((kind) => `<div class="run-row"><span>${esc(kind.label)}<br><span class="small muted">${esc(kind.blurb)}</span></span><button class="btn small" data-action="gamble" data-kind="${esc(kind.id)}" ${canPay ? "" : "disabled"}>Roll ${status.price}g</button></div>`).join("")}
-  </div>
-  ${rolls}
-  <div class="small muted">Three crates, one price of ${GAMBLE_PRICE} gold: ${esc(strengths)}. ${esc(status.odds)}.</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-    <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
   </div>`;
 }
 
@@ -1087,31 +1353,19 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       )
       .join("")}
   </nav>`;
-  if (active.length === 0) {
-    return `${nav}
-      <div id="journal-quests" class="journal-empty">
-        <span class="journal-empty-icon" aria-hidden="true">\u275D</span>
-        <strong>No quests yet</strong>
-        <span class="small muted">Talk to Captain Rowan in the village, or Elara at the healers. Tracked quests also sit on the right of your HUD.</span>
-      </div>
-      ${journeySection(session)}
-      ${deedsSection(session)}
-      ${bloodMoonSection(session)}
-      ${runRecapSection(session, "descent")}
-    ${arenaSection(session)}
-    ${descentSection(session)}
-    ${seasonSection(session)}
-    ${rivalSection(session)}
-    ${bountySection(session)}
-      ${heroSection(session)}
-      ${masterySection(session)}
-      ${reactionSection(session)}
-      ${diarySection(session)}
-      ${travelSection(session)}
-      ${bestiarySection(session, bestiarySearch)}
-      ${loreSection}`;
-  }
-  const rows = active
+  const save = session.save;
+  const journey = session.journey;
+  // Hand-in first, then whatever is pinned, then the open work, then the repeats.
+  // A save keeps its own order; this only changes what the eye meets first.
+  const questRank = (state: (typeof active)[number]): number => {
+    const quest = QUESTS[state.id];
+    const finished = Boolean(quest) && state.completed && (quest.repeatable || state.completions === 0);
+    if (finished) return 0;
+    if (session.save.pinnedQuest === state.id) return 1;
+    return state.completions > 0 ? 3 : 2;
+  };
+  const rows = [...active]
+    .sort((a, b) => questRank(a) - questRank(b))
     .map((state) => {
       const quest = QUESTS[state.id];
       const giver = NPCS[quest.giverNpc]?.name ?? quest.giverNpc;
@@ -1122,6 +1376,7 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
         const need = "count" in objective ? objective.count : objective.kind === "explore" ? objective.zones.length : 1;
         return (state.progress[i] ?? 0) >= (need ?? 1);
       }).length;
+      const pct = Math.round((objectivesDone / Math.max(1, quest.objectives.length)) * 100);
       const stateChip = finished
         ? `<span class="quest-state ready">Ready to turn in</span>`
         : state.completions > 0
@@ -1138,41 +1393,67 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
         </header>
         <p class="qdesc">${esc(quest.description)}</p>
         <div class="quest-objectives">${objectives}</div>
+        <div class="quest-progress" role="progressbar" aria-valuenow="${objectivesDone}" aria-valuemin="0" aria-valuemax="${quest.objectives.length}"><span style="width:${pct}%"></span></div>
         <footer class="quest-row-foot">
           <span class="quest-reward">${formatNumber(quest.rewards.xp)} XP</span>
           <span class="quest-reward gold">${formatNumber(quest.rewards.gold)} gold</span>
-          <span class="small muted">${esc(giver)} · ${objectivesDone}/${quest.objectives.length} done${state.completions > 0 ? ` · x${state.completions}` : ""}</span>
+          <span class="small muted">${esc(giver)} \u00b7 ${objectivesDone}/${quest.objectives.length} done${state.completions > 0 ? ` \u00b7 x${state.completions}` : ""}</span>
           <button class="btn ghost small" data-action="pin-quest" data-quest="${esc(state.id)}">${pinned ? "Unpin" : "Pin to tracker"}</button>
         </footer>
       </div>`;
     })
     .join("");
-  return `${nav}
-    <section class="journal-card" id="journal-quests">
+  const questsCard =
+    active.length === 0
+      ? `<section class="journal-card" id="journal-quests">
       <header class="journal-card-head">
         <h3>Active quests</h3>
-        <span class="journal-card-count">${active.length} tracked${readyToTurnIn > 0 ? ` · ${readyToTurnIn} ready` : ""}</span>
+        <span class="journal-card-count">nothing tracked</span>
+      </header>
+      <div class="journal-empty">
+        <span class="journal-empty-icon" aria-hidden="true">\u275D</span>
+        <strong>No quests yet</strong>
+        <span class="small muted">Talk to Captain Rowan in the village, or Elara at the healers. Tracked quests also sit on the right of your HUD.</span>
+      </div>
+    </section>`
+      : `<section class="journal-card" id="journal-quests">
+      <header class="journal-card-head">
+        <h3>Active quests</h3>
+        <span class="journal-card-count">${active.length} tracked${readyToTurnIn > 0 ? ` \u00b7 ${readyToTurnIn} ready` : ""}</span>
       </header>
       <div class="quest-list">${rows}</div>
-    </section>
-    ${journeySection(session)}
-    ${deedsSection(session)}
-    ${bloodMoonSection(session)}
-    ${runRecapSection(session, "descent")}
-    ${arenaSection(session)}
-      ${descentSection(session)}
-      ${seasonSection(session)}
-          ${rivalSection(session)}
-    ${bountySection(session)}
-    ${heroSection(session)}
-    ${masterySection(session)}
-    ${reactionSection(session)}
-    ${loadoutsSection(session)}
-    ${diarySection(session)}
-    ${travelSection(session)}
-    ${bestiarySection(session, bestiarySearch)}
-    ${loreSection}
-    <div class="small muted">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>`;
+    </section>`;
+  // One strip answers the question the page is opened for: what is waiting on me?
+  const heroStrip = `<header class="inv-hero quest-hero">
+      <div class="inv-hero-portrait">${classPortrait(save.classId, 56)}</div>
+      <div class="inv-hero-body">
+        <strong>${esc(save.name)}</strong>
+        <span class="small muted">${esc(getClass(save.classId).name)} \u00b7 Level ${save.level} \u00b7 ${esc(session.zone.name)} \u00b7 ${esc(save.title)}</span>
+        <div class="inv-hero-chips">
+          <span class="settings-chip">${active.length} quest${active.length === 1 ? "" : "s"} tracked</span>
+          <span class="settings-chip${readyToTurnIn > 0 ? " gold" : ""}">${readyToTurnIn} ready to turn in</span>
+          <span class="settings-chip${bountyReady > 0 ? " gold" : ""}">${bountyReady} bount${bountyReady === 1 ? "y" : "ies"} ready</span>
+          <span class="settings-chip">${journey.points} deed points</span>
+        </div>
+      </div>
+    </header>`;
+  const group = (title: string, note: string, sections: string[]): string =>
+    `<div class="quest-group">
+      <div class="quest-group-head">
+        <span class="quest-group-title">${esc(title)}</span>
+        <span class="quest-group-note">${esc(note)}</span>
+      </div>
+      ${sections.filter(Boolean).join("")}
+    </div>`;
+  return `${nav}
+  <div class="quest-sheet">
+    ${heroStrip}
+    ${group("Work", "What to do next", [questsCard, bountySection(session), journeySection(session), deedsSection(session)])}
+    ${group("Trials", "The ring, the descent and the week", [bloodMoonSection(session), runRecapSection(session, "descent"), arenaSection(session), descentSection(session), seasonSection(session), rivalSection(session)])}
+    ${group("Your hero", "Numbers, sets and the diary", [heroSection(session), masterySection(session), reactionSection(session), loadoutsSection(session), diarySection(session)])}
+    ${group("Records", "Places, beasts and old stories", [travelSection(session), bestiarySection(session, bestiarySearch), loreSection])}
+    <div class="small muted quest-tip">Tip: quests with collect objectives count items in your backpack. Selling them before turning in can undo progress.</div>
+  </div>`;
 }
 
 /**
@@ -1634,36 +1915,96 @@ function blessingSection(session: GameSession): string {
  * One page with every control on it, opened with the ? key or the button in Settings.
  * It reads the live keybinds, so a rebound key shows up here too instead of lying.
  */
+/**
+ * One page with every control on it, opened with the ? key or the button in Settings.
+ * It reads the live keybinds, so a rebound key shows up here too instead of lying.
+ */
 export function controlsPanelHtml(preferences: GamePreferences): string {
   const keys = preferences.keybinds;
-  const rows: [string, string, string][] = [
-    ["Move", "Arrow keys", "Walk in any direction"],
-    ["Move", `W A S D (or ${keys.up} ${keys.left} ${keys.down} ${keys.right})`, "Aim follows the mouse"],
-    ["Basic attack", `${keys.attack} / Left mouse`, "Hold to keep swinging"],
-    ["Skills", "1 2 3 4 5", "Unlock as you level"],
-    ["Dodge", keys.dodge, "Brief invulnerability mid-roll"],
-    ["Potion 1", keys.quick1, "Drinks the best healing potion if empty"],
-    ["Potion 2", keys.quick2, "Drinks the best resource potion"],
-    ["Interact", keys.interact, "Talk, loot, gather, travel"],
-    ["Go home", "H", "Recall to the village. Not in a boss fight"],
-    ["Inventory", "I", "Bag, gear and quick slots"],
-    ["Journal", "Q", "Quests, bounties, bestiary, travel"],
-    ["Talents", "T", "Spend talent points"],
-    ["Map", "M", "Show or hide the minimap"],
-    ["Settings", "Esc", "Sound, interface, keybinds"],
-    ["This sheet", "?", "Every control, at any time"],
+  const groups: { title: string; note: string; rows: [string, string, string][] }[] = [
+    {
+      title: "Moving",
+      note: "Walk with either hand, dodge when a blow is coming",
+      rows: [
+        ["Walk", `Arrow keys or ${keys.up} ${keys.left} ${keys.down} ${keys.right}`, "Aim follows the mouse"],
+        ["Dodge", keys.dodge, "Brief invulnerability mid-roll"],
+      ],
+    },
+    {
+      title: "Fighting",
+      note: "The basic swing never runs out; the rest wait for you to level",
+      rows: [
+        ["Basic attack", `${keys.attack} / Left mouse`, "Hold to keep swinging"],
+        ["Skills", "1 2 3 4 5", "Unlock as you level"],
+      ],
+    },
+    {
+      title: "Using things",
+      note: "Potions first, then whatever is in front of you",
+      rows: [
+        ["Potion 1", keys.quick1, "Drinks the best healing potion if empty"],
+        ["Potion 2", keys.quick2, "Drinks the best resource potion"],
+        ["Interact", keys.interact, "Talk, loot, gather, travel"],
+      ],
+    },
+    {
+      title: "Getting around",
+      note: "The way home and the way you read the map",
+      rows: [
+        ["Go home", "H", "Recall to the village. Not in a boss fight"],
+        ["Map", "M", "Show or hide the minimap"],
+      ],
+    },
+    {
+      title: "Screens",
+      note: "Every page, and the one you are reading now",
+      rows: [
+        ["Inventory", "I", "Bag, gear and quick slots"],
+        ["Journal", "Q", "Quests, bounties, bestiary, travel"],
+        ["Talents", "T", "Spend talent points"],
+        ["Settings", "Esc", "Sound, interface, keybinds"],
+        ["This sheet", "?", "Every control, at any time"],
+      ],
+    },
   ];
-  const list = rows
-    .map(([what, key, note]) => `<div class="control-row">
+  const cards = groups
+    .map((group) => {
+      const list = group.rows
+        .map(([what, key, note]) => `<div class="control-row">
         <span class="control-what">${esc(what)}</span>
         <span class="control-key">${esc(key)}</span>
         <span class="small muted">${esc(note)}</span>
       </div>`)
+        .join("");
+      return `<section class="inv-card controls-group">
+        <div class="inv-card-head">
+          <strong>${esc(group.title)}</strong>
+          <span class="inv-card-note">${esc(group.note)}</span>
+        </div>
+        <div class="control-list">${list}</div>
+      </section>`;
+    })
     .join("");
-  return `<div class="controls-sheet">
-    <div class="small muted">Everything you can press, in one place. Change keys in Settings.</div>
-    <div class="control-list">${list}</div>
-    <div class="small muted">A gamepad works too: left stick moves, right stick aims, A attacks, B dodges, X interacts. Rebind the buttons in Settings.</div>
+  return `<div class="inv-sheet controls-sheet">
+    <header class="inv-hero">
+      <div class="inv-hero-portrait" style="display:grid;place-items:center;font-size:22px">?</div>
+      <div class="inv-hero-body">
+        <strong>Every control</strong>
+        <span class="small muted">Read live from your keybinds, so a rebound key shows up here too. Change keys in Settings.</span>
+        <div class="inv-hero-chips">
+          <span class="settings-chip">${groups.reduce((n, group) => n + group.rows.length, 0)} controls</span>
+          <span class="settings-chip">Keyboard, mouse and gamepad</span>
+        </div>
+      </div>
+    </header>
+    ${cards}
+    <section class="inv-card controls-group">
+      <div class="inv-card-head">
+        <strong>With a gamepad</strong>
+        <span class="inv-card-note">Left stick moves, right stick aims</span>
+      </div>
+      <div class="small muted">A gamepad works too: left stick moves, right stick aims, A attacks, B dodges, X interacts. Rebind the buttons in Settings.</div>
+    </section>
   </div>`;
 }
 
@@ -1752,77 +2093,189 @@ export function settingsPanelHtml(
         </div>
       </div>
     </header>` : ""}
-    <div class="setting-row">
-      <div class="setting-label"><strong>Sound</strong><div class="small muted">Synthesized effects and procedural music</div></div>
-      <div class="settings-controls">
-        <label class="small">Effects
-          <input type="range" id="volume-range" min="0" max="100" value="${Math.round(volume * 100)}" />
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <strong>Sound</strong>
+        <span class="settings-group-note">Synthesized effects and procedural music</span>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Effects</strong>
+          <div class="small muted">Swords, spells, pickups and menu clicks.</div>
+        </div>
+        <input class="setting-slider" type="range" id="volume-range" min="0" max="100" value="${Math.round(volume * 100)}" aria-label="Effects volume" />
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Music</strong>
+          <div class="small muted">The theme that follows each zone.</div>
+        </div>
+        <input class="setting-slider" type="range" id="music-range" min="0" max="100" value="${Math.round(musicVolume * 100)}" aria-label="Music volume" />
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Mute effects</strong>
+          <div class="small muted">Silences sound effects but keeps the music.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="mute-toggle" ${muted ? "checked" : ""} aria-label="Mute effects" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small">Music
-          <input type="range" id="music-range" min="0" max="100" value="${Math.round(musicVolume * 100)}" />
-        </label>
-        <label class="small"><input type="checkbox" id="mute-toggle" ${muted ? "checked" : ""} /> Mute effects</label>
       </div>
     </div>
-    <div class="setting-row">
-      <div class="setting-label"><strong>Interface</strong><div class="small muted">Scale text and HUD without changing the world</div></div>
-      <div class="settings-controls">
-        <label class="small">UI scale
-          <select id="ui-scale">
-            <option value="1" ${preferences.uiScale === 1 ? "selected" : ""}>100%</option>
-            <option value="1.25" ${preferences.uiScale === 1.25 ? "selected" : ""}>125%</option>
-            <option value="1.5" ${preferences.uiScale === 1.5 ? "selected" : ""}>150%</option>
-          </select>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <strong>Screen</strong>
+        <span class="settings-group-note">How the world and the panels are drawn</span>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>UI scale</strong>
+          <div class="small muted">HUD, buttons and panels. The world stays the same size.</div>
+        </div>
+        <select id="ui-scale" class="setting-select" aria-label="UI scale">
+          <option value="1" ${preferences.uiScale === 1 ? "selected" : ""}>100%</option>
+          <option value="1.25" ${preferences.uiScale === 1.25 ? "selected" : ""}>125%</option>
+          <option value="1.5" ${preferences.uiScale === 1.5 ? "selected" : ""}>150%</option>
+        </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Reading text</strong>
+          <div class="small muted">The small print in logs, quests and tooltips.</div>
+        </div>
+        <select id="text-size-select" class="setting-select" aria-label="Reading text">
+          <option value="1" ${preferences.textSize === 1 ? "selected" : ""}>Normal</option>
+          <option value="1.15" ${preferences.textSize === 1.15 ? "selected" : ""}>Large</option>
+          <option value="1.3" ${preferences.textSize === 1.3 ? "selected" : ""}>Larger</option>
+        </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Camera zoom</strong>
+          <div class="small muted">Wide shows more of the map; Close shows more detail.</div>
+        </div>
+        <select id="zoom-select" class="setting-select" aria-label="Camera zoom">
+          <option value="1.5" ${preferences.cameraZoom === 1.5 ? "selected" : ""}>Wide</option>
+          <option value="2" ${preferences.cameraZoom === 2 ? "selected" : ""}>Normal</option>
+          <option value="2.5" ${preferences.cameraZoom === 2.5 ? "selected" : ""}>Close</option>
+        </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Brightness</strong>
+          <div class="small muted">Lifts a dark room on a bright screen.</div>
+        </div>
+        <select id="brightness-select" class="setting-select" aria-label="Brightness">
+          <option value="1" ${preferences.brightness === 1 ? "selected" : ""}>Normal</option>
+          <option value="1.2" ${preferences.brightness === 1.2 ? "selected" : ""}>Brighter</option>
+          <option value="1.4" ${preferences.brightness === 1.4 ? "selected" : ""}>Brightest</option>
+        </select>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <strong>Comfort and access</strong>
+        <span class="settings-group-note">For tired eyes, weak colour vision and motion sickness</span>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>High contrast</strong>
+          <div class="small muted">Crisper lines and brighter text everywhere.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="contrast-toggle" ${preferences.highContrast ? "checked" : ""} aria-label="High contrast" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small"><input type="checkbox" id="contrast-toggle" ${preferences.highContrast ? "checked" : ""} /> High contrast</label>
-        <label class="small">Reading text
-          <select id="text-size-select">
-            <option value="1" ${preferences.textSize === 1 ? "selected" : ""}>Normal</option>
-            <option value="1.15" ${preferences.textSize === 1.15 ? "selected" : ""}>Large</option>
-            <option value="1.3" ${preferences.textSize === 1.3 ? "selected" : ""}>Larger</option>
-          </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Colours</strong>
+          <div class="small muted">Swaps the red and green pair for colours that stay apart.</div>
+        </div>
+        <select id="color-blind-select" class="setting-select" aria-label="Colours">
+          <option value="normal" ${preferences.colorBlind === "normal" ? "selected" : ""}>Default</option>
+          <option value="protan" ${preferences.colorBlind === "protan" ? "selected" : ""}>Red-weak friendly</option>
+          <option value="deutan" ${preferences.colorBlind === "deutan" ? "selected" : ""}>Green-weak friendly</option>
+        </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Reduce motion</strong>
+          <div class="small muted">No shakes, flashes or slow-motion on a boss kill.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="motion-toggle" ${preferences.reducedMotion ? "checked" : ""} aria-label="Reduce motion" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small">Colours
-          <select id="color-blind-select">
-            <option value="normal" ${preferences.colorBlind === "normal" ? "selected" : ""}>Default</option>
-            <option value="protan" ${preferences.colorBlind === "protan" ? "selected" : ""}>Red-weak friendly</option>
-            <option value="deutan" ${preferences.colorBlind === "deutan" ? "selected" : ""}>Green-weak friendly</option>
-          </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Screen shake</strong>
+          <div class="small muted">A small jolt when you take a hit.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="shake-toggle" ${preferences.screenShake ? "checked" : ""} aria-label="Screen shake" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small"><input type="checkbox" id="motion-toggle" ${preferences.reducedMotion ? "checked" : ""} /> Reduce motion</label>
-        <label class="small"><input type="checkbox" id="damage-toggle" ${preferences.showDamage ? "checked" : ""} /> Floating damage</label>
-        <label class="small"><input type="checkbox" id="shake-toggle" ${preferences.screenShake ? "checked" : ""} /> Screen shake</label>
-        <label class="small"><input type="checkbox" id="touch-toggle" ${preferences.touchControls ? "checked" : ""} /> Touch controls</label>
-        <label class="small">Camera zoom
-          <select id="zoom-select">
-            <option value="1.5" ${preferences.cameraZoom === 1.5 ? "selected" : ""}>Wide</option>
-            <option value="2" ${preferences.cameraZoom === 2 ? "selected" : ""}>Normal</option>
-            <option value="2.5" ${preferences.cameraZoom === 2.5 ? "selected" : ""}>Close</option>
-          </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Floating damage</strong>
+          <div class="small muted">The numbers that rise off what you hit.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="damage-toggle" ${preferences.showDamage ? "checked" : ""} aria-label="Floating damage" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small">Effect size
-          <select id="effect-select">
-            <option value="0.5" ${preferences.effectIntensity === 0.5 ? "selected" : ""}>Subtle</option>
-            <option value="1" ${preferences.effectIntensity === 1 ? "selected" : ""}>Normal</option>
-            <option value="1.5" ${preferences.effectIntensity === 1.5 ? "selected" : ""}>Bold</option>
-          </select>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Effect size</strong>
+          <div class="small muted">How loud spells and bursts look on screen.</div>
+        </div>
+        <select id="effect-select" class="setting-select" aria-label="Effect size">
+          <option value="0.5" ${preferences.effectIntensity === 0.5 ? "selected" : ""}>Subtle</option>
+          <option value="1" ${preferences.effectIntensity === 1 ? "selected" : ""}>Normal</option>
+          <option value="1.5" ${preferences.effectIntensity === 1.5 ? "selected" : ""}>Bold</option>
+        </select>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <strong>Input and language</strong>
+        <span class="settings-group-note">How you touch the game, and what it says</span>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Touch controls</strong>
+          <div class="small muted">On-screen stick and buttons. Phones turn this on by themselves.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="touch-toggle" ${preferences.touchControls ? "checked" : ""} aria-label="Touch controls" />
+          <span class="setting-switch-track"></span>
         </label>
-        <label class="small">Brightness
-          <select id="brightness-select">
-            <option value="1" ${preferences.brightness === 1 ? "selected" : ""}>Normal</option>
-            <option value="1.2" ${preferences.brightness === 1.2 ? "selected" : ""}>Brighter</option>
-            <option value="1.4" ${preferences.brightness === 1.4 ? "selected" : ""}>Brightest</option>
-          </select>
-        </label>
-        <label class="small">Language
-          <select id="language-select">
-            <option value="en" ${preferences.language === "en" ? "selected" : ""}>English</option>
-            <option value="tl" ${preferences.language === "tl" ? "selected" : ""}>Tagalog</option>
-          </select>
-        </label>
-        <button class="btn ghost small" data-action="reset-tutorial">${t("btnShowTutorial")}</button>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Language</strong>
+          <div class="small muted">Menus and messages.</div>
+        </div>
+        <select id="language-select" class="setting-select" aria-label="Language">
+          <option value="en" ${preferences.language === "en" ? "selected" : ""}>English</option>
+          <option value="tl" ${preferences.language === "tl" ? "selected" : ""}>Tagalog</option>
+        </select>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-head">
+        <strong>Sheets and help</strong>
+        <span class="settings-group-note">The pages worth opening once</span>
+      </div>
+      <div class="settings-sheet-row">
         <button class="btn ghost small" data-action="open-controls">Controls sheet (?)</button>
         <button class="btn ghost small" data-action="open-update-board">Update board</button>
+        <button class="btn ghost small" data-action="reset-tutorial">${t("btnShowTutorial")}</button>
       </div>
     </div>
     <div class="setting-row">
@@ -2096,21 +2549,48 @@ export function runewordSection(session: GameSession): string {
 }
 
 export function memorialSection(entries: MemorialEntry[]): string {
-  if (entries.length === 0) {
-    return `<section class="panel-section"><h3>Memorial Wall</h3><p class="small muted">No hardcore hero has fallen here yet. Make one at the character screen and the wall will remember them.</p></section>`;
+  const count = entries.length;
+  if (count === 0) {
+    return `<section class="inv-card memorial-card">
+      <div class="inv-card-head">
+        <strong>Memorial Wall</strong>
+        <span class="inv-card-note">Nobody has fallen yet</span>
+      </div>
+      <div class="small muted">Hardcore heroes die for good. Make one at the character screen and the wall will remember them here.</div>
+    </section>`;
   }
+  const deepest = entries.reduce((best, entry) => Math.max(best, entry.level), 0);
   const rows = [...entries]
     .sort((a, b) => b.at - a.at)
     .slice(0, 20)
     .map((entry) => `<div class="memorial-row">
-      <div><strong>${esc(entry.name)}</strong><div class="small muted">${esc(classDef(entry.classId)?.name ?? entry.classId)} • Level ${entry.level} • ${esc(entry.zone)}</div></div>
-      <div class="small muted">${entry.killer ? `Fell to ${esc(entry.killer)}` : "Fell in the dark"} • ${entry.bosses} boss${entry.bosses === 1 ? "" : "es"} • ${formatTime(entry.playtime)}</div>
+      <div class="memorial-body">
+        <strong>${esc(entry.name)}</strong>
+        <div class="small muted">${esc(classDef(entry.classId)?.name ?? entry.classId)} \u00b7 Level ${entry.level} \u00b7 ${esc(entry.zone)}</div>
+      </div>
+      <div class="memorial-meta small muted">${entry.killer ? `Fell to ${esc(entry.killer)}` : "Fell in the dark"} \u00b7 ${entry.bosses} boss${entry.bosses === 1 ? "" : "es"} \u00b7 ${formatTime(entry.playtime)}</div>
     </div>`).join("");
-  return `<section class="panel-section">
-    <h3>Memorial Wall</h3>
-    <p class="small muted">Hardcore heroes die for good. These names are kept here, with how far they got.</p>
-    <div class="memorial-list">${rows}</div>
-  </section>`;
+  return `<div class="inv-sheet">
+    <header class="inv-hero">
+      <div class="inv-hero-portrait" style="display:grid;place-items:center;font-size:22px">\u2020</div>
+      <div class="inv-hero-body">
+        <strong>Memorial Wall</strong>
+        <span class="small muted">Hardcore heroes die for good. These names are kept here, with how far they got.</span>
+        <div class="inv-hero-chips">
+          <span class="settings-chip gold">${count} fallen</span>
+          <span class="settings-chip">Deepest level ${deepest}</span>
+          <span class="settings-chip">Newest first</span>
+        </div>
+      </div>
+    </header>
+    <section class="inv-card memorial-card">
+      <div class="inv-card-head">
+        <strong>Names kept</strong>
+        <span class="inv-card-note">Showing the newest ${Math.min(count, 20)} of ${count}</span>
+      </div>
+      <div class="memorial-list">${rows}</div>
+    </section>
+  </div>`;
 }
 
 export function itemRarityOrder(rarity: string): number {
