@@ -21,6 +21,26 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.14.0",
+    date: "December 2, 2026",
+    title: "The Town Ledger Update",
+    summary:
+      "Seven screens that were built one patch at a time finally speak the same language. The Journal has a grouped bar with badges for work that is waiting, the talent tree reads as a proper ladder, the village and the runeword book show progress you can see at a glance, your companion has a stage ladder and real gear slots, every villager opens on a portrait with their hearts showing, and Settings leads with your hero instead of a wall of sliders.",
+    changes: [
+      { tag: "improved", text: "The Journal bar is sorted into Work, Trials, Your hero and Records instead of sixteen links in a row, and a gold badge counts the quests ready to hand in and the bounties waiting to be collected." },
+      { tag: "improved", text: "Every quest is now a card with a title row, its objectives, then a footer showing what it pays and what you can do about it. Quests ready to turn in are marked with a gold edge, not just a line of text." },
+      { tag: "improved", text: "Talents read as a ladder down the page: a summary strip at the top, the class passive in its own card, then one tier per rung with a filled dot once a choice is taken and a clear tag on each option." },
+      { tag: "new", text: "Rebuild Eldoria opens with a progress bar and a row of effect chips for the attack, health, defence, experience, gold and shop discount the village is giving you right now." },
+      { tag: "improved", text: "Each building card shows its stages as a rail with the count beside it, then Now against Next, and the price turns red on the part you are short of." },
+      { tag: "new", text: "Your companion has a stage ladder across the top with the current stage lit and the levels to the next one counted out, so the slide from Hatchling to Elder is something you can watch." },
+      { tag: "improved", text: "Collar and charm are real gear slots that say what is worn, and every runeword shows how close its three gems are with a bar and a ready count." },
+      { tag: "improved", text: "Every villager opens on a portrait strip with their name in their own colour and their hearts underneath, a proper quoted line, and their quests and training sorted into cards." },
+      { tag: "improved", text: "Training shows each class ability with its icon and an Unlocked tag, so a level-up is visible instead of a line of small text." },
+      { tag: "improved", text: "Settings starts with a strip showing your hero, class, level, zone, difficulty, Torment tier and gold, and every row is a bordered card with a proper label." },
+      { tag: "fixed", text: "The separator and icon characters in these panels were double-encoded and showed as broken boxes and stray letters. They are clean now, on every screen." },
+    ],
+  },
+  {
     version: "1.13.0",
     date: "November 25, 2026",
     title: "The Field Kit Update",

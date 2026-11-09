@@ -5098,3 +5098,946 @@ html[data-contrast="high"] .journal-nav a {
 .gear-card.rarity-legendary .gear-item-name {
   color: #ef9c3a;
 }
+
+/* ---- Panel redesign: journal, talents, village, companion, runewords, villagers, settings ---- */
+
+/* The journal's top bar is grouped by what the player is doing, not one long row. */
+.journal-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.journal-nav-title {
+  font-family: "Press Start 2P", monospace;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding-left: 2px;
+}
+
+.journal-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.journal-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1a1520;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.journal-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+  padding: 22px 16px;
+  margin: 10px 0;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.journal-empty-icon {
+  font-size: 26px;
+  color: var(--gold);
+  opacity: 0.7;
+}
+
+.journal-card {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+  display: grid;
+  gap: 10px;
+}
+
+.journal-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.journal-card-head h3 {
+  margin: 0;
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.journal-card-count {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* One quest is a card now: title row, objectives, then a footer of rewards and actions. */
+.quest-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quest-row {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.quest-row.ready {
+  border-left-color: var(--gold);
+  background: rgba(232, 192, 90, 0.08);
+}
+
+.quest-row.done {
+  border-left-color: var(--green);
+  opacity: 0.85;
+}
+
+.quest-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.quest-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.quest-row-title strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.quest-pin {
+  color: var(--gold);
+  font-size: 10px;
+}
+
+.quest-level {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.quest-state {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.quest-state.ready {
+  border-color: rgba(232, 192, 90, 0.6);
+  background: rgba(232, 192, 90, 0.16);
+  color: var(--gold);
+}
+
+.quest-state.done {
+  border-color: rgba(105, 199, 121, 0.5);
+  color: var(--green);
+}
+
+.quest-state.dim {
+  opacity: 0.6;
+}
+
+.quest-objectives {
+  display: grid;
+  gap: 3px;
+}
+
+.quest-row-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.quest-reward {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+.quest-reward.gold {
+  color: var(--gold);
+}
+
+/* A shared shell for the town-side panels: a hero strip, a bar, then the cards. */
+.panel-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.panel-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(232, 192, 90, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.panel-hero-body h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.panel-hero-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.panel-hero-stat {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  flex: none;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.panel-hero-stat strong {
+  font-family: "Press Start 2P", monospace;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.panel-hero-stat span {
+  font-size: 10px;
+}
+
+.panel-progress {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.panel-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--gold), #ffd479);
+  transition: width 0.25s ease;
+}
+
+.panel-subhead {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.effect-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.effect-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.effect-chip span {
+  color: var(--gold);
+}
+
+/* Rebuild Eldoria: a building card shows its stage rail, then now against next. */
+.village-title {
+  display: grid;
+  gap: 2px;
+}
+
+.village-title strong {
+  font-size: 13px;
+}
+
+.village-pill {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.village-pill.ready {
+  border-color: rgba(232, 192, 90, 0.6);
+  background: rgba(232, 192, 90, 0.16);
+  color: var(--gold);
+}
+
+.village-pill.done {
+  border-color: rgba(105, 199, 121, 0.5);
+  background: rgba(105, 199, 121, 0.12);
+  color: var(--green);
+}
+
+.village-stage-rail {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 8px 0 2px;
+}
+
+.village-stage {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.village-stage.on {
+  background: var(--building-color, var(--gold));
+}
+
+.village-stage-label {
+  margin-left: 6px;
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.village-desc {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.village-benefits {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.village-benefit {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.village-benefit-tag {
+  flex: none;
+  min-width: 30px;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.village-benefit.now span:last-child {
+  color: var(--muted);
+}
+
+.village-benefit.next span:last-child {
+  color: var(--ink);
+}
+
+.village-cost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.village-price {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.village-price.short {
+  color: var(--red);
+}
+
+/* Companion: stage ladder, gear slots, taught skill. */
+.pet-stage-ladder {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pet-stage {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  opacity: 0.6;
+}
+
+.pet-stage.reached {
+  opacity: 1;
+  border-color: rgba(232, 192, 90, 0.35);
+}
+
+.pet-stage.current {
+  border-color: var(--gold);
+  background: rgba(232, 192, 90, 0.12);
+}
+
+.pet-stage-name {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pet-stage-level {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.pet-slot {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.pet-slot.filled {
+  border-color: rgba(232, 192, 90, 0.4);
+}
+
+.pet-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+}
+
+.pet-slot-head > div {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pet-slot-icon {
+  font-size: 17px;
+  color: var(--gold);
+}
+
+.pet-slot-bag {
+  margin-top: 7px;
+  display: grid;
+  gap: 4px;
+}
+
+.skill-tag {
+  font-size: 10px;
+  padding: 2px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.skill-tag.on {
+  border-color: rgba(105, 199, 121, 0.55);
+  background: rgba(105, 199, 121, 0.12);
+  color: #c9f6d3;
+}
+
+.runeword-card .gem-chip b {
+  margin-left: 5px;
+  font-weight: 700;
+ }
+
+/* Villagers: a portrait strip, a quote, then quest and service cards. */
+.npc-stack {
+  display: grid;
+  gap: 11px;
+}
+
+.npc-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--npc-color, var(--gold));
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.npc-portrait {
+  flex: none;
+  padding: 6px;
+  border-radius: 8px;
+  background: #14111c;
+  border: 1px solid var(--line);
+}
+
+.npc-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.npc-identity strong {
+  font-size: 15px;
+  color: var(--npc-color, var(--gold));
+}
+
+.npc-role {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.npc-hearts {
+  margin-top: 3px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #e2648a;
+}
+
+blockquote.dialogue {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid rgba(232, 192, 90, 0.5);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.npc-tones {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.tone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tone-btn.kind:hover {
+  border-color: rgba(226, 100, 138, 0.6);
+  background: rgba(226, 100, 138, 0.12);
+}
+
+.tone-btn.rude:hover {
+  border-color: rgba(217, 87, 87, 0.6);
+  background: rgba(217, 87, 87, 0.12);
+}
+
+.npc-card {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.npc-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 7px;
+}
+
+.npc-card-head h4 {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.npc-card-note {
+  line-height: 1.5;
+}
+
+.npc-footer {
+  display: grid;
+  gap: 8px;
+  padding-top: 3px;
+}
+
+.npc-discount {
+  align-self: center;
+  color: var(--green);
+}
+
+.ability-unlock-list {
+  display: grid;
+  gap: 5px;
+}
+
+.ability-unlock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  opacity: 0.65;
+}
+
+.ability-unlock.on {
+  opacity: 1;
+  border-color: rgba(105, 199, 121, 0.35);
+}
+
+.ability-unlock strong {
+  flex: 1;
+  font-size: 11px;
+  min-width: 0;
+}
+
+.ability-unlock-icon {
+  flex: none;
+  display: inline-flex;
+}
+
+.ability-unlock-tag {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.ability-unlock-tag.on {
+  color: var(--green);
+}
+
+/* Settings: who you are at the top, then clean label/control rows. */
+.settings-hero {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(232, 192, 90, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.settings-hero-portrait {
+  flex: none;
+  padding: 5px;
+  border-radius: 8px;
+  background: #14111c;
+  border: 1px solid var(--line);
+}
+
+.settings-hero-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-hero-body strong {
+  font-size: 14px;
+}
+
+.settings-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.settings-chip {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.settings-chip.gold {
+  border-color: rgba(232, 192, 90, 0.5);
+  color: var(--gold);
+}
+
+.setting-label {
+  min-width: 0;
+}
+
+.setting-label strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.setting-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Every section heading in the journal and the town panels uses this one style now. */
+.qtitle {
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  line-height: 1.5;
+}
+
+/* Talents: summary strip, the class passive card, then a ladder of tiers. */
+.talent-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.talent-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.talent-sum-cell {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.talent-sum-cell strong {
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.talent-passive-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 6px;
+}
+
+.talent-passive-icon {
+  font-size: 17px;
+  color: var(--gold);
+}
+
+.talent-stat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.talent-stat-chip {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(232, 192, 90, 0.35);
+  background: rgba(232, 192, 90, 0.08);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.talent-hint {
+  line-height: 1.5;
+}
+
+.talent-tag {
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.talent-tag.on {
+  border-color: rgba(232, 192, 90, 0.6);
+  background: rgba(232, 192, 90, 0.16);
+  color: var(--gold);
+}
+
+.talent-tag.ready {
+  border-color: rgba(105, 199, 121, 0.5);
+  color: var(--green);
+}
+
+.talent-tag.off,
+.talent-tag.dim {
+  opacity: 0.7;
+}
+
+.talent-tier {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  border-left: 0;
+  padding-left: 0;
+}
+
+.talent-tier-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 3px;
+}
+
+.talent-tier-rail::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: -20px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.talent-tier-dot {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #15121d;
+}
+
+.talent-tier.unlocked .talent-tier-dot {
+  border-color: var(--gold);
+}
+
+.talent-tier.filled .talent-tier-dot {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.talent-tier-body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.talent-tier-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.talent-tier-name {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.talent-tier-state {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.talent-tier.locked .talent-tier-body {
+  opacity: 0.75;
+}
+
+.settings-row-static {
+  align-items: flex-start;
+}
+
+.settings-row-static .setting-label {
+  flex: none;
+  min-width: 150px;
+}
+
+@media (max-width: 560px) {
+  .setting-row {
+    align-items: flex-start;
+  }
+
+  .settings-row-static .setting-label {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .panel-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .panel-hero-stat {
+    justify-items: start;
+    text-align: left;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .pet-stage-ladder {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

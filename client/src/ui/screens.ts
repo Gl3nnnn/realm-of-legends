@@ -49,6 +49,7 @@ import {
   achievementReward,
   getGem,
   getPetGear,
+  PET_STAGES,
   socketCount,
   socketedGems,
   type CharacterSave,
@@ -103,10 +104,10 @@ export function characterSelectHtml(saves: CharacterSave[]): string {
         ${classPortrait(save.classId, 64)}
         <div>
           <h3>${esc(save.name)}${save.hardcore ? ` <span class="hc-badge" title="One death and this hero is gone for good">Hardcore</span>` : ""}</h3>
-          <div class="muted">${esc(def.name)} Â· Level ${save.level}</div>
+          <div class="muted">${esc(def.name)} · Level ${save.level}</div>
           <div class="meta">
             <span>${esc(ZONES[save.zone]?.name ?? save.zone)}</span>
-            <span>Playtime ${formatTime(save.playtime)} Â· ${esc(updated)}</span>
+            <span>Playtime ${formatTime(save.playtime)} · ${esc(updated)}</span>
             <span class="gold">${formatNumber(save.gold)} gold</span>
           </div>
           <div class="card-actions">
@@ -143,7 +144,7 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
       ${classPortrait(def.id, 52, "card-portrait")}
       <span>
         <span class="class-name">${esc(def.name)}</span>
-        <span class="class-role">${esc(def.role)} Â· ${esc(def.difficulty)}</span>
+        <span class="class-role">${esc(def.role)} · ${esc(def.difficulty)}</span>
         ${flagship ? `<span class="badge">Recommended</span>` : ""}
       </span>
     </button>`;
@@ -179,7 +180,7 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
     </div>
   </div>
   <div>
-    <div class="section-title">Choose a class â€” ${esc(def.name)}</div>
+    <div class="section-title">Choose a class — ${esc(def.name)}</div>
     <div class="muted small" style="margin-bottom:10px">${esc(def.description)}</div>
     <div class="class-filters">
       <label class="class-search"><span>${esc(t("classSearchLabel"))}</span><input type="search" data-class-search value="${esc(search)}" placeholder="${esc(t("classSearchPlaceholder"))}" aria-label="${esc(t("classSearchLabel"))}" /></label>
@@ -201,21 +202,21 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
     </div>
   </div>
   <div class="create-footer">
-    <span class="muted small">${esc(def.weapon)} Â· ${esc(def.resource)} user Â· ${esc(def.difficulty)} difficulty</span>
+    <span class="muted small">${esc(def.weapon)} · ${esc(def.resource)} user · ${esc(def.difficulty)} difficulty</span>
     <span class="muted small">Your hero is stored only in this browser. Export any time.</span>
   </div>`;
 }
 
 export function abilityBarHtml(session: GameSession): string {
   const basic = session.classInfo.basic;
-  const basicSlot = `<button class="ability-slot basic" data-cast="basic" title="${esc(basic.name)} â€” click or Space">
+  const basicSlot = `<button class="ability-slot basic" data-cast="basic" title="${esc(basic.name)} — click or Space">
     <span class="ability-key">LMB</span>
     <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${abilityIconHtml(basic.icon, 40)}</span>
   </button>`;
   const slots = session.classInfo.abilities.slice(0, 5).map((ability, i) => {
     const unlocked = session.save.level >= ability.unlockLevel;
     const notEnough = unlocked && session.save.resource < ability.cost;
-    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""}" data-cast="${unlocked ? ability.id : ""}" title="${esc(ability.name)} â€” ${esc(ability.description)}">
+    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""}" data-cast="${unlocked ? ability.id : ""}" title="${esc(ability.name)} — ${esc(ability.description)}">
       <span class="ability-key">${i + 1}</span>
       ${unlocked ? `<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${abilityIconHtml(ability.icon, 40)}</span>` : ""}
       ${ability.cost > 0 && unlocked ? `<span class="ability-cost">${ability.cost}</span>` : ""}
@@ -232,7 +233,7 @@ export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z"
     .map((itemId, index) => {
       const def = itemId ? getItem(itemId) : null;
       const qty = itemId ? session.countItem(itemId) : 0;
-      const label = def ? `${def.name} Â· ${keys[index]} to use` : "Empty quick slot Â· bind a potion in your inventory";
+      const label = def ? `${def.name} · ${keys[index]} to use` : "Empty quick slot · bind a potion in your inventory";
       return `<button class="quick-slot ${def ? "filled" : "empty"}" data-quickslot="${index}" title="${esc(label)}" aria-label="${esc(label)}">
         <span class="quick-key">${keys[index]}</span>
         ${def ? `<span class="quick-icon">${itemIconHtml(def.icon, 26)}</span>` : `<span class="quick-empty">+</span>`}
@@ -415,7 +416,7 @@ export function inventoryPanelHtml(
     const choices = session.backpackGems
       .map((row) => `<button class="gem-chip" style="border-color:${getGem(row.gemId)?.color ?? "#666"}" data-action="socket-gem" ${target} data-gem="${row.gemId}">Set ${esc(row.name)} (${row.qty})</button>`)
       .join("");
-    actions += `<div class="small muted">Sockets: ${setGems.length} of ${sockets} filled${open > 0 ? ` Â· ${open} open` : " Â· full"}</div>`;
+    actions += `<div class="small muted">Sockets: ${setGems.length} of ${sockets} filled${open > 0 ? ` · ${open} open` : " · full"}</div>`;
     if (setRows) actions += `<div class="gem-row">${setRows}</div>`;
     if (open > 0) {
       actions += choices
@@ -478,7 +479,7 @@ export function inventoryPanelHtml(
 }
 function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
-  const stats = statLines(def.stats).slice(0, 2).join(" Â· ");
+  const stats = statLines(def.stats).slice(0, 2).join(" · ");
   const price = Math.max(1, Math.ceil((def.buy ?? 0) * (1 - session.shopDiscountPercent / 100)));
   const canAfford = session.save.gold >= price;
   const canUse = canClassUse(def, session.save.classId);
@@ -510,14 +511,14 @@ function forgeSectionHtml(session: GameSession): string {
         ${itemIconHtml(getItem(stack.itemId).icon, 26)}
         <div>
           <div class="name">${esc(itemDisplayName(stack))}</div>
-          <div class="sub">${cost ? `${cost.gold} gold Â· ${cost.ore}x Iron Ore` : "Masterwork"}</div>
+          <div class="sub">${cost ? `${cost.gold} gold · ${cost.ore}x Iron Ore` : "Masterwork"}</div>
         </div>
         <button class="btn small" data-action="upgrade-slot" data-slot="${slot}" ${canAfford ? "" : "disabled"}>${cost ? `Upgrade +${cost.next}` : `+${MAX_UPGRADE}`}</button>
       </div>`;
     })
     .join("");
   const recipes = RECIPES.map((recipe) => {
-    const materials = recipe.materials.map((material) => `${session.countItem(material.itemId)}/${material.qty} ${esc(getItem(material.itemId).name)}`).join(" Â· ");
+    const materials = recipe.materials.map((material) => `${session.countItem(material.itemId)}/${material.qty} ${esc(getItem(material.itemId).name)}`).join(" · ");
     const result = getItem(recipe.resultItemId);
     const canCraft = session.save.gold >= recipe.gold
       && recipe.materials.every((material) => session.countItem(material.itemId) >= material.qty)
@@ -528,14 +529,14 @@ function forgeSectionHtml(session: GameSession): string {
       ${itemIconHtml(getItem(recipe.resultItemId).icon, 26)}
       <div>
         <div class="name">${esc(recipe.name)}</div>
-        <div class="sub">${materials} Â· ${recipe.gold}g</div>
+        <div class="sub">${materials} · ${recipe.gold}g</div>
         <div class="sub muted">Gather in ${esc(recipe.zone)}</div>
       </div>
       <button class="btn small" data-action="craft" data-recipe="${recipe.id}" ${canCraft ? "" : "disabled"}>Craft</button>
     </div>`;
   }).join("");
   return `<div class="forge-section">
-    <div class="section-title">Borin's Forge Â· Upgrade equipment</div>
+    <div class="section-title">Borin's Forge · Upgrade equipment</div>
     <div class="forge-list">${upgrades || `<div class="small muted">Equip a weapon or armor to upgrade it.</div>`}</div>
     <div class="section-title" style="margin-top:14px">Crafting recipes</div>
     <div class="forge-list">${recipes}</div>
@@ -558,7 +559,7 @@ export function shopPanelHtml(session: GameSession, shopId: string): string {
     .join("");
   return `<div class="shop-columns">
     <div>
-      <div class="section-title">${esc(shop.name)} Â· <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
+      <div class="section-title">${esc(shop.name)} · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
       ${session.shopDiscountPercent > 0 ? `<div class="small" style="color:var(--good)">Trust discount: ${session.shopDiscountPercent}% off everything here.</div>` : ""}
       <div class="shop-list">${buy}</div>
     </div>
@@ -600,11 +601,11 @@ export function stashPanelHtml(session: GameSession): string {
   }).join("");
   const nextCapacity = upgrade ? STASH_CAPACITIES[upgrade.nextTier] : capacity;
   const upgradeHtml = upgrade
-    ? `<button class="btn small" data-action="stash-upgrade" ${session.save.gold >= upgrade.gold ? "" : "disabled"}>Expand to ${nextCapacity} squares Â· ${upgrade.gold}g</button>`
+    ? `<button class="btn small" data-action="stash-upgrade" ${session.save.gold >= upgrade.gold ? "" : "disabled"}>Expand to ${nextCapacity} squares · ${upgrade.gold}g</button>`
     : `<span class="small muted">The vault is fully expanded.</span>`;
   return `<div class="panel-columns">
     <div>
-      <div class="section-title">Vault Â· ${used}/${capacity} squares Â· <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
+      <div class="section-title">Vault · ${used}/${capacity} squares · <span class="gold">${formatNumber(session.save.gold)} gold</span></div>
       <div class="bag-tools">
         <button class="btn ghost small" data-action="stash-sort">Tidy vault</button>
         <button class="btn ghost small" data-action="stash-materials">Deposit materials</button>
@@ -614,7 +615,7 @@ export function stashPanelHtml(session: GameSession): string {
       <div class="small muted" style="margin-top:8px">Click an item to take it back. The vault keeps what your pack cannot carry.</div>
     </div>
     <div>
-      <div class="section-title">Backpack Â· ${session.freeSlots()} free squares</div>
+      <div class="section-title">Backpack · ${session.freeSlots()} free squares</div>
       <div class="inv-grid">${bagCells}</div>
       <div class="small muted" style="margin-top:8px">Click an item to store it. Quest counters only count what you carry, so take quest items back out before turning them in.</div>
     </div>
@@ -633,7 +634,7 @@ function objectiveRow(questId: string, progress: number, objectiveIndex: number)
     (id) => MONSTERS[id]?.name ?? id,
     (id) => ITEMS[id]?.name ?? id,
   );
-  return `<div class="objective ${done ? "done" : ""}">${done ? "âœ“" : "â€¢"} ${esc(text)}</div>`;
+  return `<div class="objective ${done ? "done" : ""}">${done ? "✓" : "•"} ${esc(text)}</div>`;
 }
 
 /**
@@ -648,12 +649,12 @@ export function journeySection(session: GameSession): string {
   const stops = journey.stops
     .map((stop) => `<div class="journey-stop ${stop.state}">
         <div class="journey-stop-head"><span class="journey-level">${stop.level}</span><span class="journey-label">${esc(stop.label)}</span></div>
-        <div class="small muted">${stop.needed} points \u00b7¿½ ${stop.gold} gold \u00b7¿½ ${stop.state === "claimed" ? "claimed" : stop.state === "ready" ? "ready to claim" : "locked"}</div>
+        <div class="small muted">${stop.needed} points \u00b7 ${stop.gold} gold \u00b7 ${stop.state === "claimed" ? "claimed" : stop.state === "ready" ? "ready to claim" : "locked"}</div>
       </div>`)
     .join("");
   return `<div class="journal-section" id="journal-journey">
-    <div class="qtitle">The Journey \u00b7¿½ level ${journey.level}</div>
-    <div class="small muted">${journey.points} points \u00b7¿½ ${session.deedPointsLeft} still to earn from deeds. Free, permanent \u00b7d never reset.</div>
+    <div class="qtitle">The Journey \u00b7 level ${journey.level}</div>
+    <div class="small muted">${journey.points} points \u00b7 ${session.deedPointsLeft} still to earn from deeds. Free, permanent \u00b7 never reset.</div>
     <div class="journey-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
     <div class="small muted">${next ? `${journey.toNext} points to stop ${next.level}` : "Every stop reached. The song is sung."}</div>
     ${ready > 0 ? `<button class="btn" data-action="claim-journey">Claim ${ready} stop${ready === 1 ? "" : "s"}</button>` : `<div class="small muted">Finish a deed to move the bar.</div>`}
@@ -676,7 +677,7 @@ export function deedsSection(session: GameSession): string {
             <div class="deed-head"><span class="deed-name">${esc(deed.name)}</span><span class="deed-points">+${deed.points}</span></div>
             <div class="small muted">${esc(deed.task)}</div>
             <div class="deed-bar"><span style="width:${pct}%"></span></div>
-            <div class="small muted">${deed.progress} / ${deed.target}${deed.done ? " \u00b7¿½ done" : ""}</div>
+            <div class="small muted">${deed.progress} / ${deed.target}${deed.done ? " \u00b7 done" : ""}</div>
           </div>`;
         })
         .join("");
@@ -736,7 +737,7 @@ export function arenaSection(session: GameSession): string {
     <div class="small muted">An endless wave ring behind the village gate. It costs nothing to enter and pays better the deeper you get.</div>
     <div class="arena-stats">
       <div><span class="small muted">Deepest run</span><strong>Wave ${arena.best}</strong></div>
-      <div><span class="small muted">Current</span><strong>${arena.active ? `Wave ${arena.wave} \u00b7¿½ ${arena.alive} left` : "not in the ring"}</strong></div>
+      <div><span class="small muted">Current</span><strong>${arena.active ? `Wave ${arena.wave} \u00b7 ${arena.alive} left` : "not in the ring"}</strong></div>
     </div>
     ${arena.active
       ? `<button class="btn ghost" data-action="leave-arena">Leave the ring</button>`
@@ -975,7 +976,7 @@ export function rivalSection(session: GameSession): string {
     <div class="small muted">${esc(rival.line)}</div>
     <div class="rival-card">
       <div class="rival-vs"><span>It is level ${rival.level}</span><span>${esc(status)}</span></div>
-      <div class="small">Weak to <strong>${esc(weak.type)}</strong> \u00b7¿½ ${esc(weak.note)}</div>
+      <div class="small">Weak to <strong>${esc(weak.type)}</strong> \u00b7 ${esc(weak.note)}</div>
     </div>
   </div>`;
 }
@@ -1029,11 +1030,70 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       <div class="small muted">${lore.length} of ${LORE_ENTRIES.length} entries uncovered.</div>
       ${loreRows}
     </div>`;
-  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}"><a href="#journal-quests">${esc(t("journalQuestsNav"))}</a><a href="#journal-journey">Journey</a><a href="#journal-deeds">Deeds</a><a href="#journal-arena">Ring</a><a href="#journal-descent">Descent</a><a href="#journal-season">Season</a><a href="#journal-rival">Rival</a><a href="#journal-bounties">Bounties</a><a href="#journal-bestiary">${esc(t("journalBestiaryNav"))}</a><a href="#journal-lore">${esc(t("journalLoreNav"))}</a><a href="#journal-hero">Your Story</a><a href="#journal-mastery">Mastery</a><a href="#journal-loadouts">Sets</a><a href="#journal-diary">Diary</a><a href="#journal-travel">Travel</a></nav>`;
+  const readyToTurnIn = active.filter((state) => {
+    const quest = QUESTS[state.id];
+    return Boolean(quest) && state.completed && (quest.repeatable || state.completions === 0);
+  }).length;
+  const bountyReady = session.bounties.filter((bounty) => {
+    const claimed = session.save.bounties.find((entry) => entry.key === bounty.key)?.claimed ?? false;
+    return !claimed && session.bountyProgress(bounty.key) >= bounty.need;
+  }).length;
+  const navGroups: { title: string; links: { href: string; label: string; badge?: number }[] }[] = [
+    {
+      title: "Work",
+      links: [
+        { href: "#journal-quests", label: t("journalQuestsNav"), badge: readyToTurnIn },
+        { href: "#journal-bounties", label: "Bounties", badge: bountyReady },
+        { href: "#journal-journey", label: "Journey" },
+        { href: "#journal-deeds", label: "Deeds" },
+      ],
+    },
+    {
+      title: "Trials",
+      links: [
+        { href: "#journal-arena", label: "Ring" },
+        { href: "#journal-descent", label: "Descent" },
+        { href: "#journal-season", label: "Season" },
+        { href: "#journal-rival", label: "Rival" },
+      ],
+    },
+    {
+      title: "Your hero",
+      links: [
+        { href: "#journal-hero", label: "Story", badge: session.claimableAchievements.length },
+        { href: "#journal-mastery", label: "Mastery" },
+        { href: "#journal-loadouts", label: "Sets" },
+        { href: "#journal-bestiary", label: t("journalBestiaryNav") },
+      ],
+    },
+    {
+      title: "Records",
+      links: [
+        { href: "#journal-lore", label: t("journalLoreNav") },
+        { href: "#journal-diary", label: "Diary" },
+        { href: "#journal-travel", label: "Travel" },
+      ],
+    },
+  ];
+  const nav = `<nav class="journal-nav" aria-label="${esc(t("journalNavLabel"))}">
+    ${navGroups
+      .map(
+        (group) => `<div class="journal-nav-group">
+      <span class="journal-nav-title">${esc(group.title)}</span>
+      <div class="journal-nav-links">${group.links
+        .map((link) => `<a href="${link.href}">${esc(link.label)}${link.badge ? `<span class="journal-nav-badge">${link.badge}</span>` : ""}</a>`)
+        .join("")}</div>
+    </div>`,
+      )
+      .join("")}
+  </nav>`;
   if (active.length === 0) {
     return `${nav}
-      <div id="journal-quests" class="empty-state">No quests yet. Talk to Captain Rowan in Eldoria Village, or Elara at the healers.</div>
-      <div class="small muted">Active quests appear on the right side of your HUD. Completed objectives can be turned in at the quest giver.</div>
+      <div id="journal-quests" class="journal-empty">
+        <span class="journal-empty-icon" aria-hidden="true">\u275D</span>
+        <strong>No quests yet</strong>
+        <span class="small muted">Talk to Captain Rowan in the village, or Elara at the healers. Tracked quests also sit on the right of your HUD.</span>
+      </div>
       ${journeySection(session)}
       ${deedsSection(session)}
       ${bloodMoonSection(session)}
@@ -1058,20 +1118,43 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       const objectives = quest.objectives.map((_, i) => objectiveRow(state.id, state.progress[i] ?? 0, i)).join("");
       const finished = state.completed && (quest.repeatable || state.completions === 0);
       const pinned = session.save.pinnedQuest === state.id;
+      const objectivesDone = quest.objectives.filter((objective, i) => {
+        const need = "count" in objective ? objective.count : objective.kind === "explore" ? objective.zones.length : 1;
+        return (state.progress[i] ?? 0) >= (need ?? 1);
+      }).length;
+      const stateChip = finished
+        ? `<span class="quest-state ready">Ready to turn in</span>`
+        : state.completions > 0
+          ? `<span class="quest-state done">Done</span>`
+          : `<span class="quest-state">In progress</span>`;
       return `<div class="quest-row ${finished ? "ready" : ""} ${state.completions > 0 ? "done" : ""} ${pinned ? "pinned" : ""}">
-        <div class="qtitle">${pinned ? "ðŸ“Œ " : ""}${esc(quest.name)}</div>
-        <div class="qdesc">${esc(quest.description)}</div>
-        ${objectives}
-        <div class="small muted">Giver: ${esc(giver)} Â· ${quest.rewards.xp} XP Â· ${quest.rewards.gold} gold${state.completions > 0 ? ` Â· completed x${state.completions}` : ""}</div>
-        <div class="quest-row-tools">
+        <header class="quest-row-head">
+          <div class="quest-row-title">
+            ${pinned ? `<span class="quest-pin" aria-hidden="true">\u25C8</span>` : ""}
+            <strong>${esc(quest.name)}</strong>
+            <span class="quest-level">Lv ${quest.requiresLevel ?? 1}</span>
+          </div>
+          ${stateChip}
+        </header>
+        <p class="qdesc">${esc(quest.description)}</p>
+        <div class="quest-objectives">${objectives}</div>
+        <footer class="quest-row-foot">
+          <span class="quest-reward">${formatNumber(quest.rewards.xp)} XP</span>
+          <span class="quest-reward gold">${formatNumber(quest.rewards.gold)} gold</span>
+          <span class="small muted">${esc(giver)} · ${objectivesDone}/${quest.objectives.length} done${state.completions > 0 ? ` · x${state.completions}` : ""}</span>
           <button class="btn ghost small" data-action="pin-quest" data-quest="${esc(state.id)}">${pinned ? "Unpin" : "Pin to tracker"}</button>
-        </div>
-        ${finished ? `<div class="qready">Ready to turn in.</div>` : ""}
+        </footer>
       </div>`;
     })
     .join("");
   return `${nav}
-    <div id="journal-quests" class="journal-quests" style="display:grid;gap:10px">${rows}</div>
+    <section class="journal-card" id="journal-quests">
+      <header class="journal-card-head">
+        <h3>Active quests</h3>
+        <span class="journal-card-count">${active.length} tracked${readyToTurnIn > 0 ? ` · ${readyToTurnIn} ready` : ""}</span>
+      </header>
+      <div class="quest-list">${rows}</div>
+    </section>
     ${journeySection(session)}
     ${deedsSection(session)}
     ${bloodMoonSection(session)}
@@ -1114,14 +1197,14 @@ function bountySection(session: GameSession): string {
       return `<div class="bounty-row ${complete && !claimed ? "ready" : ""} ${claimed ? "paid" : ""}">
         <div class="bounty-head">
           <span class="bounty-name">${esc(bounty.monsterName)}</span>
-          <span class="bounty-purse">${formatNumber(bounty.gold)} g Â· ${formatNumber(bounty.xp)} XP</span>
+          <span class="bounty-purse">${formatNumber(bounty.gold)} g · ${formatNumber(bounty.xp)} XP</span>
         </div>
-        <div class="small muted">${esc(bounty.zoneName)} Â· Level ${bounty.level}</div>
+        <div class="small muted">${esc(bounty.zoneName)} · Level ${bounty.level}</div>
         <div class="bounty-bar"><div class="bounty-bar-fill" style="width:${pct}%"></div></div>
         <div class="bounty-foot">
           <span class="small muted">${done} / ${bounty.need} killed</span>
           ${claimed
-            ? `<span class="bounty-paid">Paid âœ“</span>`
+            ? `<span class="bounty-paid">Paid ✓</span>`
             : complete
               ? `<button class="btn small" data-action="claim-bounty" data-bounty="${esc(bounty.key)}">Collect</button>`
               : `<span class="small muted">Keep hunting</span>`}
@@ -1156,7 +1239,7 @@ function heroSection(session: GameSession): string {
   const claimable = session.claimableAchievements;
   const rows = achievementRows(save)
     .map((achievement) => `<div class="achv-row ${achievement.earned ? "earned" : ""}">
-        <span class="achv-icon" aria-hidden="true">${achievement.earned ? achievement.icon : "â—‹"}</span>
+        <span class="achv-icon" aria-hidden="true">${achievement.earned ? achievement.icon : "○"}</span>
         <span class="achv-body">
           <span class="achv-name">${esc(achievement.name)}</span>
           <span class="small muted">${esc(achievement.earned && achievement.title ? `Title unlocked: ${achievement.title}` : achievement.hint)}</span>
@@ -1167,7 +1250,7 @@ function heroSection(session: GameSession): string {
   const titles = session.titles
     .map((title) => {
       const worn = save.title === title;
-      return `<button class="title-chip ${worn ? "worn" : ""}" data-action="set-title" data-title="${esc(title)}" ${worn ? "aria-pressed=\"true\"" : ""}>${esc(title)}${worn ? " âœ“" : ""}</button>`;
+      return `<button class="title-chip ${worn ? "worn" : ""}" data-action="set-title" data-title="${esc(title)}" ${worn ? "aria-pressed=\"true\"" : ""}>${esc(title)}${worn ? " ✓" : ""}</button>`;
     })
     .join("");
   return `<div class="lore-section" id="journal-hero">
@@ -1177,7 +1260,7 @@ function heroSection(session: GameSession): string {
     <div class="stat-grid">${stats}</div>
     <div class="small muted" style="margin-top:12px">Titles you can wear</div>
     <div class="title-row">${titles}</div>
-    <div class="small muted" style="margin-top:12px">Achievements Â· ${progress.earned} of ${progress.total}${claimable.length ? ` Â· ${claimable.length} reward${claimable.length === 1 ? "" : "s"} waiting` : ""}</div>
+    <div class="small muted" style="margin-top:12px">Achievements · ${progress.earned} of ${progress.total}${claimable.length ? ` · ${claimable.length} reward${claimable.length === 1 ? "" : "s"} waiting` : ""}</div>
     ${claimable.length ? `<button class="btn small" data-action="claim-all-achievements">Collect all ${claimable.length} reward${claimable.length === 1 ? "" : "s"}</button>` : ""}
     <div class="achv-list">${rows}</div>
   </div>`;
@@ -1228,12 +1311,12 @@ function bestiarySection(session: GameSession, search = ""): string {
       }
       return `<details class="beast-row">
         <summary>
-          <span class="beast-name">${esc(entry.monster.name)}${entry.monster.boss ? " Â· Boss" : ""}</span>
-          <span class="beast-level">Lv ${entry.monster.level}${kills > 0 ? ` Â· ${kills} slain` : ""}</span>
+          <span class="beast-name">${esc(entry.monster.name)}${entry.monster.boss ? " · Boss" : ""}</span>
+          <span class="beast-level">Lv ${entry.monster.level}${kills > 0 ? ` · ${kills} slain` : ""}</span>
         </summary>
         <div class="beast-body">
-          <div class="small muted">${esc(entry.zoneName)} Â· ${esc(role)}</div>
-          <div class="small">${Math.round(entry.monster.maxHp)} health Â· ${Math.round(entry.monster.attack)} attack Â· ${Math.round(entry.monster.speed)} speed</div>
+          <div class="small muted">${esc(entry.zoneName)} · ${esc(role)}</div>
+          <div class="small">${Math.round(entry.monster.maxHp)} health · ${Math.round(entry.monster.attack)} attack · ${Math.round(entry.monster.speed)} speed</div>
           ${weakLine}
           ${entry.drops.length ? `<div class="small muted">Drops: ${esc(entry.drops.join(", "))}</div>` : ""}
           ${entry.quests.length ? `<div class="small" style="color:var(--gold)">Wanted by: ${esc(entry.quests.join(", "))}</div>` : ""}
@@ -1297,11 +1380,11 @@ function characterSheet(session: GameSession): string {
 function masterySection(session: GameSession): string {
   const rows = session.mastery
     .map((row) => `<div class="mastery-row rank-${row.rank}">
-        <span class="mastery-icon" aria-hidden="true">${row.icon.length <= 2 ? esc(row.icon) : "âœ¦"}</span>
+        <span class="mastery-icon" aria-hidden="true">${row.icon.length <= 2 ? esc(row.icon) : "✦"}</span>
         <span class="mastery-body">
-          <span class="mastery-name">${esc(row.name)} <span class="mastery-rank">Rank ${row.rank}${row.rank >= MAX_MASTERY ? " Â· max" : ""}</span></span>
+          <span class="mastery-name">${esc(row.name)} <span class="mastery-rank">Rank ${row.rank}${row.rank >= MAX_MASTERY ? " · max" : ""}</span></span>
           <span class="mastery-bar"><span style="width:${row.percent}%"></span></span>
-          <span class="small muted">${row.uses} casts${row.toNext > 0 ? ` Â· ${row.toNext} to rank ${row.rank + 1}` : ""}${row.rank > 0 ? ` Â· âˆ’${row.costCut}% cost, âˆ’${row.cooldownCut}% cooldown` : ""}</span>
+          <span class="small muted">${row.uses} casts${row.toNext > 0 ? ` · ${row.toNext} to rank ${row.rank + 1}` : ""}${row.rank > 0 ? ` · −${row.costCut}% cost, −${row.cooldownCut}% cooldown` : ""}</span>
         </span>
       </div>`)
     .join("");
@@ -1403,7 +1486,7 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
       if (entry.available) action = `<button class="btn small" data-action="accept-quest" data-quest="${entry.questId}">${t("btnAcceptQuest")}</button>`;
       else if (state && state.claimedReward !== undefined && quest.choose) {
         const claimed = quest.choose[state.claimedReward];
-        const label = claimed ? `${claimed.icon ?? "ðŸŽ"} Reward claimed` : "Reward claimed";
+        const label = claimed ? `${claimed.icon ?? ""} Reward claimed` : "Reward claimed";
         action = `<span class="small muted">${esc(label)} - final</span>`;
       }
       else if (entry.canTurnIn && quest.choose) {
@@ -1411,8 +1494,8 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
           .map((option, i) => {
             const items = (option.items ?? []).map((it) => `${it.qty}x ${it.itemId.replace(/_/g, " ")}`);
             const parts = [`${option.xp} XP`, `${option.gold} gold`, ...items];
-            const icon = option.icon ?? "ðŸŽ";
-            return `<button class="btn small" data-action="pick-reward" data-quest="${entry.questId}" data-index="${i}">${icon} ${esc(parts.join(" Â· "))}</button>`;
+            const icon = option.icon ?? "";
+            return `<button class="btn small" data-action="pick-reward" data-quest="${entry.questId}" data-index="${i}">${icon} ${esc(parts.join(" · "))}</button>`;
           })
           .join("")}</div>`;
       }
@@ -1422,51 +1505,76 @@ export function npcPanelHtml(session: GameSession, npcId: string): string {
       else if (session.save.level < entry.level) action = `<span class="small muted">Requires level ${entry.level}</span>`;
       else if (entry.requires.length > 0) action = `<span class="small muted">Requires ${entry.requires.map((id) => QUESTS[id]?.name ?? id).join(", ")}</span>`;
       return `<div class="quest-row ${entry.canTurnIn ? "ready" : ""}">
-        <div class="qtitle">${esc(quest.name)} <span class="muted" style="font-size:8px">Lv ${entry.level}</span></div>
-        <div class="qdesc">${esc(quest.description)}</div>
-        ${objectives}
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <header class="quest-row-head">
+          <div class="quest-row-title"><strong>${esc(quest.name)}</strong><span class="quest-level">Lv ${entry.level}</span></div>
+          ${entry.canTurnIn ? `<span class="quest-state ready">Ready</span>` : state ? `<span class="quest-state">In progress</span>` : `<span class="quest-state dim">Locked</span>`}
+        </header>
+        <p class="qdesc">${esc(quest.description)}</p>
+        <div class="quest-objectives">${objectives}</div>
+        <footer class="quest-row-foot">
+          <span class="quest-reward">${formatNumber(quest.rewards.xp)} XP</span>
+          <span class="quest-reward gold">${formatNumber(quest.rewards.gold)} gold</span>
           ${action}
-          <span class="small muted">${quest.rewards.xp} XP Â· ${quest.rewards.gold} gold</span>
-        </div>
+        </footer>
       </div>`;
     })
     .join("");
-  const choices = `<div class="gift-list">
-    <button class="btn small" data-action="npc-choice" data-npc="${npc.id}" data-choice="kind">ðŸ’¬ Kind words</button>
-    <button class="btn small" data-action="npc-choice" data-npc="${npc.id}" data-choice="rude">ðŸ˜  Rude remark</button>
+  const choices = `<div class="npc-tones">
+    <button class="tone-btn kind" data-action="npc-choice" data-npc="${npc.id}" data-choice="kind"><span aria-hidden="true">\u2665</span> Kind words</button>
+    <button class="tone-btn rude" data-action="npc-choice" data-npc="${npc.id}" data-choice="rude"><span aria-hidden="true">\u2660</span> Rude remark</button>
   </div>`;
   const trainer = npc.trainer
-    ? `<div>
-        <div class="section-title">Training</div>
-        <div style="display:grid;gap:5px">
-          ${session.classInfo.abilities.map((ability) => `<div class="stat-line"><span>${esc(ability.name)}</span><span>${session.save.level >= ability.unlockLevel ? "Unlocked" : `Level ${ability.unlockLevel}`}</span></div>`).join("")}
+    ? `<section class="npc-card">
+        <header class="npc-card-head"><h4>Training</h4><span class="small muted">${esc(npc.name)}</span></header>
+        <div class="ability-unlock-list">
+          ${session.classInfo.abilities
+            .map((ability) => {
+              const unlocked = session.save.level >= ability.unlockLevel;
+              return `<div class="ability-unlock ${unlocked ? "on" : ""}">
+                <span class="ability-unlock-icon" aria-hidden="true">${abilityIconHtml(ability.icon ?? "strike", 22)}</span>
+                <strong>${esc(ability.name)}</strong>
+                <span class="ability-unlock-tag ${unlocked ? "on" : ""}">${unlocked ? "Unlocked" : `Lv ${ability.unlockLevel}`}</span>
+              </div>`;
+            })
+            .join("")}
         </div>
-        <div class="small muted" style="margin-top:8px">Talents are chosen with T. Master Kael can reset them for ${session.respecCost() || 0} gold.</div>
-        <button class="btn ghost small" data-action="respec-talents" ${session.save.talents.length > 0 ? "" : "disabled"}>Reset talents${session.respecCost() > 0 ? ` Â· ${session.respecCost()}g` : ""}</button>
-        ${session.canNewGamePlus() ? `<div class="small muted" style="margin-top:8px">The Hollow King has fallen. A harsher cycle awaits.</div><button class="btn small" data-action="new-game-plus">Begin New Game+ ${session.save.ngPlus + 1}</button>` : ""}
-      </div>`
+        <div class="npc-card-note small muted">Talents are chosen with T. ${esc(npc.name)} can reset them for ${session.respecCost() || 0} gold.</div>
+        <div class="row-wrap">
+          <button class="btn ghost small" data-action="respec-talents" ${session.save.talents.length > 0 ? "" : "disabled"}>Reset talents${session.respecCost() > 0 ? ` · ${session.respecCost()}g` : ""}</button>
+          ${session.canNewGamePlus() ? `<button class="btn small" data-action="new-game-plus">Begin New Game+ ${session.save.ngPlus + 1}</button>` : ""}
+        </div>
+        ${session.canNewGamePlus() ? `<div class="npc-card-note small muted">The Hollow King has fallen. A harsher cycle awaits.</div>` : ""}
+      </section>`
     : "";
-  return `<div class="npc-head">
-    ${charIconHtml(npc.sprite, 56)}
-    <div>
-      <h2 style="font-size:14px;color:${esc(npc.color)}">${esc(npc.name)}</h2>
-      <div class="muted">${esc(npc.role)}</div>
-    </div>
-  </div>
-  <div class="dialogue">"${esc(dialogue)}"</div>
-  ${choices}
-  ${friendSection(session, npcId)}
-  ${questRows ? `<div style="display:grid;gap:9px"><div class="section-title">Quests</div>${questRows}</div>` : ""}
-  ${trainer}
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    ${npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : ""}
-    ${npc.gamble ? `<button class="btn" data-action="open-gamble" data-npc="${esc(npc.id)}">Sit at the table</button>` : ""}
-    ${npc.stash ? `<button class="btn" data-action="open-stash">Open vault</button>` : ""}
-    ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="small" style="color:var(--good);align-self:center">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
-    <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
-  </div>
-  ${npc.healer ? blessingSection(session) : ""}`;
+  const hostButtons = [
+    npc.shop ? `<button class="btn" data-action="open-shop" data-shop="${npc.shop}">Browse ${esc(SHOPS[npc.shop]?.name ?? "shop")}</button>` : "",
+    npc.gamble ? `<button class="btn" data-action="open-gamble" data-npc="${esc(npc.id)}">Sit at the table</button>` : "",
+    npc.stash ? `<button class="btn" data-action="open-stash">Open vault</button>` : "",
+  ].filter(Boolean).join("");
+  const heartRow = session.friendRows.find((entry) => entry.npcId === npcId);
+  return `<div class="npc-stack" style="--npc-color:${esc(npc.color)}">
+    <header class="npc-hero">
+      <div class="npc-portrait">${charIconHtml(npc.sprite, 64)}</div>
+      <div class="npc-identity">
+        <strong>${esc(npc.name)}</strong>
+        <span class="npc-role">${esc(npc.role)}</span>
+        ${heartRow ? `<span class="npc-hearts" title="${heartRow.hearts} of 5 hearts">${heartRow.heartText}</span>` : ""}
+      </div>
+    </header>
+    <blockquote class="dialogue">${esc(dialogue)}</blockquote>
+    ${choices}
+    ${friendSection(session, npcId)}
+    ${questRows ? `<section class="npc-card"><header class="npc-card-head"><h4>Quests</h4><span class="small muted">${questStates.length} offered</span></header><div class="quest-list">${questRows}</div></section>` : ""}
+    ${trainer}
+    <footer class="npc-footer">
+      ${hostButtons ? `<div class="row-wrap">${hostButtons}</div>` : ""}
+      <div class="row-wrap">
+        ${npc.healer ? `<button class="btn" data-action="heal" ${session.healCost() > 0 ? "" : "disabled"}>${t("btnHeal", { cost: session.healCost() })}</button>${session.healDiscountPercent > 0 ? `<span class="npc-discount small">${session.healDiscountPercent}% off for a friend of the shrine</span>` : ""}` : ""}
+        <button class="btn ghost" data-action="close-panel">${t("btnLeave")}</button>
+      </div>
+    </footer>
+    ${npc.healer ? blessingSection(session) : ""}
+  </div>`;
 }
 
 /**
@@ -1571,24 +1679,54 @@ export function talentsPanelHtml(session: GameSession): string {
           const selected = chosen?.id === choice.id;
           const locked = save.level < choice.level;
           const taken = Boolean(chosen) && !selected;
-          return `<button class="talent-choice ${selected ? "selected" : ""} ${locked ? "locked" : ""}" data-action="learn-talent" data-talent="${esc(choice.id)}" ${locked || chosen ? "disabled" : ""}>
-            <span class="talent-choice-head"><b>${esc(choice.name)}</b><span>${locked ? `Lv ${choice.level}` : selected ? "Chosen" : taken ? "Locked" : "Available"}</span></span>
+          const tag = locked ? `Lv ${choice.level}` : selected ? "Chosen" : taken ? "Locked" : "Available";
+          const tagClass = selected ? "on" : taken ? "off" : locked ? "dim" : "ready";
+          return `<button class="talent-choice ${selected ? "selected" : ""} ${locked ? "locked" : ""} ${taken ? "taken" : ""}" data-action="learn-talent" data-talent="${esc(choice.id)}" ${locked || chosen ? "disabled" : ""}>
+            <span class="talent-choice-head"><b>${esc(choice.name)}</b><span class="talent-tag ${tagClass}">${tag}</span></span>
             <span class="talent-choice-desc">${esc(choice.description)}</span>
           </button>`;
         })
         .join("");
-      return `<div class="talent-tier ${save.level >= tier.level ? "unlocked" : "locked"}">
-        <div class="talent-tier-label">Tier ${tier.level}${save.level < tier.level ? ` Â· requires level ${tier.level}` : ""}</div>
-        <div class="talent-choices">${choices}</div>
+      const filled = Boolean(chosen);
+      return `<div class="talent-tier ${save.level >= tier.level ? "unlocked" : "locked"} ${filled ? "filled" : ""}">
+        <div class="talent-tier-rail" aria-hidden="true"><span class="talent-tier-dot"></span></div>
+        <div class="talent-tier-body">
+          <div class="talent-tier-label">
+            <span class="talent-tier-name">Tier ${tier.level}</span>
+            <span class="talent-tier-state">${save.level < tier.level ? `Opens at level ${tier.level}` : filled ? "Chosen" : `${tier.choices.length} options`}</span>
+          </div>
+          <div class="talent-choices">${choices}</div>
+        </div>
       </div>`;
     })
     .join("");
-  return `<div class="talent-passive">
-      <div class="section-title">${esc(passive.name)} Â· Class passive</div>
-      <div class="small muted">${esc(passive.description)} ${esc(passive.stats ? Object.entries(passive.stats).map(([key, value]) => `+${key === "crit" ? `${Math.round(Number(value) * 100)}%` : Math.round(Number(value))} ${key}`).join(", ") : "")}</div>
+  const chosenCount = save.talents.length;
+  const totalTiers = tree.tiers.length;
+  const nextTier = tree.tiers.find((tier) => save.level < tier.level);
+  const respec = session.respecCost();
+  const statChips = passive.stats
+    ? Object.entries(passive.stats)
+        .filter(([, value]) => Number(value) !== 0)
+        .map(([key, value]) => `<span class="talent-stat-chip">+${key === "crit" ? `${Math.round(Number(value) * 100)}%` : Math.round(Number(value))} ${esc(key)}</span>`)
+        .join("")
+    : "";
+  return `<div class="talent-wrap">
+    <header class="talent-summary">
+      <div class="talent-sum-cell"><span class="small muted">Chosen</span><strong>${chosenCount} / ${totalTiers}</strong></div>
+      <div class="talent-sum-cell"><span class="small muted">Next tier</span><strong>${nextTier ? `Level ${nextTier.level}` : "All open"}</strong></div>
+      <div class="talent-sum-cell"><span class="small muted">Reset</span><strong>${respec > 0 ? `${respec} g` : "Free"}</strong></div>
+    </header>
+    <div class="talent-passive">
+      <div class="talent-passive-head">
+        <span class="talent-passive-icon" aria-hidden="true">\u25C6</span>
+        <div><strong>${esc(passive.name)}</strong><div class="small muted">Class passive</div></div>
+      </div>
+      <div class="small muted">${esc(passive.description)}</div>
+      ${statChips ? `<div class="talent-stat-chips">${statChips}</div>` : ""}
     </div>
-    <div class="small muted" style="margin-bottom:10px">Choose one talent at levels 5, 10, 15, 20, and 30. Choices are permanent until Master Kael resets them.</div>
-    <div class="talent-tiers">${tiers}</div>`;
+    <div class="talent-hint small muted">Pick one talent at levels 5, 10, 15, 20 and 30. Choices are permanent until Master Kael resets them.</div>
+    <div class="talent-tiers">${tiers}</div>
+  </div>`;
 }
 
 export function settingsPanelHtml(
@@ -1602,8 +1740,20 @@ export function settingsPanelHtml(
 ): string {
   const classInfo = session ? getClass(session.save.classId) : null;
   return `<div class="settings-grid">
+    ${session ? `<header class="settings-hero">
+      <div class="settings-hero-portrait">${classPortrait(session.save.classId, 56)}</div>
+      <div class="settings-hero-body">
+        <strong>${esc(session.save.name)}</strong>
+        <span class="small muted">${esc(classInfo?.name ?? "")} · Level ${session.save.level} · ${esc(session.zone.name)}</span>
+        <div class="settings-hero-chips">
+          <span class="settings-chip">${session.save.difficulty === "story" ? "Story" : session.save.difficulty === "nightmare" ? "Nightmare" : "Normal"}${session.save.ngPlus > 0 ? ` · cycle ${session.save.ngPlus + 1}` : ""}</span>
+          <span class="settings-chip">Torment ${session.save.torment}</span>
+          <span class="settings-chip gold">${formatNumber(session.save.gold)} gold</span>
+        </div>
+      </div>
+    </header>` : ""}
     <div class="setting-row">
-      <div><strong>Sound</strong><div class="small muted">Synthesized effects and procedural music</div></div>
+      <div class="setting-label"><strong>Sound</strong><div class="small muted">Synthesized effects and procedural music</div></div>
       <div class="settings-controls">
         <label class="small">Effects
           <input type="range" id="volume-range" min="0" max="100" value="${Math.round(volume * 100)}" />
@@ -1615,7 +1765,7 @@ export function settingsPanelHtml(
       </div>
     </div>
     <div class="setting-row">
-      <div><strong>Interface</strong><div class="small muted">Scale text and HUD without changing the world</div></div>
+      <div class="setting-label"><strong>Interface</strong><div class="small muted">Scale text and HUD without changing the world</div></div>
       <div class="settings-controls">
         <label class="small">UI scale
           <select id="ui-scale">
@@ -1676,7 +1826,7 @@ export function settingsPanelHtml(
       </div>
     </div>
     <div class="setting-row">
-      <div><strong>Keybinds</strong><div class="small muted">Click a binding, then press a key. Arrow keys always move.</div></div>
+      <div class="setting-label"><strong>Keybinds</strong><div class="small muted">Click a binding, then press a key. Arrow keys always move.</div></div>
       <div class="keybind-grid">
         ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${rebinding === action ? "listening" : ""}" data-action="rebind-key" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${rebinding === action ? "Press a key" : preferences.keybinds[action]}</b></button>`).join("")}
         <button class="btn ghost small" data-action="reset-keys">${t("btnResetKeybinds")}</button>
@@ -1684,26 +1834,26 @@ export function settingsPanelHtml(
       <div class="small muted">If two actions share a key, the new key is refused and the message says which action already has it.</div>
     </div>
     <div class="setting-row">
-      <div><strong>Gamepad buttons</strong><div class="small muted">Click a button, then press the gamepad button you want. Sticks always move and aim.</div></div>
+      <div class="setting-label"><strong>Gamepad buttons</strong><div class="small muted">Click a button, then press the gamepad button you want. Sticks always move and aim.</div></div>
       <div class="keybind-grid">
         ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${padListening === action ? "listening" : ""}" data-action="rebind-pad" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${padListening === action ? "Press a button" : `Button ${preferences.padBinds[action]}`}</b></button>`).join("")}
         <button class="btn ghost small" data-action="reset-pad">${t("btnResetGamepad")}</button>
       </div>
     </div>
     ${session ? `<div class="setting-row">
-      <div><strong>Difficulty</strong><div class="small muted">Story is forgiving, Nightmare is brutal. Change it any time while alive.</div></div>
+      <div class="setting-label"><strong>Difficulty</strong><div class="small muted">Story is forgiving, Nightmare is brutal. Change it any time while alive.</div></div>
       <div class="settings-controls">
         <select id="difficulty-select">
           <option value="story" ${session.save.difficulty === "story" ? "selected" : ""}>Story</option>
           <option value="normal" ${session.save.difficulty === "normal" ? "selected" : ""}>Normal</option>
           <option value="nightmare" ${session.save.difficulty === "nightmare" ? "selected" : ""}>Nightmare</option>
         </select>
-        <span class="small muted">Cycle ${session.save.ngPlus + 1}${session.save.ngPlus > 0 ? ` Â· +${session.save.ngPlus * 35}% enemy power` : ""}</span>
+        <span class="small muted">Cycle ${session.save.ngPlus + 1}${session.save.ngPlus > 0 ? ` · +${session.save.ngPlus * 35}% enemy power` : ""}</span>
         ${session.canNewGamePlus() ? `<button class="btn small" data-action="new-game-plus">Begin New Game+</button>` : ""}
       </div>
     </div>
     <div class="setting-row">
-      <div><strong>Torment ${session.save.torment}</strong><div class="small muted">${esc(session.tormentInfo.description)} It applies to the whole realm, every zone. Higher tiers open as the hero levels, and the top ones only after the Hollow King falls.</div></div>
+      <div class="setting-label"><strong>Torment ${session.save.torment}</strong><div class="small muted">${esc(session.tormentInfo.description)} It applies to the whole realm, every zone. Higher tiers open as the hero levels, and the top ones only after the Hollow King falls.</div></div>
       <div class="settings-controls">
         <button class="btn ghost small" data-action="torment-down" ${session.save.torment > 0 ? "" : "disabled"}>Easier</button>
         <span class="small muted">Tier ${session.save.torment} · ${session.tormentUnlocked} unlocked</span>
@@ -1711,7 +1861,7 @@ export function settingsPanelHtml(
       </div>
     </div>
     <div class="setting-row">
-      <div><strong>${esc(session.save.name)}</strong><div class="small muted">${classInfo?.name} · Level ${session.save.level} · ${esc(session.zone.name)}</div></div>
+      <div class="setting-label"><strong>${esc(session.save.name)}</strong><div class="small muted">${classInfo?.name} · Level ${session.save.level} · ${esc(session.zone.name)}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn ghost small" data-action="share-card" title="Draws your hero as a picture you can post">Save share card</button>
         <button class="btn ghost small" data-action="export-current">${t("btnExportHero")}</button>
@@ -1721,20 +1871,20 @@ export function settingsPanelHtml(
         <button class="btn danger small" data-action="delete-current" title="Asks first, then erases this hero">${t("btnDeleteHero")}</button>
       </div>
     </div>` : ""}
-    <div>
-      <div class="section-title">Controls</div>
+    <div class="setting-row settings-row-static">
+      <div class="setting-label"><strong>Controls</strong><div class="small muted">The keys you press most, at a glance</div></div>
       <div class="controls-help">
-        <span>WASD / Arrows â€” move</span>
-        <span>Left click / Space â€” basic attack</span>
-        <span>1-5 â€” class abilities</span>
-        <span>Shift â€” dodge (brief invulnerability)</span>
-        <span>Z / X â€” use bound potions</span>
-        <span>E â€” interact / portal / chest</span>
-        <span>I â€” inventory</span>
-        <span>Q â€” quests</span>
-        <span>T â€” talents</span>
-        <span>Esc â€” close panel / settings</span>
-        <span>Mouse â€” aim skills</span>
+        <span>WASD / Arrows — move</span>
+        <span>Left click / Space — basic attack</span>
+        <span>1-5 — class abilities</span>
+        <span>Shift — dodge (brief invulnerability)</span>
+        <span>Z / X — use bound potions</span>
+        <span>E — interact / portal / chest</span>
+        <span>I — inventory</span>
+        <span>Q — quests</span>
+        <span>T — talents</span>
+        <span>Esc — close panel / settings</span>
+        <span>Mouse — aim skills</span>
       </div>
     </div>
     <div class="small muted">
@@ -1748,41 +1898,70 @@ export function settingsPanelHtml(
 export function villageSection(session: GameSession): string {
   const rows = session.villageRows;
   const effects = session.villageEffects;
-  const built = rows.filter((row) => row.level > 0).length;
   const total = rows.reduce((sum, row) => sum + row.level, 0);
   const maxTotal = rows.length * rows[0]!.maxLevel;
-  const cards = rows.map((row) => {
-    const next = row.next;
-    const material = next?.materials ? itemDef(next.materials.itemId) : undefined;
-    const have = next?.materials ? session.countItem(next.materials.itemId) : 0;
-    const dots = Array.from({ length: row.maxLevel }, (_, i) => `<span class="village-dot ${i < row.level ? "on" : ""}"></span>`).join("");
-    return `<div class="village-card" style="--building-color:${row.color}">
-      <div class="village-head">
-        <div><strong>${esc(row.name)}</strong><div class="small muted">${esc(row.role)}</div></div>
-        <div class="village-dots" title="Stage ${row.level} of ${row.maxLevel}">${dots}</div>
+  const cards = rows
+    .map((row) => {
+      const next = row.next;
+      const material = next?.materials ? itemDef(next.materials.itemId) : undefined;
+      const have = next?.materials ? session.countItem(next.materials.itemId) : 0;
+      const need = next?.materials?.qty ?? 0;
+      const shortMaterial = need > 0 && have < need;
+      const shortGold = Boolean(next) && session.save.gold < (next?.gold ?? 0);
+      const stages = Array.from({ length: row.maxLevel }, (_, i) => `<span class="village-stage ${i < row.level ? "on" : ""}"></span>`).join("");
+      const status = !next
+        ? `<span class="village-pill done">Fully rebuilt</span>`
+        : row.affordable
+          ? `<span class="village-pill ready">Ready to rebuild</span>`
+          : `<span class="village-pill">Saved up for</span>`;
+      return `<article class="village-card" style="--building-color:${row.color}">
+      <header class="village-head">
+        <div class="village-title">
+          <strong>${esc(row.name)}</strong>
+          <span class="small muted">${esc(row.role)}</span>
+        </div>
+        ${status}
+      </header>
+      <div class="village-stage-rail" title="Stage ${row.level} of ${row.maxLevel}">
+        ${stages}
+        <span class="village-stage-label">${row.level}/${row.maxLevel}</span>
       </div>
-      <div class="small muted">${esc(row.description)}</div>
-      <div class="small"><strong>Now:</strong> ${esc(row.current)}</div>
-      ${next ? `<div class="village-next">
-        <div class="small"><strong>Next:</strong> ${esc(next.benefit)}</div>
-        <div class="small muted">${next.gold} gold${next.materials && material ? ` and ${next.materials.qty}x ${esc(material.name)} (you have ${have})` : ""}</div>
-        <button class="btn small" data-action="rebuild-village" data-village="${row.id}" ${row.affordable ? "" : "disabled"}>Rebuild</button>
-      </div>` : `<div class="small" style="color:var(--good)">Fully rebuilt</div>`}
-    </div>`;
-  }).join("");
-  return `<section class="panel-section">
-    <h3>Rebuild Eldoria</h3>
-    <p class="small muted">Gold had nowhere to go once the vault was full. Every stage here is paid once and kept forever, and helps every hero on this account.</p>
-    <div class="village-summary small">
-      <span><strong>${built}/${rows.length}</strong> buildings started</span>
-      <span><strong>${total}/${maxTotal}</strong> stages raised</span>
-      <span><strong>+${effects.attackPct}%</strong> attack</span>
-      <span><strong>+${effects.maxHpPct}%</strong> health</span>
-      <span><strong>+${effects.defenseFlat}</strong> defense</span>
-      <span><strong>+${effects.xpPct}%</strong> xp</span>
-      <span><strong>+${effects.goldPct}%</strong> gold</span>
-      <span><strong>${effects.shopDiscountPct}%</strong> off shops</span>
-    </div>
+      <p class="village-desc small muted">${esc(row.description)}</p>
+      <div class="village-benefits">
+        <div class="village-benefit now"><span class="village-benefit-tag">Now</span><span>${esc(row.current)}</span></div>
+        ${next ? `<div class="village-benefit next"><span class="village-benefit-tag">Next</span><span>${esc(next.benefit)}</span></div>` : ""}
+      </div>
+      ${next
+        ? `<footer class="village-cost">
+        <span class="village-price ${shortGold ? "short" : ""}">${formatNumber(next.gold)} gold</span>
+        ${next.materials && material
+          ? `<span class="village-price ${shortMaterial ? "short" : ""}">${have}/${need} ${esc(material.name)}</span>`
+          : ""}
+        <button class="btn small" data-action="rebuild-village" data-village="${row.id}" ${row.affordable ? "" : "disabled"}>${next ? `Rebuild \u2192 stage ${row.level + 1}` : "Rebuild"}</button>
+      </footer>`
+        : `<footer class="village-cost"><span class="small" style="color:var(--green)">Every stage here is paid once and kept forever.</span></footer>`}
+    </article>`;
+    })
+    .join("");
+  const completion = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
+  const effectChips: [string, string][] = [
+    ["\u2694", `+${effects.attackPct}% attack`],
+    ["\u2764", `+${effects.maxHpPct}% health`],
+    ["\u26E8", `+${effects.defenseFlat} defense`],
+    ["\u2726", `+${effects.xpPct}% xp`],
+    ["\u25C9", `+${effects.goldPct}% gold`],
+    ["\u25C8", `${effects.shopDiscountPct}% off shops`],
+  ];
+  return `<section class="panel-stack">
+    <header class="panel-hero">
+      <div class="panel-hero-body">
+        <h3>Rebuild Eldoria</h3>
+        <p class="small muted">Every stage is paid once and kept forever, and every hero on this account feels it. Gold finally has somewhere to live.</p>
+      </div>
+      <div class="panel-hero-stat"><strong>${total}/${maxTotal}</strong><span class="small muted">stages raised</span></div>
+    </header>
+    <div class="panel-progress"><div class="panel-progress-fill" style="width:${completion}%"></div></div>
+    <div class="effect-chip-row">${effectChips.map(([icon, label]) => `<span class="effect-chip"><span aria-hidden="true">${icon}</span>${esc(label)}</span>`).join("")}</div>
     <div class="village-grid">${cards}</div>
     <div class="row-wrap"><button class="btn ghost small" data-action="open-runewords">Open the runeword book</button></div>
   </section>`;
@@ -1790,62 +1969,128 @@ export function villageSection(session: GameSession): string {
 
 export function companionSection(session: GameSession): string {
   if (!session.hasCompanion) {
-    return `<section class="panel-section"><h3>Companion</h3><p class="small muted">Hatch your egg at the village and a companion will follow you. Then it can wear a collar and a charm, and learn one skill.</p></section>`;
+    return `<section class="panel-stack">
+      <header class="panel-hero">
+        <div class="panel-hero-body">
+          <h3>Companion</h3>
+          <p class="small muted">Hatch your egg in the village and a companion follows you. Then it can wear a collar and a charm, and learn one skill.</p>
+        </div>
+      </header>
+    </section>`;
   }
   const loadout = session.petLoadout;
+  const stage = session.petStage;
+  const next = session.petStageNext;
+  const petName = esc(session.save.companion?.name ?? "Your companion");
   const gearRows = session.petGearRow;
-  const gearCards = gearRows.map((row) => {
-    const owned = session.save.inventory
-      .map((stack, index) => ({ stack, index }))
-      .filter((entry): entry is { stack: ItemStack; index: number } => Boolean(entry.stack))
-      .filter(({ stack }) => getPetGear(stack.itemId)?.slot === row.slot)
-      .map(({ stack }) => `<button class="btn ghost small" data-action="wear-pet-gear" data-item="${stack.itemId}">${esc(itemDef(stack.itemId)?.name ?? stack.itemId)}</button>`);
-    return `<div class="village-card">
-      <div class="village-head">
-        <div><strong>${row.slot === "collar" ? "Collar" : "Charm"}</strong><div class="small muted">${esc(row.name)}</div></div>
+  const slotCards = gearRows
+    .map((row) => {
+      const owned = session.save.inventory
+        .map((stack, index) => ({ stack, index }))
+        .filter((entry): entry is { stack: ItemStack; index: number } => Boolean(entry.stack))
+        .filter(({ stack }) => getPetGear(stack.itemId)?.slot === row.slot)
+        .map(({ stack }) => `<button class="btn ghost small" data-action="wear-pet-gear" data-item="${stack.itemId}">${esc(itemDef(stack.itemId)?.name ?? stack.itemId)}</button>`);
+      const worn = row.itemId ? itemDef(row.itemId) : undefined;
+      return `<article class="pet-slot ${row.itemId ? "filled" : "empty"}">
+      <header class="pet-slot-head">
+        <span class="pet-slot-icon" aria-hidden="true">${row.slot === "collar" ? "\u25CE" : "\u2740"}</span>
+        <div>
+          <strong>${row.slot === "collar" ? "Collar" : "Charm"}</strong>
+          <span class="small muted">${worn ? esc(worn.name) : esc(row.name)}</span>
+        </div>
         ${row.itemId ? `<button class="btn ghost small" data-action="remove-pet-gear" data-slot="${row.slot}">Take off</button>` : ""}
-      </div>
-      <div class="small muted">${esc(row.description)}</div>
-      ${owned.length ? `<div class="village-next"><div class="small">In your bag:</div><div class="row-wrap">${owned.join("")}</div></div>` : `<div class="small muted">None in your bag. Mira sells them.</div>`}
+      </header>
+      <p class="small muted">${esc(row.description)}</p>
+      ${owned.length
+        ? `<div class="pet-slot-bag"><span class="small muted">In your bag</span><div class="row-wrap">${owned.join("")}</div></div>`
+        : `<div class="small muted">${row.itemId ? "Nothing spare in your bag." : "None in your bag. Mira sells them."}</div>`}
+    </article>`;
+    })
+    .join("");
+  const skills = session.petSkillList
+    .map(
+      (skill) => `<div class="skill-row ${skill.learned ? "learned" : ""}">
+    <div>
+      <strong>${esc(skill.name)}</strong>
+      <div class="small muted">${esc(skill.description)}</div>
+    </div>
+    ${skill.learned ? `<span class="skill-tag on">\u2713 Learned</span>` : `<button class="btn ghost small" data-action="teach-pet-skill" data-skill="${skill.id}" ${skill.available ? "" : "disabled"}>Teach</button>`}
+  </div>`,
+    )
+    .join("");
+  const stageLadder = PET_STAGES.map((entry) => {
+    const reached = session.petLevel >= entry.fromLevel;
+    const current = stage.stage === entry.stage;
+    return `<div class="pet-stage ${reached ? "reached" : ""} ${current ? "current" : ""}">
+      <span class="pet-stage-name">${esc(entry.name)}</span>
+      <span class="pet-stage-level">Lv ${entry.fromLevel}</span>
     </div>`;
   }).join("");
-  const skills = session.petSkillList.map((skill) => `<div class="skill-row ${skill.learned ? "learned" : ""}">
-    <div><strong>${esc(skill.name)}</strong><div class="small muted">${esc(skill.description)}</div></div>
-    ${skill.learned ? `<span class="small" style="color:var(--good)">Learned</span>` : `<button class="btn ghost small" data-action="teach-pet-skill" data-skill="${skill.id}" ${skill.available ? "" : "disabled"}>Teach</button>`}
-  </div>`).join("");
-  const next = session.petStageNext;
-  return `<section class="panel-section">
-    <h3>Companion</h3>
-    <p class="small muted">${esc(session.save.companion?.name ?? "Your companion")} is level ${session.petLevel} (${esc(session.petStage.name)}). Worn gear and a taught skill give it more to do than just bite. ${next ? `Next stage at level ${next.fromLevel}: ${esc(next.name)}.` : "It has already reached the last stage."}</p>
-    <div class="village-summary small">
-      <span><strong>+${loadout.attack}</strong> attack</span>
-      <span><strong>+${loadout.defense}</strong> defense</span>
-      <span><strong>+${loadout.maxHp}</strong> health</span>
-      <span><strong>+${loadout.moveSpeed}</strong> move speed</span>
-      <span><strong>${Math.round(loadout.power * 100)}%</strong> bite power</span>
+  const progress = next
+    ? Math.min(100, Math.round(((session.petLevel - stage.fromLevel) / Math.max(1, next.fromLevel - stage.fromLevel)) * 100))
+    : 100;
+  return `<section class="panel-stack">
+    <header class="panel-hero">
+      <div class="panel-hero-body">
+        <h3>${petName}</h3>
+        <p class="small muted">Level ${session.petLevel} \u00B7 ${esc(stage.name)}. Worn gear and a taught skill give it more to do than just bite.</p>
+      </div>
+      <div class="panel-hero-stat"><strong>${Math.round(loadout.power * 100)}%</strong><span class="small muted">bite power</span></div>
+    </header>
+    <div class="pet-stage-ladder">${stageLadder}</div>
+    <div class="panel-progress"><div class="panel-progress-fill" style="width:${progress}%"></div></div>
+    <div class="small muted">${next ? `${next.fromLevel - session.petLevel} level${next.fromLevel - session.petLevel === 1 ? "" : "s"} to ${esc(next.name)}` : "Every stage reached. It has grown as far as it can."}</div>
+    <div class="effect-chip-row">
+      <span class="effect-chip"><span aria-hidden="true">\u2694</span>+${loadout.attack} attack</span>
+      <span class="effect-chip"><span aria-hidden="true">\u26E8</span>+${loadout.defense} defense</span>
+      <span class="effect-chip"><span aria-hidden="true">\u2764</span>+${loadout.maxHp} health</span>
+      <span class="effect-chip"><span aria-hidden="true">\u27A4</span>+${loadout.moveSpeed} move speed</span>
     </div>
-    <div class="village-grid">${gearCards}</div>
-    <h4>Skills</h4>
+    <div class="village-grid">${slotCards}</div>
+    <div class="panel-subhead">Skills</div>
     <div class="skill-list">${skills}</div>
   </section>`;
 }
 
 export function runewordSection(session: GameSession): string {
   const rows = session.runewordRows;
-  const cards = rows.map((row) => {
-    const chips = row.gems.map((gem) => `<span class="gem-chip ${gem.have >= gem.need ? "ready" : ""}">${esc(gem.name)}</span>`).join("");
-    return `<div class="village-card ${row.forged ? "forged" : ""}">
-      <div class="village-head">
-        <div><strong>${esc(row.name)}</strong><div class="small muted">${row.gems.map((gem) => `${gem.have}/${gem.need} ${gem.name}`).join(" • ")}</div></div>
-        ${row.forged ? `<span class="small" style="color:var(--good)">Forged</span>` : row.ready ? `<span class="small" style="color:var(--accent)">Ready</span>` : ""}
-      </div>
+  const forged = rows.filter((row) => row.forged).length;
+  const ready = rows.filter((row) => row.ready && !row.forged).length;
+  const cards = rows
+    .map((row) => {
+      const held = row.gems.reduce((sum, gem) => sum + Math.min(gem.have, gem.need), 0);
+      const wanted = row.gems.reduce((sum, gem) => sum + gem.need, 0);
+      const pct = wanted > 0 ? Math.min(100, Math.round((held / wanted) * 100)) : 100;
+      const status = row.forged
+        ? `<span class="village-pill done">Forged</span>`
+        : row.ready
+          ? `<span class="village-pill ready">Ready</span>`
+          : `<span class="village-pill">${held}/${wanted} gems</span>`;
+      const chips = row.gems
+        .map((gem) => {
+          const got = gem.have >= gem.need;
+          return `<span class="gem-chip ${got ? "ready" : ""}">${esc(gem.name)}<b>${gem.have}/${gem.need}</b></span>`;
+        })
+        .join("");
+      return `<article class="village-card runeword-card ${row.forged ? "forged" : ""}">
+      <header class="village-head">
+        <div class="village-title"><strong>${esc(row.name)}</strong><span class="small muted">3 sockets · any order</span></div>
+        ${status}
+      </header>
+      <div class="panel-progress small"><div class="panel-progress-fill" style="width:${pct}%"></div></div>
       <div class="gem-chips">${chips}</div>
-      <div class="small muted">${esc(row.text)}</div>
-    </div>`;
-  }).join("");
-  return `<section class="panel-section">
-    <h3>Runewords</h3>
-    <p class="small muted">Three gems in the right combination, set into gear with at least three sockets, spell a runeword. The order does not matter. Rare gear holds three, epic four, legendary five.</p>
+      <p class="small muted">${esc(row.text)}</p>
+    </article>`;
+    })
+    .join("");
+  return `<section class="panel-stack">
+    <header class="panel-hero">
+      <div class="panel-hero-body">
+        <h3>Runewords</h3>
+        <p class="small muted">Three gems in the right combination, set into gear with at least three sockets, spell a runeword. The order does not matter. Rare gear holds three, epic four, legendary five.</p>
+      </div>
+      <div class="panel-hero-stat"><strong>${forged}/${rows.length}</strong><span class="small muted">${ready > 0 ? `${ready} ready now` : "forged"}</span></div>
+    </header>
     <div class="village-grid">${cards}</div>
   </section>`;
 }
