@@ -63,7 +63,9 @@ export function charIconHtml(sprite: string, size = 40): string {
 
 export function portraitHtml(sprite: string, size = 64, extraClass = ""): string {
   const frame = portraitFrame(sprite);
-  return `<span class="portrait-frame ${extraClass}" style="width:${size}px;height:${size}px;background-image:url('${asset("assets/portraits.png")}');background-size:${size * 5}px auto;background-position:-${frame.col * size}px -${frame.row * size}px"></span>`;
+  // Position with percentages so the same markup survives any CSS size override
+  // (class cards, the narrow HUD). A 5x5 sheet means each step is a quarter.
+  return `<span class="portrait-frame ${extraClass}" style="width:${size}px;height:${size}px;background-image:url('${asset("assets/portraits.png")}');background-size:500% 500%;background-position:${frame.col * 25}% ${frame.row * 25}%"></span>`;
 }
 
 export function classPortrait(classId: string, size = 64, extraClass = ""): string {

@@ -169,8 +169,13 @@ export class WorldScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, session.zone.width * session.zone.tileWidth, session.zone.height * session.zone.tileHeight);
     this.cameras.main.startFollow(this.player, true, 0.16, 0.16);
-    this.cameras.main.setZoom(preferences.cameraZoom);
+    this.applyCameraZoom(preferences.cameraZoom);
     this.cameras.main.roundPixels = true;
+    // A resized window changes how much world fits on screen, so the zoom has to
+    // be re-checked or a wide view can expose a blank strip past the map edge.
+    const onResize = () => this.applyCameraZoom(loadPreferences().cameraZoom);
+    this.scale.on("resize", onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off("resize", onResize));
     if (!preferences.reducedMotion) this.cameras.main.fadeIn(260, 10, 8, 14);
     const vignette = this.add.graphics().setScrollFactor(0).setDepth(9500);
     const vw = this.scale.width;
@@ -201,7 +206,7 @@ export class WorldScene extends Phaser.Scene {
     // Camera zoom lives on the scene, not in CSS, so it follows the settings sheet live.
     const onPreferences = (event: Event) => {
       const next = (event as CustomEvent<GamePreferences>).detail;
-      if (next?.cameraZoom) this.cameras.main.setZoom(next.cameraZoom);
+      if (next?.cameraZoom) this.applyCameraZoom(next.cameraZoom);
     };
     window.addEventListener("realm:preferences", onPreferences);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -232,6 +237,22 @@ export class WorldScene extends Phaser.Scene {
 
     this.syncEntities();
     this.ui.update(0);
+  }
+
+  /**
+   * Zoom the camera but never so far out that the world stops covering the canvas.
+   * Phaser clamps the camera to the map bounds; when the wanted view is wider than
+   * the zone it leaves the extra space to the right of the map, which reads as a
+   * black strip. Fitting the zone to the viewport keeps the map edge to edge.
+   */
+  private applyCameraZoom(preferredZoom: number): void {
+    const zone = this.session.zone;
+    const worldWidth = zone.width * zone.tileWidth;
+    const worldHeight = zone.height * zone.tileHeight;
+    const fitZoom = Math.max(this.scale.width / worldWidth, this.scale.height / worldHeight);
+    // Round up a hair so pixel rounding cannot leave a one-pixel seam at the edge.
+    const floorZoom = Math.ceil(fitZoom * 100) / 100;
+    this.cameras.main.setZoom(Math.max(preferredZoom, floorZoom));
   }
 
   private buildMap(): void {

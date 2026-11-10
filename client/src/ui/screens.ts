@@ -1919,7 +1919,7 @@ function blessingSection(session: GameSession): string {
  * One page with every control on it, opened with the ? key or the button in Settings.
  * It reads the live keybinds, so a rebound key shows up here too instead of lying.
  */
-export function controlsPanelHtml(preferences: GamePreferences): string {
+export function controlsPanelHtml(preferences: GamePreferences, session: GameSession | null = null): string {
   const keys = preferences.keybinds;
   const groups: { title: string; note: string; rows: [string, string, string][] }[] = [
     {
@@ -1987,10 +1987,12 @@ export function controlsPanelHtml(preferences: GamePreferences): string {
     .join("");
   return `<div class="inv-sheet controls-sheet">
     <header class="inv-hero">
-      <div class="inv-hero-portrait" style="display:grid;place-items:center;font-size:22px">?</div>
+      ${session
+        ? `<div class="inv-hero-portrait">${classPortrait(session.save.classId, 56)}</div>`
+        : `<div class="inv-hero-portrait" style="display:grid;place-items:center;font-size:22px">?</div>`}
       <div class="inv-hero-body">
-        <strong>Every control</strong>
-        <span class="small muted">Read live from your keybinds, so a rebound key shows up here too. Change keys in Settings.</span>
+        <strong>${session ? esc(session.save.name) : "Every control"}</strong>
+        <span class="small muted">${session ? `${esc(getClass(session.save.classId).name)} · Level ${session.save.level} · ${esc(session.zone.name)}` : "Read live from your keybinds, so a rebound key shows up here too. Change keys in Settings."}</span>
         <div class="inv-hero-chips">
           <span class="settings-chip">${groups.reduce((n, group) => n + group.rows.length, 0)} controls</span>
           <span class="settings-chip">Keyboard, mouse and gamepad</span>

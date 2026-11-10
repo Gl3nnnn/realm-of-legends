@@ -412,8 +412,9 @@ export class UIManager {
     this.dom.portrait.style.borderColor = classColor(def.id);
     const frame = portraitFrame(def.sprite);
     this.dom.portrait.style.backgroundImage = `url('${import.meta.env.BASE_URL}assets/portraits.png')`;
-    this.dom.portrait.style.backgroundSize = "320px auto";
-    this.dom.portrait.style.backgroundPosition = `-${frame.col * 64}px -${frame.row * 64}px`;
+    // Percentage placement keeps the right face when the HUD shrinks the frame.
+    this.dom.portrait.style.backgroundSize = "500% 500%";
+    this.dom.portrait.style.backgroundPosition = `${frame.col * 25}% ${frame.row * 25}%`;
     this.dom.name.textContent = session.save.name;
     this.dom.classLabel.textContent = `${def.name} · ${def.role}`;
     const resourceBar = this.dom.resFill.parentElement;
@@ -1296,7 +1297,7 @@ export class UIManager {
       narrow = true;
     } else if (this.panel.kind === "controls") {
       title = "Controls";
-      body = controlsPanelHtml(this.preferences);
+      body = controlsPanelHtml(this.preferences, this.session);
       narrow = true;
     }
     this.dom.overlay.innerHTML = `<section class="panel ${narrow ? "narrow" : ""}" role="document">
