@@ -277,8 +277,9 @@ export function drawTileset() {
   });
   tile(TILE.pine, (_t, ox, oy) => {
     rect(im, ox + 7, oy + 11, 2, 5, "#4a3320");
+    // Narrow at the tip and widening toward the trunk, so the tree points up.
     for (let row = 0; row < 4; row += 1) {
-      const w = 12 - row * 2;
+      const w = 6 + row * 2;
       rect(im, ox + (16 - w) / 2, oy + 2 + row * 3, w, 3, row % 2 === 0 ? "#24492b" : "#2e5a34");
     }
     rect(im, ox + 7, oy + 2, 2, 10, "#3c6b3f");
