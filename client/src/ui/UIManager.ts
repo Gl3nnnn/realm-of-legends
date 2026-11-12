@@ -762,10 +762,24 @@ export class UIManager {
     const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
     const show = Boolean(this.session) && !this.modalOpen && this.dom.tutorial.classList.contains("hidden") && (coarse || this.preferences.touchControls);
     this.dom.touchControls.classList.toggle("hidden", !show);
-    for (const [action, key] of [["quick1", "quick1"], ["quick2", "quick2"], ["interact", "interact"]] as const) {
+    this.refreshTouchLabels();
+  }
+
+  private refreshTouchLabels(): void {
+    const quickButtons = [
+      ["quick1", this.preferences.keybinds.quick1, 0],
+      ["quick2", this.preferences.keybinds.quick2, 1],
+    ] as const;
+    for (const [action, key, index] of quickButtons) {
       const button = this.dom.touchControls.querySelector<HTMLElement>(`[data-touch="${action}"]`);
-      if (button) button.textContent = this.preferences.keybinds[key];
+      if (!button) continue;
+      const itemId = this.session?.save.quickSlots[index];
+      const count = itemId && this.session ? this.session.countItem(itemId) : null;
+      button.innerHTML = count === null ? esc(key) : `${esc(key)}<span class="touch-count">${count}</span>`;
+      button.setAttribute("aria-label", count === null ? `Quick slot ${index + 1}: ${key}` : `Quick slot ${index + 1}: ${key}, ${count} left`);
     }
+    const interact = this.dom.touchControls.querySelector<HTMLElement>('[data-touch="interact"]');
+    if (interact) interact.textContent = this.preferences.keybinds.interact;
   }
 
   private onKeyDown(event: KeyboardEvent): void {
@@ -1759,6 +1773,7 @@ export class UIManager {
     if (signature === this.quickbarSignature) return;
     this.quickbarSignature = signature;
     this.dom.quickbar.innerHTML = quickbarHtml(this.session, [this.preferences.keybinds.quick1, this.preferences.keybinds.quick2]);
+    this.refreshTouchLabels();
   }
 
   private updateCompass(): void {

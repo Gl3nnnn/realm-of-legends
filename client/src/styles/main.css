@@ -3697,6 +3697,9 @@ summary:focus-visible {
   }
 
   .hud-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 3px;
   }
 
@@ -3946,11 +3949,11 @@ summary:focus-visible {
   }
 
   .hud-top-left {
-    width: 52vw;
+    width: 50vw;
   }
 
   .hud-top-right {
-    max-width: 46vw;
+    max-width: 42vw;
   }
 
   #minimap {
@@ -4151,6 +4154,7 @@ html[data-contrast="high"] .journal-nav a {
 }
 
 .touch-btn {
+  position: relative;
   width: 58px;
   height: 58px;
   border-radius: 50%;
@@ -4162,6 +4166,20 @@ html[data-contrast="high"] .journal-nav a {
   pointer-events: auto;
   touch-action: manipulation;
   user-select: none;
+}
+
+.touch-count {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 13px;
+  padding: 1px 3px;
+  border: 1px solid rgba(232, 192, 90, 0.45);
+  border-radius: 7px;
+  background: rgba(12, 10, 18, 0.92);
+  color: var(--text);
+  font-size: 7px;
+  line-height: 1;
 }
 
 .touch-btn.small {
@@ -4245,6 +4263,70 @@ html[data-contrast="high"] .journal-nav a {
 /* Small phones: shrink the touch buttons a little more, but keep them easy to tap. */
 @media (pointer: coarse) and (max-width: 380px) {
   :root { --touch-unit: clamp(34px, min(9.5vw, 6.5vh), 52px); }
+  .ability-bar { gap: 2px; padding: 3px; }
+}
+
+/* Phones put the stick and action buttons over the bottom edge, so move the log
+   above the stick and reserve the middle of the bar for the abilities. */
+@media (pointer: coarse) and (max-width: 760px) {
+  .combat-log {
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left));
+    bottom: calc(env(safe-area-inset-bottom) + var(--touch-unit) * 2.4 + 24px);
+    width: min(34vw, 150px);
+    max-height: 104px;
+    margin: 0;
+  }
+
+  .quickbar {
+    display: none;
+  }
+
+  .ability-slot.empty {
+    display: none;
+  }
+
+  .ability-wrap {
+    padding-left: calc(var(--touch-unit) * 2.4 + 20px);
+    padding-right: calc(var(--touch-unit) * 3.2 + 12px);
+  }
+
+  .ability-bar {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ability-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .quest-tracker {
+    bottom: calc(env(safe-area-inset-bottom) + var(--touch-unit) * 5.6 + 8px);
+    max-height: 14vh;
+  }
+
+  #quest-tracker .next-step {
+    padding: 6px 8px;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  #quest-tracker .next-step-label {
+    font-size: 7px;
+  }
+
+  #quest-tracker .next-step-title {
+    font-size: 11px;
+  }
+
+  #quest-tracker .next-step-detail {
+    margin-top: 1px;
+  }
+
+  #quest-tracker .next-step-where {
+    display: none;
+  }
 }
 
 /* Short landscape phones: keep the HUD and game area usable. */

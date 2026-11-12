@@ -199,6 +199,57 @@ test("class browsing filters correctly and stays within a phone viewport", async
   expect(hasHorizontalOverflow).toBe(false);
 });
 
+test.describe("phone HUD", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("keeps every panel button on screen and the log above the movement stick", async ({ page }) => {
+    await page.goto("/");
+    await openHeroSelect(page);
+    await page.locator('[data-action="new-character"]').click();
+    await page.locator("#char-name").fill("Phone Hero");
+    await page.locator('[data-action="create-character"]').click();
+    await skipIntro(page);
+    await page.locator("#tutorial-close").click();
+
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    const boxes = await page.locator(".hud-controls .icon-btn").evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          id: button.getAttribute("data-panel") ?? button.id,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      }),
+    );
+    expect(boxes.length).toBe(8);
+    for (const box of boxes) {
+      expect(box.left, `${box.id} starts inside the phone`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${box.id} ends inside the phone`).toBeLessThanOrEqual(viewport!.width);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+    }
+
+    const log = await page.locator("#combat-log").boundingBox();
+    const stick = await page.locator("#touch-stick").boundingBox();
+    const actions = await page.locator(".touch-actions").boundingBox();
+    const abilities = await page.locator("#ability-bar").boundingBox();
+    expect(log).not.toBeNull();
+    expect(stick).not.toBeNull();
+    expect(actions).not.toBeNull();
+    expect(abilities).not.toBeNull();
+    expect(log!.y + log!.height, "the combat log clears the movement stick").toBeLessThanOrEqual(stick!.y);
+    expect(abilities!.x, "the ability bar clears the movement stick").toBeGreaterThanOrEqual(stick!.x + stick!.width - 1);
+    expect(abilities!.x + abilities!.width, "the ability bar clears the touch actions").toBeLessThanOrEqual(actions!.x + 1);
+    await expect(page.locator("#quickbar")).toBeHidden();
+
+    await page.locator('[data-panel="settings"]').click();
+    await expect(page.locator("#overlay")).toContainText("Settings");
+  });
+});
+
 test("minimap toggle updates its visibility and accessible state", async ({ page }) => {
   await page.goto("/");
   await openHeroSelect(page);

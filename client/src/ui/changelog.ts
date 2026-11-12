@@ -21,6 +21,22 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.21.0",
+    date: "November 12, 2026",
+    title: "The Small Screen Update",
+    summary:
+      "The phone HUD was still laid out like the desktop one: the row of panel buttons ran off the right edge, so Settings could not be reached, and the combat log and quest tracker sat under the touch controls. The top row now wraps, the bottom bar keeps the abilities clear of the movement stick and action buttons, and every icon button says what it opens to a screen reader.",
+    changes: [
+      { tag: "fixed", text: "On phones, the panel buttons now wrap onto a second row, so Settings and every other sheet stay on screen." },
+      { tag: "fixed", text: "The combat log sits above the movement stick instead of underneath it, so the last few lines stay readable while you walk." },
+      { tag: "fixed", text: "The ability bar now sits in the free space between the movement stick and the attack buttons, so no ability is covered by Dodge or Attack." },
+      { tag: "improved", text: "Touch potion buttons show how many are left, and the duplicate quickbar is hidden on phones to make room." },
+      { tag: "improved", text: "The quest tracker moves above the aim stick and shows a compact next-step card on phones." },
+      { tag: "improved", text: "The top-left vitals and top-right buttons no longer crowd each other on the narrowest phones." },
+      { tag: "improved", text: "Each HUD icon button now has a descriptive name for screen readers instead of a single letter." },
+    ],
+  },
+  {
     version: "1.20.0",
     date: "November 9, 2026",
     title: "The Last Shelves Update",
