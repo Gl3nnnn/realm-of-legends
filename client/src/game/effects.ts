@@ -256,7 +256,8 @@ export function drawProjectile(scene: WorldScene, g: Phaser.GameObjects.Graphics
     g.fillCircle(projectile.x, projectile.y, projectile.radius + 8);
     g.fillStyle(color, 0.3);
     g.fillCircle(projectile.x, projectile.y, projectile.radius + 3);
-    for (let i = 1; i <= 4; i += 1) {
+    const trail = loadPreferences().performanceMode ? 1 : 4;
+    for (let i = 1; i <= trail; i += 1) {
       g.fillStyle(color, 0.34 - i * 0.07);
       g.fillCircle(projectile.x - dx * i * 4, projectile.y - dy * i * 4, Math.max(1, projectile.radius * (1 - i * 0.15)));
     }
@@ -295,7 +296,8 @@ export function softGlow(scene: Phaser.Scene, x: number, y: number, color: numbe
 
 /** A bright flash that swells and fades away at one spot. Skipped under reduced motion. */
 export function glowBurst(scene: Phaser.Scene, x: number, y: number, color: number, size: number, alpha: number, duration: number, depth = y + 4): void {
-  if (loadPreferences().reducedMotion) return;
+  const preferences = loadPreferences();
+  if (preferences.reducedMotion || preferences.performanceMode) return;
   const glow = softGlow(scene, x, y, color, size, alpha, depth).setBlendMode(Phaser.BlendModes.ADD);
   scene.tweens.add({
     targets: glow,

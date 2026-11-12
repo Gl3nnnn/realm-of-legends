@@ -104,7 +104,10 @@ export class WorldScene extends Phaser.Scene {
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
   private decorLayer?: Phaser.Tilemaps.TilemapLayer;
   private tallTileSprites = new Map<string, Phaser.GameObjects.Image>();
+  private ambientDots: Phaser.GameObjects.Arc[] = [];
   private aim = { x: 0, y: 0 };
+  private manualAimAt = 0;
+  private lastRumbleAt = 0;
   private hitPauseLeft = 0;
   /** Seconds left of the slow crawl after a boss falls. */
   private slowmoLeft = 0;
@@ -135,7 +138,9 @@ export class WorldScene extends Phaser.Scene {
     this.chestSprites.clear();
     this.chestLabels.clear();
     this.gatherSprites.clear();
+    this.ambientDots = [];
     this.pointerMoved = false;
+    this.manualAimAt = -10_000;
     this.floatPool = [];
     this.burstPool = [];
     this.padPrev = [];
@@ -207,6 +212,9 @@ export class WorldScene extends Phaser.Scene {
     const onPreferences = (event: Event) => {
       const next = (event as CustomEvent<GamePreferences>).detail;
       if (next?.cameraZoom) this.applyCameraZoom(next.cameraZoom);
+      if (next && typeof next.performanceMode === "boolean") {
+        for (const dot of this.ambientDots) dot.setVisible(!next.performanceMode);
+      }
     };
     window.addEventListener("realm:preferences", onPreferences);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -215,11 +223,13 @@ export class WorldScene extends Phaser.Scene {
 
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
       this.pointerMoved = true;
+      this.manualAimAt = this.time.now;
       const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.aim = { x: point.x, y: point.y };
     });
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (!pointer.leftButtonDown() || this.ui.modalOpen) return;
+      this.manualAimAt = this.time.now;
       const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.aim = { x: point.x, y: point.y };
       this.pointerMoved = true;
@@ -529,7 +539,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Starts a small decorative tween (idle bobs, glows, quest hops). Under Reduce motion it is skipped, so the scene stays calm. */
   private calmTween(config: Phaser.Types.Tweens.TweenBuilderConfig): void {
-    if (loadPreferences().reducedMotion) return;
+    const preferences = loadPreferences();
+    if (preferences.reducedMotion || preferences.performanceMode) return;
     this.tweens.add(config);
   }
 
@@ -613,6 +624,39 @@ export class WorldScene extends Phaser.Scene {
     if (ability) this.cast(ability.id);
   }
 
+  /**
+   * Pick the monster closest to where the hero is already facing, but never one
+   * far off to the side. The aim snaps only when no stick, touch or pointer input
+   * is steering it, so manual aim always wins.
+   */
+  private assistedAim(base: { x: number; y: number }): { x: number; y: number } {
+    const save = this.session.save;
+    const dirX = base.x - save.x;
+    const dirY = base.y - save.y;
+    const length = Math.hypot(dirX, dirY) || 1;
+    const aimX = dirX / length;
+    const aimY = dirY / length;
+    const range = this.session.classInfo.basic.range + 60;
+    let best: MonsterInstance | null = null;
+    let bestScore = Infinity;
+    for (const monster of this.session.monsters) {
+      if (monster.state === "dead") continue;
+      const dx = monster.x - save.x;
+      const dy = monster.y - save.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < 1 || distance > range) continue;
+      const dot = Math.max(-1, Math.min(1, (dx * aimX + dy * aimY) / distance));
+      const angle = Math.acos(dot);
+      if (angle > 0.95) continue;
+      const score = angle * 200 + distance;
+      if (score < bestScore) {
+        bestScore = score;
+        best = monster;
+      }
+    }
+    return best ? { x: best.x, y: best.y } : base;
+  }
+
   private syncKeybinds(force = false): void {
     syncKeybinds(this, force);
   }
@@ -670,7 +714,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createAmbience(): void {
-    if (loadPreferences().reducedMotion) return;
+    const preferences = loadPreferences();
+    if (preferences.reducedMotion) return;
     const ambience = this.session.zone.ambience;
     const config = {
       village: { color: 0xe8d8a0, count: 5, radius: 1.2, drift: 10, alpha: 0.1 },
@@ -681,10 +726,12 @@ export class WorldScene extends Phaser.Scene {
       throne: { color: 0xffb070, count: 9, radius: 1.4, drift: 12, alpha: 0.12 },
     }[ambience];
     const zone = this.session.zone;
-    for (let i = 0; i < config.count; i += 1) {
+    const count = preferences.performanceMode ? Math.max(2, Math.ceil(config.count * 0.35)) : config.count;
+    for (let i = 0; i < count; i += 1) {
       const x = Math.random() * zone.width * zone.tileWidth;
       const y = Math.random() * zone.height * zone.tileHeight;
       const dot = this.add.circle(x, y, config.radius + Math.random(), config.color, config.alpha).setDepth(-2);
+      this.ambientDots.push(dot);
       this.tweens.add({
         targets: dot,
         y: y - config.drift - Math.random() * 12,
@@ -702,6 +749,7 @@ export class WorldScene extends Phaser.Scene {
     if (!this.session) return;
     this.syncGatherSprites();
     this.syncKeybinds();
+    const preferences = loadPreferences();
     const pad = this.readGamepad();
     if (pad.menu) {
       this.ui.openMenu();
@@ -729,7 +777,20 @@ export class WorldScene extends Phaser.Scene {
       const len = Math.hypot(touchAim.x, touchAim.y) || 1;
       this.aim = { x: this.session.save.x + (touchAim.x / len) * 160, y: this.session.save.y + (touchAim.y / len) * 160 };
     }
-    if (this.ui.takeTouchAimFire()) {
+    const touchFire = this.ui.takeTouchAimFire();
+    const steeringAim =
+      touchAim.active ||
+      touchFire ||
+      pad.aimX !== 0 ||
+      pad.aimY !== 0 ||
+      this.input.activePointer.isDown ||
+      time - this.manualAimAt < 800;
+    if (preferences.autoAim && !steeringAim) {
+      const facing = this.facingVector(this.session.facing);
+      const base = { x: this.session.save.x + facing.x * 160, y: this.session.save.y + facing.y * 160 };
+      this.aim = this.assistedAim(base);
+    }
+    if (touchFire) {
       this.cast("basic");
     }
 
@@ -1256,7 +1317,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private flurryFx(x: number, y: number, color: number, angle: number, duration: number): void {
-    for (let i = 0; i < 3; i += 1) {
+    const slashes = loadPreferences().performanceMode ? 2 : 3;
+    for (let i = 0; i < slashes; i += 1) {
       this.time.delayedCall(i * 55, () => {
         this.arcFx(x, y, angle + i * 2.1, color, 20, 3, 1.2, 180);
       });
@@ -1345,7 +1407,8 @@ export class WorldScene extends Phaser.Scene {
 
   private rainFx(x: number, y: number, radius: number, color: number, duration: number): void {
     this.ringFx(x, y, radius, color, 2, duration);
-    for (let i = 0; i < 7; i += 1) {
+    const drops = loadPreferences().performanceMode ? 3 : 7;
+    for (let i = 0; i < drops; i += 1) {
       const ox = (Math.random() * 2 - 1) * radius * 0.8;
       const oy = (Math.random() * 2 - 1) * radius * 0.6;
       this.time.delayedCall(i * 60, () => {
@@ -1356,8 +1419,9 @@ export class WorldScene extends Phaser.Scene {
 
   private summonFx(x: number, y: number, color: number, accent: number, duration: number): void {
     this.runeFx(x, y, 28, color, accent, duration);
-    for (let i = 0; i < 8; i += 1) {
-      const a = (Math.PI * 2 * i) / 8;
+    const sparks = loadPreferences().performanceMode ? 3 : 8;
+    for (let i = 0; i < sparks; i += 1) {
+      const a = (Math.PI * 2 * i) / sparks;
       const dot = this.add.circle(x + Math.cos(a) * 18, y + Math.sin(a) * 10, 2, color, 0.9).setDepth(y + 4);
       this.tweens.add({
         targets: dot,
@@ -1372,8 +1436,9 @@ export class WorldScene extends Phaser.Scene {
 
   private dashFx(x1: number, y1: number, x2: number, y2: number, color: number, accent: number, duration: number): void {
     this.lineFx(x1, y1, x2, y2, accent, 6, 0.25, duration);
-    for (let i = 1; i <= 3; i += 1) {
-      const t = i / 4;
+    const ghosts = loadPreferences().performanceMode ? 1 : 3;
+    for (let i = 1; i <= ghosts; i += 1) {
+      const t = i / (ghosts + 1);
       const ghost = this.add.circle(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 7, color, 0.18).setDepth(y1 + 2);
       this.tweens.add({ targets: ghost, alpha: 0, scale: 1.6, duration: 220 + i * 40, onComplete: () => ghost.destroy() });
     }
@@ -1381,7 +1446,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private healSparkle(x: number, y: number): void {
-    for (let i = 0; i < 6; i += 1) {
+    const sparks = loadPreferences().performanceMode ? 2 : 6;
+    for (let i = 0; i < sparks; i += 1) {
       const dot = this.add.circle(x + (Math.random() * 2 - 1) * 18, y + 6, 1.8, 0x8ef0a0, 0.9).setDepth(y + 5);
       this.tweens.add({
         targets: dot,
@@ -1410,7 +1476,8 @@ export class WorldScene extends Phaser.Scene {
 
   private buffFx(x: number, y: number, color: number, accent: number, duration: number): void {
     this.ringFx(x, y, 22, color, 3, duration);
-    for (let i = 0; i < 5; i += 1) {
+    const sparks = loadPreferences().performanceMode ? 2 : 5;
+    for (let i = 0; i < sparks; i += 1) {
       const dot = this.add.circle(x + (Math.random() * 2 - 1) * 16, y + 8, 2, accent, 0.9).setDepth(y + 4);
       this.tweens.add({
         targets: dot,
@@ -1424,7 +1491,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private smokeFx(x: number, y: number, color: number, duration: number): void {
-    for (let i = 0; i < 5; i += 1) {
+    const puffs = loadPreferences().performanceMode ? 2 : 5;
+    for (let i = 0; i < puffs; i += 1) {
       const puff = this.add.circle(x + (Math.random() * 2 - 1) * 12, y + (Math.random() * 2 - 1) * 8, 6 + Math.random() * 5, color, 0.28).setDepth(y + 3);
       this.tweens.add({
         targets: puff,
@@ -1511,9 +1579,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private burst(x: number, y: number, color: number, count = 7, spread = 1): void {
+    const trimmed = loadPreferences().performanceMode;
     // One soft bright flash under the sparks, sized by how big the burst is.
-    glowBurst(this, x, y, color, Math.min(90, 18 + count * 3 * spread), 0.5, 280 + spread * 80, 9280);
-    for (let i = 0; i < count; i += 1) {
+    if (!trimmed) glowBurst(this, x, y, color, Math.min(90, 18 + count * 3 * spread), 0.5, 280 + spread * 80, 9280);
+    const shown = trimmed ? Math.max(1, Math.ceil(count / 3)) : count;
+    for (let i = 0; i < shown; i += 1) {
       const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
       const dot = this.burstPool.pop() ?? this.add.circle(x, y, 2, color, 0.95).setDepth(9300);
       this.tweens.killTweensOf(dot);
@@ -1538,11 +1608,18 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Shake the pad for a landed hit. Kind 1 is a crit, 0 a clean hit, 2 a boss falling. */
+  /** Shake the pad or buzz the phone for a landed hit. Kind 1 is a crit, 0 a clean hit, 2 a boss falling. */
   private rumble(kind: 0 | 1 | 2): void {
     const preferences = loadPreferences();
     if (preferences.reducedMotion || !preferences.haptics) return;
+    if (kind === 0 && this.time.now - this.lastRumbleAt < 50) return;
+    this.lastRumbleAt = this.time.now;
     rumblePad(kind);
+    try {
+      navigator.vibrate?.(kind === 2 ? [70, 50, 110] : kind === 1 ? 35 : 12);
+    } catch {
+      // Vibration can be blocked by the browser or the device; the game plays on.
+    }
   }
 
   private flashMonster(x: number, y: number): void {

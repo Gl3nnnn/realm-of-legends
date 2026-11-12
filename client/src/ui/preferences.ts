@@ -197,6 +197,7 @@ export function applyPreferences(preferences: GamePreferences): void {
   root.dataset.colorBlind = preferences.colorBlind;
   root.dataset.textSize = String(preferences.textSize);
   root.dataset.touch = preferences.touchControls ? "on" : "auto";
+  root.dataset.performance = preferences.performanceMode ? "on" : "off";
   root.style.setProperty("--ui-scale", String(preferences.uiScale));
   root.style.setProperty("--text-scale", String(preferences.textSize));
   root.style.setProperty("--world-brightness", String(preferences.brightness));

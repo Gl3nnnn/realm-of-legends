@@ -96,6 +96,12 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   await expect(page.locator("#game canvas")).toHaveCSS("filter", "brightness(1.4) contrast(1.18)");
   await page.locator("#motion-toggle").check();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+  await page.locator("#autoaim-toggle").check();
+  await expect(page.locator("#autoaim-toggle")).toBeChecked();
+  await page.locator("#haptics-toggle").uncheck();
+  await expect(page.locator("#haptics-toggle")).not.toBeChecked();
+  await page.locator("#performance-toggle").check();
+  await expect(page.locator("html")).toHaveAttribute("data-performance", "on");
   await page.locator('[data-action="close-panel"]').click();
 
   await page.keyboard.press("i");

@@ -2174,6 +2174,16 @@ export function settingsPanelHtml(
           <option value="1.4" ${preferences.brightness === 1.4 ? "selected" : ""}>Brightest</option>
         </select>
       </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Performance mode</strong>
+          <div class="small muted">Trims particles, glows and background blur on older phones.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="performance-toggle" ${preferences.performanceMode ? "checked" : ""} aria-label="Performance mode" />
+          <span class="setting-switch-track"></span>
+        </label>
+      </div>
     </div>
     <div class="settings-group">
       <div class="settings-group-head">
@@ -2255,6 +2265,26 @@ export function settingsPanelHtml(
         </div>
         <label class="setting-switch">
           <input type="checkbox" id="touch-toggle" ${preferences.touchControls ? "checked" : ""} aria-label="Touch controls" />
+          <span class="setting-switch-track"></span>
+        </label>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Aim assist</strong>
+          <div class="small muted">Gently pulls your aim to a nearby monster when you are not steering it yourself.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="autoaim-toggle" ${preferences.autoAim ? "checked" : ""} aria-label="Aim assist" />
+          <span class="setting-switch-track"></span>
+        </label>
+      </div>
+      <div class="setting-line">
+        <div class="setting-line-label">
+          <strong>Phone vibration</strong>
+          <div class="small muted">A short buzz on hits, crits and boss kills where the browser allows it.</div>
+        </div>
+        <label class="setting-switch">
+          <input type="checkbox" id="haptics-toggle" ${preferences.haptics ? "checked" : ""} aria-label="Phone vibration" />
           <span class="setting-switch-track"></span>
         </label>
       </div>

@@ -3043,6 +3043,30 @@ html[data-motion="reduced"] *::after {
   scroll-behavior: auto !important;
 }
 
+/* Performance mode drops the expensive compositing work first: blurred backdrops,
+   long shadows and endless decorative animations. */
+html[data-performance="on"] *,
+html[data-performance="on"] *::before,
+html[data-performance="on"] *::after {
+  backdrop-filter: none !important;
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+html[data-performance="on"] .hud-vitals,
+html[data-performance="on"] .ability-bar,
+html[data-performance="on"] .quickbar,
+html[data-performance="on"] .panel,
+html[data-performance="on"] .update-shell,
+html[data-performance="on"] .confirm-card,
+html[data-performance="on"] .boss-intro {
+  box-shadow: 0 0 0 1px #000 !important;
+}
+
+html[data-performance="on"] .danger-vignette {
+  display: none;
+}
+
 html[data-ui-scale="1.25"] #hud,
 html[data-ui-scale="1.5"] #hud {
   width: calc(100% / var(--ui-scale));

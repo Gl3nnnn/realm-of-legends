@@ -21,6 +21,19 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.22.0",
+    date: "November 12, 2026",
+    title: "The Comfort Update",
+    summary:
+      "Aim assist, phone vibration and a lighter performance mode were already saved in the preferences file, but no switch reached them. They do now: aim assist gently takes the nearest monster in front when your hands are off the aim, phones buzz on a landed hit, and performance mode trims the particles, glows and blurred panels that cost the most on an older device.",
+    changes: [
+      { tag: "new", text: "Settings now has a switch for Aim assist, which snaps to the nearest monster in front when no stick, touch or pointer is steering your aim." },
+      { tag: "new", text: "Phone vibration is now a real setting and phones buzz on hits, crits and boss kills where the browser allows it." },
+      { tag: "new", text: "Performance mode now has a switch and is wired to the world: fewer particle sparks, shorter projectile trails, less ambience, no glow flashes and no heavy backdrop blur." },
+      { tag: "improved", text: "The three settings sit with Touch controls in Settings, so the options for a phone are together instead of hidden in the save file." },
+    ],
+  },
+  {
     version: "1.21.0",
     date: "November 12, 2026",
     title: "The Small Screen Update",

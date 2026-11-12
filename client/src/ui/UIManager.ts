@@ -620,6 +620,9 @@ export class UIManager {
         this.preferences = updatePreferences({ touchControls: input.checked });
         this.refreshTouchVisibility();
       }
+      if (input.id === "autoaim-toggle") this.preferences = updatePreferences({ autoAim: input.checked });
+      if (input.id === "haptics-toggle") this.preferences = updatePreferences({ haptics: input.checked });
+      if (input.id === "performance-toggle") this.preferences = updatePreferences({ performanceMode: input.checked });
       if (input.id === "zoom-select") {
         const zoom = Number(input.value) === 1.5 ? 1.5 : Number(input.value) === 2.5 ? 2.5 : 2;
         this.preferences = updatePreferences({ cameraZoom: zoom });
