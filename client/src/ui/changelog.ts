@@ -21,6 +21,20 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.24.0",
+    date: "November 13, 2026",
+    title: "The Readable Fight Update",
+    summary:
+      "Every class skill can now be cast from a gamepad, the health bar over a wounded monster changes colour as it runs out, and rare gear on the ground throws a coloured beam so a good drop is spotted instead of walked over. A talent tier waiting to be picked keeps a button on the HUD until you choose.",
+    changes: [
+      { tag: "new", text: "Gamepad players can cast all five class skills: Y, RB, RT and both stick clicks, each one rebindable in Settings." },
+      { tag: "new", text: "Monster health bars now turn amber below 60 percent and bright red below 25 percent, and an elite's bar gets a gold rim." },
+      { tag: "new", text: "Rare, epic and legendary drops stand in a coloured shaft of light, taller the better the item." },
+      { tag: "new", text: "An unspent talent tier shows a purple button on the HUD; click it to open Talents and pick one." },
+      { tag: "improved", text: "Dropped loot glows in its own rarity colour instead of the same gold for everything." },
+    ],
+  },
+  {
     version: "1.23.0",
     date: "November 13, 2026",
     title: "The Clearer Choices Update",

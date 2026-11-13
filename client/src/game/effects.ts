@@ -129,8 +129,19 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
       bars.lineStyle(1, 0xffffff, 0.95);
       bars.strokeRect(monster.x - width / 2 - 1, y - 1, width + 2, boss ? 5 : 4);
     }
-    bars.fillStyle(boss ? 0xd95454 : 0xc04a4a, 1);
-    bars.fillRect(monster.x - width / 2, y, width * Math.max(0, monster.hp / maxHp), boss ? 3 : 2);
+    // The bar turns as the monster runs out of health, so a nearly dead enemy is
+    // readable from across the fight without reading a number.
+    const ratio = maxHp > 0 ? Math.max(0, monster.hp / maxHp) : 1;
+    if (preferences.highContrast) bars.fillStyle(0xffffff, 1);
+    else if (ratio > 0.6) bars.fillStyle(boss ? 0xd95454 : 0xc04a4a, 1);
+    else if (ratio > 0.25) bars.fillStyle(0xe8a53a, 1);
+    else bars.fillStyle(0xff5a5a, 1);
+    bars.fillRect(monster.x - width / 2, y, width * ratio, boss ? 3 : 2);
+    // An elite carries a thin gold rim, because its bar sits next to normal ones.
+    if (monster.elite && !boss) {
+      bars.lineStyle(1, 0xe8c46a, 0.85);
+      bars.strokeRect(monster.x - width / 2 - 2, y - 2, width + 4, 6);
+    }
   }
 }
 

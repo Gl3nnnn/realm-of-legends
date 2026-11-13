@@ -57,7 +57,7 @@ import {
   type ItemStack,
   type MemorialEntry,
 } from "@realm/core";
-import { KEYBIND_LABELS, type GamePreferences, type KeybindAction } from "./preferences";
+import { KEYBIND_LABELS, PAD_ACTIONS, PAD_LABELS, type GamePreferences, type KeybindAction, type PadAction } from "./preferences";
 import { t, type TextKey } from "./text";
 import {
   abilityIconHtml,
@@ -2097,7 +2097,7 @@ export function settingsPanelHtml(
   musicVolume: number,
   preferences: GamePreferences,
   rebinding: KeybindAction | null = null,
-  padListening: KeybindAction | null = null,
+  padListening: PadAction | null = null,
 ): string {
   const classInfo = session ? getClass(session.save.classId) : null;
   return `<div class="settings-grid">
@@ -2337,9 +2337,9 @@ export function settingsPanelHtml(
       <div class="small muted">If two actions share a key, the new key is refused and the message says which action already has it.</div>
     </div>
     <div class="setting-row">
-      <div class="setting-label"><strong>Gamepad buttons</strong><div class="small muted">Click a button, then press the gamepad button you want. Sticks always move and aim.</div></div>
+      <div class="setting-label"><strong>Gamepad buttons</strong><div class="small muted">Click a button, then press the gamepad button you want. Sticks always move and aim, and the five skill buttons cast in order.</div></div>
       <div class="keybind-grid">
-        ${(Object.keys(KEYBIND_LABELS) as KeybindAction[]).map((action) => `<button class="keybind-btn ${padListening === action ? "listening" : ""}" data-action="rebind-pad" data-key="${action}"><span>${KEYBIND_LABELS[action]}</span><b>${padListening === action ? "Press a button" : `Button ${preferences.padBinds[action]}`}</b></button>`).join("")}
+        ${PAD_ACTIONS.map((action) => `<button class="keybind-btn ${padListening === action ? "listening" : ""}" data-action="rebind-pad" data-key="${action}"><span>${PAD_LABELS[action]}</span><b>${padListening === action ? "Press a button" : `Button ${preferences.padBinds[action]}`}</b></button>`).join("")}
         <button class="btn ghost small" data-action="reset-pad">${t("btnResetGamepad")}</button>
       </div>
     </div>

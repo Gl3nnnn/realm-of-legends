@@ -1507,6 +1507,29 @@ input[type="text"]:focus {
   .streak-chip { animation: none; }
 }
 
+/* A talent tier waiting to be chosen: a button, because the fix is one click away. */
+.talent-chip {
+  position: static;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(34, 20, 46, 0.94);
+  border: 1px solid #a05ec0;
+  border-radius: 5px;
+  padding: 4px 9px;
+  color: #eec9ff;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 0 12px rgba(160, 94, 192, 0.35);
+}
+
+.talent-chip:hover,
+.talent-chip:focus-visible {
+  border-color: #e0a8ff;
+  color: #ffffff;
+}
+
 /* Companion level, kept small and under the streak so both read as one status column. */
 .pet-chip {
   position: static;

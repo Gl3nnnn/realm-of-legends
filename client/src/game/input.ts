@@ -14,6 +14,8 @@ export type GamepadState = {
   interact: boolean;
   quick1: boolean;
   quick2: boolean;
+  /** One entry per class skill, in the order the ability bar shows them. */
+  skills: boolean[];
   menu: boolean;
   cancel: boolean;
 };
@@ -44,7 +46,9 @@ export function justDown(scene: InputScene, action: KeybindAction): boolean {
 export function readGamepad(scene: InputScene): GamepadState {
   const state: GamepadState = {
     moveX: 0, moveY: 0, aimX: 0, aimY: 0,
-    attack: false, dodge: false, interact: false, quick1: false, quick2: false, menu: false, cancel: false,
+    attack: false, dodge: false, interact: false, quick1: false, quick2: false,
+    skills: [false, false, false, false, false],
+    menu: false, cancel: false,
   };
   const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
   const pad = pads ? Array.from(pads).find((entry) => entry && entry.connected) : null;
@@ -69,6 +73,10 @@ export function readGamepad(scene: InputScene): GamepadState {
   state.interact = edge(bind.interact);
   state.quick1 = edge(bind.quick1);
   state.quick2 = edge(bind.quick2);
+  const skillBinds = [bind.skill1, bind.skill2, bind.skill3, bind.skill4, bind.skill5];
+  for (let i = 0; i < skillBinds.length; i += 1) {
+    state.skills[i] = edge(skillBinds[i]);
+  }
   state.menu = edge(9);
   state.cancel = edge(1);
   scene.padPrev = pad.buttons.map((button) => button.pressed);

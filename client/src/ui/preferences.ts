@@ -11,9 +11,16 @@ export type KeybindAction =
 
 export type Keybinds = Record<KeybindAction, string>;
 
+/** The five class skills, which the keyboard always fires with 1-5. A pad needs
+ *  buttons for them, so they are pad-only actions rather than keyboard keybinds. */
+export type PadSkillAction = "skill1" | "skill2" | "skill3" | "skill4" | "skill5";
+
+/** Everything a gamepad button can do. */
+export type PadAction = KeybindAction | PadSkillAction;
+
 // Gamepad button numbers (standard layout: 0 = A, 1 = B, 2 = X, 3 = Y ...).
 // Move and aim stay on the sticks; these buttons cover the actions.
-export type PadBinds = Partial<Record<KeybindAction, number>>;
+export type PadBinds = Record<PadAction, number>;
 
 export interface GamePreferences {
   uiScale: 1 | 1.25 | 1.5;
@@ -38,10 +45,12 @@ export interface GamePreferences {
   /** Extra size for the small reading text in panels and the log. */
   textSize: 1 | 1.15 | 1.3;
   keybinds: Keybinds;
-  padBinds: Record<KeybindAction, number>;
+  padBinds: PadBinds;
 }
 
-export const DEFAULT_PAD_BINDS: Record<KeybindAction, number> = {
+// Y and the two shoulder triggers cast, then the two stick clicks for skills four
+// and five. Every button on a standard pad that was not already spoken for.
+export const DEFAULT_PAD_BINDS: PadBinds = {
   up: 12,
   down: 13,
   left: 14,
@@ -51,7 +60,30 @@ export const DEFAULT_PAD_BINDS: Record<KeybindAction, number> = {
   interact: 2,
   quick1: 4,
   quick2: 5,
+  skill1: 3,
+  skill2: 6,
+  skill3: 7,
+  skill4: 10,
+  skill5: 11,
 };
+
+/** The pad grid in Settings lists these in order, skills last. */
+export const PAD_ACTIONS: PadAction[] = [
+  "up",
+  "down",
+  "left",
+  "right",
+  "attack",
+  "dodge",
+  "interact",
+  "quick1",
+  "quick2",
+  "skill1",
+  "skill2",
+  "skill3",
+  "skill4",
+  "skill5",
+];
 
 export const DEFAULT_KEYBINDS: Keybinds = {
   up: "W",
@@ -75,6 +107,15 @@ export const KEYBIND_LABELS: Record<KeybindAction, string> = {
   interact: "Interact",
   quick1: "Quick slot 1",
   quick2: "Quick slot 2",
+};
+
+export const PAD_LABELS: Record<PadAction, string> = {
+  ...KEYBIND_LABELS,
+  skill1: "Skill 1",
+  skill2: "Skill 2",
+  skill3: "Skill 3",
+  skill4: "Skill 4",
+  skill5: "Skill 5",
 };
 
 export function isReservedKeybind(key: string): boolean {
@@ -104,11 +145,11 @@ const DEFAULTS: GamePreferences = {
   padBinds: { ...DEFAULT_PAD_BINDS },
 };
 
-function sanitizePadBinds(value: unknown): Record<KeybindAction, number> {
-  const parsed = (value && typeof value === "object" ? value : {}) as Partial<Record<KeybindAction, unknown>>;
-  const next = {} as Record<KeybindAction, number>;
+function sanitizePadBinds(value: unknown): PadBinds {
+  const parsed = (value && typeof value === "object" ? value : {}) as Partial<Record<PadAction, unknown>>;
+  const next = {} as PadBinds;
   const used = new Set<number>();
-  for (const action of Object.keys(DEFAULT_PAD_BINDS) as KeybindAction[]) {
+  for (const action of Object.keys(DEFAULT_PAD_BINDS) as PadAction[]) {
     const button = parsed[action];
     const validButton = typeof button === "number" && Number.isInteger(button) && button >= 0 && button <= 16 && button !== 9
       ? button

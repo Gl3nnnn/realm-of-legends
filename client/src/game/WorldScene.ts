@@ -6,10 +6,12 @@ import {
   HIT_FREEZE_SECONDS,
   MONSTERS,
   NPCS,
+  RARITY_COLORS,
   charFrame,
   getItem,
   itemIcon,
   monsterFrame,
+  type Rarity,
   type Direction,
   type GameSession,
   type MonsterInstance,
@@ -98,7 +100,7 @@ export class WorldScene extends Phaser.Scene {
   private monsterShadows = new Map<string, Phaser.GameObjects.Ellipse>();
   private monsterGlows = new Map<string, Phaser.GameObjects.Image>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
-  private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc }>();
+  private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc; beam?: Phaser.GameObjects.Rectangle }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
   private chestLabels = new Map<string, Phaser.GameObjects.Text>();
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
@@ -833,6 +835,10 @@ export class WorldScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keys.THREE)) this.castSlot(2);
       if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) this.castSlot(3);
       if (Phaser.Input.Keyboard.JustDown(this.keys.FIVE)) this.castSlot(4);
+      // A pad casts with its own five skill buttons, in the same 1-5 order as the bar.
+      for (let slot = 0; slot < pad.skills.length; slot += 1) {
+        if (pad.skills[slot]) this.castSlot(slot);
+      }
       if (this.justDown("interact") || pad.interact) this.interact();
       if (pad.quick1) this.usePotion(0);
       if (pad.quick2) this.usePotion(1);
@@ -1061,11 +1067,23 @@ export class WorldScene extends Phaser.Scene {
       let entry = this.lootSprites.get(drop.uid);
       if (!entry) {
         const def = getItem(drop.itemId);
-        const glow = this.add.circle(drop.x, drop.y + 3, 8, 0xffd76a, 0.1).setDepth(drop.y - 1);
+        const rarityColor = Phaser.Display.Color.HexStringToColor(RARITY_COLORS[def.rarity as Rarity]).color;
+        const glow = this.add.circle(drop.x, drop.y + 3, 8, rarityColor, 0.1).setDepth(drop.y - 1);
         const icon = this.add.sprite(drop.x, drop.y, "items", itemIcon(def.icon)).setDepth(drop.y);
+        // Rare and better gear throws a coloured shaft of light, so a good drop is
+        // spotted from the other side of a room instead of walked over by accident.
+        let beam: Phaser.GameObjects.Rectangle | undefined;
+        if (def.rarity === "rare" || def.rarity === "epic" || def.rarity === "legendary") {
+          const tall = def.rarity === "legendary" ? 58 : def.rarity === "epic" ? 42 : 28;
+          beam = this.add.rectangle(drop.x, drop.y - tall / 2 + 4, 3, tall, rarityColor, 0.5)
+            .setDepth(drop.y - 2)
+            .setBlendMode(Phaser.BlendModes.ADD);
+          this.calmTween({ targets: beam, alpha: { from: 0.5, to: 0.18 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+          this.calmTween({ targets: glow, scaleX: 1.35, scaleY: 1.35, duration: 900, yoyo: true, repeat: -1 });
+        }
         this.calmTween({ targets: icon, y: drop.y - 3, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         this.calmTween({ targets: glow, alpha: { from: 0.1, to: 0.32 }, duration: 700, yoyo: true, repeat: -1 });
-        entry = { icon, glow };
+        entry = { icon, glow, beam };
         this.lootSprites.set(drop.uid, entry);
       }
     }
@@ -1073,6 +1091,7 @@ export class WorldScene extends Phaser.Scene {
       if (!activeLoot.has(uid)) {
         entry.icon.destroy();
         entry.glow.destroy();
+        entry.beam?.destroy();
         this.lootSprites.delete(uid);
       }
     }

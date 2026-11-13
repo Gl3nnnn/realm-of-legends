@@ -9,6 +9,7 @@ import {
   getClass,
   getItem,
   getTalentTree,
+  talentTierChosen,
   migrateSave,
   nextStep,
   DEFAULT_TITLE,
@@ -58,6 +59,7 @@ import {
   DEFAULT_KEYBINDS,
   DEFAULT_PAD_BINDS,
   KEYBIND_LABELS,
+  PAD_LABELS,
   TUTORIAL_STORAGE_KEY,
   applyPreferences,
   isReservedKeybind,
@@ -66,6 +68,7 @@ import {
   updatePreferences,
   type GamePreferences,
   type KeybindAction,
+  type PadAction,
 } from "./preferences";
 
 type PanelState =
@@ -142,7 +145,7 @@ export class UIManager {
   private inventoryFilter: InventoryFilter = "all";
   private inventorySort: InventorySort = "default";
   private rebinding: KeybindAction | null = null;
-  private padListening: KeybindAction | null = null;
+  private padListening: PadAction | null = null;
   private touchMove = { x: 0, y: 0 };
   private touchPointer: number | null = null;
   private touchAim = { x: 0, y: 0, active: false };
@@ -158,6 +161,7 @@ export class UIManager {
   private statusSignature = "";
   private weatherSignature = "";
   private bountySignature = "";
+  private talentSignature = "";
   private deathSignature = "";
   private bossIntroTimer = 0;
   private lowHealthShown = false;
@@ -239,6 +243,7 @@ export class UIManager {
     dummyChip: must("dummy-chip"),
     bountyChip: must("bounty-chip"),
     petChip: must("pet-chip"),
+    talentChip: must("talent-chip"),
     deathRecap: must("death-recap"),
     bossIntro: must("boss-intro"),
     bossIntroKicker: must("boss-intro-kicker"),
@@ -508,6 +513,10 @@ export class UIManager {
       if (!session || !session.resetDummy()) return;
       this.handleEvents(session.drainEvents());
       this.updateHud(true);
+    });
+    this.dom.talentChip.addEventListener("click", () => {
+      if (!this.session) return;
+      this.openPanel("talents");
     });
 
     this.dom.charSelect.addEventListener("click", (event) => {
@@ -1400,16 +1409,16 @@ export class UIManager {
           this.toast("That button is reserved for the menu.", "bad");
           return;
         }
-        const holder = (Object.entries(this.preferences.padBinds) as [KeybindAction, number][]).find(([other, value]) => other !== action && value === index);
+        const holder = (Object.entries(this.preferences.padBinds) as [PadAction, number][]).find(([other, value]) => other !== action && value === index);
         this.padListening = null;
         if (holder) {
           this.renderPanel();
-          this.toast(t("gamepadTaken", { index, action: KEYBIND_LABELS[holder[0]] }), "bad");
+          this.toast(t("gamepadTaken", { index, action: PAD_LABELS[holder[0]] }), "bad");
           return;
         }
         this.preferences = updatePreferences({ padBinds: { ...this.preferences.padBinds, [action]: index } });
         this.renderPanel();
-        this.toast(t("gamepadBound", { action: KEYBIND_LABELS[action], index }), "good");
+        this.toast(t("gamepadBound", { action: PAD_LABELS[action], index }), "good");
         return;
       }
       window.requestAnimationFrame(poll);
@@ -2017,6 +2026,7 @@ export class UIManager {
     this.updateDummyChip();
     this.updateDescentChip();
     this.updateBountyChip();
+    this.updateTalentChip();
     this.updatePetChip();
     this.dom.zone.textContent = session.zone.name;
     this.dom.safe.textContent = session.zone.safe ? "Safe" : "Hostile";
@@ -2085,6 +2095,30 @@ export class UIManager {
     }
     const done = session.bountyProgress(next.key);
     this.dom.bountyChip.innerHTML = `<span class="chip-icon">📜</span> Bounty: ${esc(bountyLabel(next.monsterName))} ${done}/${next.need}`;
+  }
+
+  /**
+   * The open talent tier, waiting to be picked. A talent gets one toast when it opens
+   * and then goes quiet, so this chip keeps the choice in front of the player until it
+   * is made. Clicking it opens the talent page directly.
+   */
+  private updateTalentChip(): void {
+    const session = this.session;
+    if (!session) return;
+    const save = session.save;
+    const tree = getTalentTree(save.classId);
+    const open = tree.tiers.filter((tier) => save.level >= tier.level && !talentTierChosen(save.classId, save.talents, tier.choices[0]?.tier ?? 0));
+    const next = open[0];
+    const signature = next ? `${next.level}:${open.length}` : "";
+    if (signature === this.talentSignature) return;
+    this.talentSignature = signature;
+    if (!next) {
+      this.dom.talentChip.classList.add("hidden");
+      return;
+    }
+    this.dom.talentChip.classList.remove("hidden");
+    const more = open.length > 1 ? ` (+${open.length - 1} more)` : "";
+    this.dom.talentChip.innerHTML = `<span class="chip-icon">\u25C6</span> Talent ready: tier ${next.level}${more} \u2014 pick one`;
   }
 
   /** Show the boss card for a moment when a new boss notices the hero. */
