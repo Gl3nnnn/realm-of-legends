@@ -15,6 +15,7 @@ export type GamepadState = {
   quick1: boolean;
   quick2: boolean;
   menu: boolean;
+  cancel: boolean;
 };
 
 // Re-binds the scene's keys when the player changes a keybind in Settings.
@@ -43,7 +44,7 @@ export function justDown(scene: InputScene, action: KeybindAction): boolean {
 export function readGamepad(scene: InputScene): GamepadState {
   const state: GamepadState = {
     moveX: 0, moveY: 0, aimX: 0, aimY: 0,
-    attack: false, dodge: false, interact: false, quick1: false, quick2: false, menu: false,
+    attack: false, dodge: false, interact: false, quick1: false, quick2: false, menu: false, cancel: false,
   };
   const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
   const pad = pads ? Array.from(pads).find((entry) => entry && entry.connected) : null;
@@ -69,6 +70,7 @@ export function readGamepad(scene: InputScene): GamepadState {
   state.quick1 = edge(bind.quick1);
   state.quick2 = edge(bind.quick2);
   state.menu = edge(9);
+  state.cancel = edge(1);
   scene.padPrev = pad.buttons.map((button) => button.pressed);
   return state;
 }

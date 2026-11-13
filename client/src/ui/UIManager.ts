@@ -454,14 +454,39 @@ export class UIManager {
     }
   }
 
-  /** Opens Settings from the gamepad menu button, dismissing the tutorial first if needed. */
+  /** Start toggles Settings, or closes whatever panel is already open. */
   openMenu(): void {
     if (this.confirmAsk) {
       this.closeConfirm();
       return;
     }
     this.dismissTutorial();
+    if (this.panel) {
+      this.closePanel();
+      return;
+    }
+    if (!this.dom.updateBoard.classList.contains("hidden")) {
+      this.closeUpdateBoard();
+      return;
+    }
     this.openPanel("settings");
+  }
+
+  /** B closes the current panel or confirm, the same way Escape does on a keyboard. */
+  closeMenu(): void {
+    if (this.confirmAsk) {
+      this.closeConfirm();
+      return;
+    }
+    if (this.panel) {
+      this.closePanel();
+      return;
+    }
+    if (!this.dom.updateBoard.classList.contains("hidden")) {
+      this.closeUpdateBoard();
+      return;
+    }
+    if (!this.dom.tutorial.classList.contains("hidden")) this.dismissTutorial();
   }
 
   private bindEvents(): void {
@@ -477,6 +502,12 @@ export class UIManager {
       this.useQuickSlotOrBest(index);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
+    });
+    this.dom.dummyChip.addEventListener("click", () => {
+      const session = this.session;
+      if (!session || !session.resetDummy()) return;
+      this.handleEvents(session.drainEvents());
+      this.updateHud(true);
     });
 
     this.dom.charSelect.addEventListener("click", (event) => {
@@ -906,6 +937,15 @@ export class UIManager {
     } else if (event.key === "t" || event.key === "T") {
       event.preventDefault();
       this.openPanel("talents");
+    } else if (event.key === "v" || event.key === "V") {
+      event.preventDefault();
+      this.openPanel("village");
+    } else if (event.key === "c" || event.key === "C") {
+      event.preventDefault();
+      this.openPanel("companion");
+    } else if (event.key === "u" || event.key === "U") {
+      event.preventDefault();
+      this.showUpdateBoard();
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       this.toggleMinimap();
@@ -946,7 +986,7 @@ export class UIManager {
    * Use the potion bound to a quick slot. When that slot is empty or the bottle is gone,
    * drink the best matching potion in the bag instead, so a fight is never lost to bookkeeping.
    */
-  private useQuickSlotOrBest(index: number): void {
+  useQuickSlotOrBest(index: number): void {
     const session = this.session;
     if (!session) return;
     if (session.save.quickSlots[index]) {
@@ -1588,7 +1628,10 @@ export class UIManager {
       if (changed) this.sfx.ui();
       this.renderPanel();
     } else if (this.panel?.kind === "companion") {
-      if (action === "wear-pet-gear" && target.dataset.item) {
+      if (action === "hatch-companion") {
+        changed = session.hatchCompanion();
+        if (changed) this.sfx.level();
+      } else if (action === "wear-pet-gear" && target.dataset.item) {
         changed = session.wearPetGear(target.dataset.item);
       } else if (action === "remove-pet-gear" && target.dataset.slot) {
         changed = session.removePetGear(target.dataset.slot as "collar" | "charm");
@@ -2320,7 +2363,7 @@ export class UIManager {
     this.dom.dummyChip.classList.toggle("hidden", !show);
     if (!show) return;
     const text = dummy.hits > 0
-      ? `Dummy - ${dummy.hits} hits - ${Math.round(dummy.damage)} damage - best ${Math.round(dummy.bestHit)}`
+      ? `Dummy - ${dummy.hits} hits - ${Math.round(dummy.damage)} damage - ${dummy.combo} combo - best ${Math.round(dummy.bestHit)}`
       : `Dummy - personal best combo ${dummy.bestCombo}`;
     if (this.dom.dummyChip.textContent !== text) this.dom.dummyChip.textContent = text;
   }

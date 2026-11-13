@@ -1306,6 +1306,7 @@ input[type="text"]:focus {
 /* The training dummy's meter: grey and quiet, because it is a tool, not a fight. */
 .dummy-chip {
   position: static;
+  font-family: inherit;
   font-size: 10px;
   font-weight: 700;
   background: rgba(26, 30, 38, 0.92);
@@ -1313,6 +1314,14 @@ input[type="text"]:focus {
   border-radius: 5px;
   padding: 4px 9px;
   color: #cfd8e8;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dummy-chip:hover,
+.dummy-chip:focus-visible {
+  border-color: #cfd8e8;
+  color: #ffffff;
 }
 
 /* Relics and the risk dial, inside the journal's Descent card. */
@@ -2999,15 +3008,19 @@ html[data-color-blind="deutan"] .death-value {
 
 html[data-color-blind="protan"] .log-line.good,
 html[data-color-blind="protan"] .compare-line.up,
+html[data-color-blind="protan"] .stock-compare.up,
 html[data-color-blind="protan"] .bounty-paid,
 html[data-color-blind="deutan"] .log-line.good,
 html[data-color-blind="deutan"] .compare-line.up,
+html[data-color-blind="deutan"] .stock-compare.up,
 html[data-color-blind="deutan"] .bounty-paid {
   color: #8ec8ff;
 }
 
 html[data-color-blind="protan"] .compare-line.down,
-html[data-color-blind="deutan"] .compare-line.down {
+html[data-color-blind="protan"] .stock-compare.down,
+html[data-color-blind="deutan"] .compare-line.down,
+html[data-color-blind="deutan"] .stock-compare.down {
   color: #ffb0d8;
 }
 
@@ -6575,6 +6588,32 @@ blockquote.dialogue {
 
 .stock-note {
   font-size: 11px;
+  color: var(--muted);
+}
+
+.stock-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stock-compare-label {
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.stock-compare.up {
+  color: #7fe0a0;
+}
+
+.stock-compare.down {
+  color: #ff9fa0;
+}
+
+.stock-compare.even {
   color: var(--muted);
 }
 

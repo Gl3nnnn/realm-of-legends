@@ -301,6 +301,15 @@ describe("combat", () => {
     expect(session.pets.some((pet) => pet.uid === oldest)).toBe(false);
   });
 
+  it("hatches a carried egg once and leaves a hatched companion alone", () => {
+    const session = forestSession();
+    session.save.companion = { kind: "egg", name: "Forest Egg", species: "sprout", hatched: false };
+
+    expect(session.hatchCompanion()).toBe(true);
+    expect(session.save.companion?.hatched).toBe(true);
+    expect(session.hatchCompanion()).toBe(false);
+  });
+
   it("keeps companions and the hatchling from attacking through walls", () => {
     const session = forestSession("summoner");
     session.zone.blocked.fill(false);

@@ -551,6 +551,17 @@ function shopHeroHtml(session: GameSession, shopId: string, shopName: string): s
   </header>`;
 }
 
+function shopCompareHtml(session: GameSession, itemId: string): string {
+  const compare = session.compareToEquipped({ itemId, qty: 1 });
+  if (!compare) return "";
+  const gains = compare.lines.filter((line) => line.startsWith("+")).length;
+  const losses = compare.lines.filter((line) => line.startsWith("-")).length;
+  const tone = gains > losses ? "up" : losses > gains ? "down" : "even";
+  const label = tone === "up" ? "Upgrade" : tone === "down" ? "Downgrade" : "Sidegrade";
+  const detail = compare.lines.length ? compare.lines.slice(0, 3).join(" \u00B7 ") : `same numbers as worn ${compare.slot}`;
+  return `<div class="stock-compare ${tone}"><span class="stock-compare-label">${label}</span><span>${esc(detail)}</span></div>`;
+}
+
 /** One line of stock: the item, what it does, what it costs, and why you cannot buy it. */
 function shopRow(session: GameSession, itemId: string): string {
   const def = getItem(itemId);
@@ -563,6 +574,7 @@ function shopRow(session: GameSession, itemId: string): string {
   const stats = statLines(def.stats).slice(0, 3).join(" · ");
   const blocked = !canUse ? "Not for this class" : !levelMet ? `Requires level ${def.requiresLevel}` : !hasSpace ? "Backpack full" : "";
   const note = blocked || stats || def.description;
+  const compare = canUse && levelMet ? shopCompareHtml(session, itemId) : "";
   return `<article class="stock-row${canBuy ? "" : " locked"}">
     <div class="stock-icon">
       ${itemIconHtml(def.icon, 30)}
@@ -571,6 +583,7 @@ function shopRow(session: GameSession, itemId: string): string {
     <div class="stock-body">
       <div class="stock-name rarity-${def.rarity}">${esc(def.name)}</div>
       <div class="stock-note">${esc(note)}</div>
+      ${compare}
       <div class="stock-tags">
         <span class="tag r-${def.rarity}">${esc(def.rarity)}</span>
         ${def.requiresLevel ? `<span class="tag">Lv ${def.requiresLevel}</span>` : ""}
@@ -1027,7 +1040,7 @@ function gauntletCard(session: GameSession): string {
   const state = gauntlet.active
     ? `Round ${gauntlet.round + 1} of ${gauntlet.total}: ${esc(gauntlet.next)}`
     : "not started";
-  return `<div class="gauntlet-card">
+  return `<div class="gauntlet-card" id="journal-gauntlet">
     <div class="qtitle small-title">The Gauntlet</div>
     <div class="small muted">Every story boss, back to back, with no waves between. Each one pays better than it did in its own zone.</div>
     <div class="arena-stats">
@@ -1319,6 +1332,8 @@ export function questsPanelHtml(session: GameSession, bestiarySearch = ""): stri
       links: [
         { href: "#journal-arena", label: "Ring" },
         { href: "#journal-descent", label: "Descent" },
+        { href: "#journal-gauntlet", label: "Gauntlet" },
+        { href: "#journal-bloodmoon", label: "Blood Moon" },
         { href: "#journal-season", label: "Season" },
         { href: "#journal-rival", label: "Rival" },
       ],
@@ -1962,6 +1977,9 @@ export function controlsPanelHtml(preferences: GamePreferences, session: GameSes
         ["Inventory", "I", "Bag, gear and quick slots"],
         ["Journal", "Q", "Quests, bounties, bestiary, travel"],
         ["Talents", "T", "Spend talent points"],
+        ["Village", "V", "Rebuild Eldoria and open the runeword book"],
+        ["Companion", "C", "Hatch, gear and train your companion"],
+        ["Update board", "U", "What changed in the latest build"],
         ["Settings", "Esc", "Sound, interface, keybinds"],
         ["This sheet", "?", "Every control, at any time"],
       ],
@@ -2005,7 +2023,7 @@ export function controlsPanelHtml(preferences: GamePreferences, session: GameSes
         <strong>With a gamepad</strong>
         <span class="inv-card-note">Left stick moves, right stick aims</span>
       </div>
-      <div class="small muted">A gamepad works too: left stick moves, right stick aims, A attacks, B dodges, X interacts. Rebind the buttons in Settings.</div>
+      <div class="small muted">A gamepad works too: left stick moves, right stick aims, A attacks, B dodges and closes panels, X interacts, Start opens or closes Settings. Rebind the buttons in Settings.</div>
     </section>
   </div>`;
 }
@@ -2454,13 +2472,21 @@ export function villageSection(session: GameSession): string {
 
 export function companionSection(session: GameSession): string {
   if (!session.hasCompanion) {
+    const egg = session.save.companion;
+    const ready = Boolean(egg && !egg.hatched);
+    const eggName = egg?.name ?? "the egg";
     return `<section class="panel-stack">
       <header class="panel-hero">
         <div class="panel-hero-body">
           <h3>Companion</h3>
-          <p class="small muted">Hatch your egg in the village and a companion follows you. Then it can wear a collar and a charm, and learn one skill.</p>
+          <p class="small muted">${ready
+            ? `${esc(eggName)} is warm and rocking. Hatch it here whenever you are ready, and it will follow you from the first step.`
+            : "No egg yet. Once you carry one, you can hatch it here. A companion can then wear a collar and a charm, and learn one skill."}</p>
         </div>
       </header>
+      ${ready
+        ? `<div class="row-wrap"><button class="btn" data-action="hatch-companion">Hatch ${esc(eggName)}</button></div>`
+        : ""}
     </section>`;
   }
   const loadout = session.petLoadout;

@@ -21,6 +21,22 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.23.0",
+    date: "November 13, 2026",
+    title: "The Clearer Choices Update",
+    summary:
+      "The counter now tells you whether a piece of gear is an upgrade before you buy it, a carried egg can be hatched from the companion page instead of a hidden village key press, and the training dummy's meter can be wiped with one click. Gamepad players can close any panel with B or toggle Settings with Start, and the journal points at the Gauntlet and the Blood Moon.",
+    changes: [
+      { tag: "new", text: "Shop gear now shows an Upgrade, Downgrade or Sidegrade line against what you already wear, with the first few stat changes in plain numbers." },
+      { tag: "new", text: "The companion page hatches a carried egg itself, so the first companion no longer depends on an undocumented village key press." },
+      { tag: "new", text: "Click the training dummy's meter to wipe it and start a fresh comparison." },
+      { tag: "improved", text: "The gamepad's B button closes the open panel or confirmation, and Start toggles Settings instead of only opening it." },
+      { tag: "improved", text: "Gamepad and touch potion buttons now fall back to the best matching potion when their assigned slot is empty, just like the keyboard." },
+      { tag: "improved", text: "The journal navigation now links to the Gauntlet and the Blood Moon." },
+      { tag: "improved", text: "V, C and U open the village, companion and update board from the keyboard, and the controls sheet lists them." },
+    ],
+  },
+  {
     version: "1.22.0",
     date: "November 12, 2026",
     title: "The Comfort Update",

@@ -113,6 +113,19 @@ test("loads, creates a hero, and opens the core panels", async ({ page }) => {
   await expect(page.locator("#overlay")).toContainText("Quest");
   await page.keyboard.press("Escape");
 
+  await page.keyboard.press("v");
+  await expect(page.locator("#overlay")).toContainText("Rebuild Eldoria");
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("c");
+  await expect(page.locator("#overlay")).toContainText("Companion");
+  await page.keyboard.press("Escape");
+
+  await page.keyboard.press("u");
+  await expect(page.locator("#update-board")).toBeVisible();
+  await page.locator("#update-continue").click();
+  await expect(page.locator("#update-board")).toBeHidden();
+
   await expect(page.locator("canvas").first()).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -138,11 +151,20 @@ test("rebinds and restores keys from settings", async ({ page }) => {
   await expect(quick1).toContainText("Z");
 });
 
-test("opens settings from a gamepad Start press", async ({ page }) => {
+test("toggles settings from a gamepad Start press", async ({ page }) => {
   await page.addInitScript(() => {
     const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
-    buttons[9] = { pressed: true, touched: true, value: 1 };
+    const startButton = { pressed: true, touched: true, value: 1 };
+    buttons[9] = startButton;
     const pad = { connected: true, id: "Playwright Pad", index: 0, mapping: "standard", axes: [0, 0, 0, 0], buttons, timestamp: Date.now() };
+    Object.defineProperty(window, "__setStart", {
+      value: (pressed: boolean) => {
+        startButton.pressed = pressed;
+        startButton.touched = pressed;
+        startButton.value = pressed ? 1 : 0;
+        pad.timestamp = Date.now();
+      },
+    });
     Object.defineProperty(navigator, "getGamepads", { value: () => [pad], configurable: true });
   });
 
@@ -155,6 +177,10 @@ test("opens settings from a gamepad Start press", async ({ page }) => {
 
   await expect(page.locator("#overlay")).toBeVisible();
   await expect(page.locator("#overlay")).toContainText("Settings");
+  await page.evaluate(() => (window as Window & { __setStart?: (pressed: boolean) => void }).__setStart?.(false));
+  await page.waitForTimeout(80);
+  await page.evaluate(() => (window as Window & { __setStart?: (pressed: boolean) => void }).__setStart?.(true));
+  await expect(page.locator("#overlay")).toHaveAttribute("aria-hidden", "true");
 });
 
 test("enables touch controls for touch-capable players", async ({ page }) => {

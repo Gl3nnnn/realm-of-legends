@@ -684,10 +684,14 @@ export class WorldScene extends Phaser.Scene {
     } else if (action === "interact") {
       this.interact();
     } else if (action === "quick1" || action === "quick2") {
-      this.session.useQuickSlot(action === "quick1" ? 0 : 1);
-      this.handleSimEvents(this.session.drainEvents());
-      this.ui.requestSave();
+      this.usePotion(action === "quick1" ? 0 : 1);
     }
+  }
+
+  private usePotion(index: number): void {
+    this.ui.useQuickSlotOrBest(index);
+    this.handleSimEvents(this.session.drainEvents());
+    this.ui.requestSave();
   }
 
   private interact(): void {
@@ -756,6 +760,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     if (this.ui.modalOpen) {
+      if (pad.cancel) this.ui.closeMenu();
       this.ui.update(0);
       return;
     }
@@ -829,16 +834,8 @@ export class WorldScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) this.castSlot(3);
       if (Phaser.Input.Keyboard.JustDown(this.keys.FIVE)) this.castSlot(4);
       if (this.justDown("interact") || pad.interact) this.interact();
-      if (pad.quick1) {
-        this.session.useQuickSlot(0);
-        this.handleSimEvents(this.session.drainEvents());
-        this.ui.requestSave();
-      }
-      if (pad.quick2) {
-        this.session.useQuickSlot(1);
-        this.handleSimEvents(this.session.drainEvents());
-        this.ui.requestSave();
-      }
+      if (pad.quick1) this.usePotion(0);
+      if (pad.quick2) this.usePotion(1);
     }
 
     if (this.session.zone.id !== this.zoneId) {
