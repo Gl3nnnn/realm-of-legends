@@ -58,6 +58,7 @@ import {
   type MemorialEntry,
 } from "@realm/core";
 import { KEYBIND_LABELS, PAD_ACTIONS, PAD_LABELS, type GamePreferences, type KeybindAction, type PadAction } from "./preferences";
+import { classTint } from "../game/vfx";
 import { t, type TextKey } from "./text";
 import {
   abilityIconHtml,
@@ -207,6 +208,8 @@ export function createPanelHtml(selectedClass: ClassId, roleFilter: string = "al
 }
 
 export function abilityBarHtml(session: GameSession): string {
+  // The bar wears the hero's own colour, so two players' bars never look alike.
+  const tint = classTint(session.save.classId, session.classInfo.accent);
   const basic = session.classInfo.basic;
   const basicSlot = `<button class="ability-slot basic" data-cast="basic" title="${esc(basic.name)} — click or Space">
     <span class="ability-key">LMB</span>
@@ -215,15 +218,20 @@ export function abilityBarHtml(session: GameSession): string {
   const slots = session.classInfo.abilities.slice(0, 5).map((ability, i) => {
     const unlocked = session.save.level >= ability.unlockLevel;
     const notEnough = unlocked && session.save.resource < ability.cost;
-    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""}" data-cast="${unlocked ? ability.id : ""}" title="${esc(ability.name)} — ${esc(ability.description)}">
+    // An ultimate gets a gold rim and a slow shine, so the big button stands out.
+    const ultimate = ability.signature === true;
+    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""} ${ultimate ? "ultimate" : ""}" data-cast="${unlocked ? ability.id : ""}" title="${esc(ability.name)} — ${esc(ability.description)}">
       <span class="ability-key">${i + 1}</span>
+      ${ultimate ? `<span class="ultimate-shine" aria-hidden="true"></span>` : ""}
       ${unlocked ? `<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${abilityIconHtml(ability.icon, 40)}</span>` : ""}
       ${ability.cost > 0 && unlocked ? `<span class="ability-cost">${ability.cost}</span>` : ""}
       ${!unlocked ? `<span class="lock">Lv ${ability.unlockLevel}</span>` : ""}
       <span class="cooldown" data-cd="${ability.id}" style="height:0%"></span>
+      <span class="cd-sweep" data-cdsweep="${ability.id}" aria-hidden="true"></span>
+      <span class="cooldown-text" data-cdt="${ability.id}"></span>
     </button>`;
   }).join("");
-  return basicSlot + slots;
+  return `<span class="ability-tint" data-tint="${esc(tint)}"></span>` + basicSlot + slots;
 }
 
 export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z", "X"]): string {

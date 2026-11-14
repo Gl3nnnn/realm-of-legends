@@ -1819,6 +1819,9 @@ export class UIManager {
     if (signature === this.abilitySignature) return;
     this.abilitySignature = signature;
     this.dom.abilityBar.innerHTML = abilityBarHtml(this.session);
+    // Paint the bar in the hero's own colour, so the kit reads as one family.
+    const tint = this.dom.abilityBar.querySelector<HTMLElement>(".ability-tint");
+    this.dom.abilityBar.style.setProperty("--class-tint", tint?.dataset.tint ?? "#e8c07d");
   }
 
   private rebuildQuickbar(): void {
@@ -2043,11 +2046,25 @@ export class UIManager {
       if (!button) continue;
       button.classList.toggle("no-resource", unlocked && save.resource < ability.cost);
       const overlay = button.querySelector<HTMLElement>(`[data-cd="${ability.id}"]`);
+      // The number in the middle of the sweep, so a long cooldown can be read at a
+      // glance instead of guessed from how much of the square is shaded.
+      const counter = button.querySelector<HTMLElement>(`[data-cdt="${ability.id}"]`);
       if (overlay) {
         const remaining = session.abilityCooldown(ability.id);
         const cooldownDuration = session.abilityCooldownDuration(ability.id);
         const pct = cooldownDuration > 0 ? Math.min(100, (remaining / cooldownDuration) * 100) : 0;
         overlay.style.height = `${pct}%`;
+        // A radial sweep that empties as the skill comes back, so the wait reads as a
+        // clock face instead of a bar slowly sliding down the button.
+        const sweep = button.querySelector<HTMLElement>(`[data-cdsweep="${ability.id}"]`);
+        if (sweep) {
+          button.classList.toggle("cooling", remaining > 0);
+          sweep.style.setProperty("--cd-deg", `${Math.round(pct * 3.6)}deg`);
+        }
+        if (counter) {
+          const seconds = remaining > 0 ? (remaining >= 1 ? Math.ceil(remaining) : Number(remaining.toFixed(1))) : 0;
+          counter.textContent = seconds > 0 ? String(seconds) : "";
+        }
       }
     }
 

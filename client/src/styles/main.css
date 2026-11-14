@@ -1861,12 +1861,37 @@ input[type="text"]:focus {
   width: 52px;
   height: 52px;
   background-color: #14111c;
+  /* A soft top highlight and a dark base, so the button reads as a carved tile
+     instead of a flat square. */
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0) 46%, rgba(0, 0, 0, 0.4));
   background-repeat: no-repeat;
   border: 2px solid #4a3e59;
   border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -2px 3px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.45);
   cursor: pointer;
   overflow: hidden;
   flex: none;
+}
+
+/* While a skill is coming back off cooldown the icon sits back, so a ready
+   button is the bright one at a glance. */
+.ability-slot.cooling {
+  filter: saturate(0.55) brightness(0.8);
+}
+
+.ability-slot.cooling .cd-sweep {
+  display: block;
+}
+
+/* The clock face: a wedge of shadow that shrinks as the skill returns. */
+.cd-sweep {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(6, 5, 10, 0.82) var(--cd-deg, 0deg), transparent var(--cd-deg, 0deg));
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 34%, #000 36%);
+  mask-image: radial-gradient(circle at 50% 50%, transparent 34%, #000 36%);
 }
 
 .ability-slot.basic {
@@ -1881,7 +1906,49 @@ input[type="text"]:focus {
 }
 
 .ability-slot.ready {
-  border-color: #8a74a8;
+  border-color: var(--class-tint, #8a74a8);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 0 8px -2px var(--class-tint, #8a74a8);
+}
+
+/* A ready skill breathes, so the eye finds the one you can press right now. */
+.ability-slot.ready:not(.cooling) {
+  animation: ready-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes ready-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 0 8px -2px var(--class-tint, #8a74a8);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 0 14px 0 var(--class-tint, #8a74a8);
+  }
+}
+
+html[data-motion="reduced"] .ability-slot.ready:not(.cooling) {
+  animation: none;
+}
+
+/* The bar carries the hero's class colour, so a kit reads as one family. */
+.ability-tint {
+  display: none;
+}
+
+.ability-slot.ready:hover {
+  border-color: var(--class-tint, var(--gold));
+}
+
+/* A thin class-coloured underline on each ready button, so the bar has a spine. */
+.ability-slot.ready::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--class-tint, #8a74a8);
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .ability-slot.no-resource {
@@ -1890,6 +1957,7 @@ input[type="text"]:focus {
 
 .ability-slot:hover {
   border-color: var(--gold);
+  transform: translateY(-1px);
 }
 
 .ability-slot .cooldown {
@@ -1897,7 +1965,7 @@ input[type="text"]:focus {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(6, 5, 10, 0.78);
+  background: rgba(6, 5, 10, 0.55);
   pointer-events: none;
 }
 
@@ -1917,6 +1985,52 @@ input[type="text"]:focus {
   font-size: 9px;
   color: #9ecbff;
   text-shadow: 1px 1px 0 #000;
+}
+
+.ability-slot.ultimate {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(232, 192, 90, 0.35), 0 0 12px rgba(232, 192, 90, 0.28) inset;
+}
+
+/* A slow shine that sweeps the ultimate button, so it reads as the big one. */
+.ultimate-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 235, 180, 0.55) 50%, transparent 65%);
+  background-size: 220% 100%;
+  animation: ultimate-sheen 3.4s ease-in-out infinite;
+}
+
+@keyframes ultimate-sheen {
+  0%,
+  55% {
+    background-position: 160% 0;
+  }
+  100% {
+    background-position: -60% 0;
+  }
+}
+
+/* The number inside the cooldown sweep: big enough to read mid-fight. */
+.cooldown-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 1px 1px 0 #000;
+  pointer-events: none;
+}
+
+.ability-slot:active:not(.empty) {
+  transform: scale(0.94);
+  border-color: #fff3c4;
+}
+
+html[data-motion="reduced"] .ultimate-shine {
+  animation: none;
 }
 
 .ability-slot .lock {

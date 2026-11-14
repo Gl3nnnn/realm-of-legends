@@ -191,6 +191,72 @@ const ABILITY_STYLE: Record<string, VfxStyle> = {
   stormcaller_eye: "nova",
 };
 
+/**
+ * Every class leans on two of its own colours. Damaging skills keep their damage
+ * hue but slide toward the class colour, and the rings and shards always take the
+ * class's second colour - so a kit reads as one family without losing fire vs ice.
+ */
+export const CLASS_PALETTE: Record<ClassId, { primary: string; secondary: string }> = {
+  warrior: { primary: "#d8b06a", secondary: "#fff0c4" },
+  mage: { primary: "#c98bff", secondary: "#7fd4ff" },
+  archer: { primary: "#9fe083", secondary: "#ffe6a8" },
+  assassin: { primary: "#8c6bd8", secondary: "#e6dcff" },
+  paladin: { primary: "#ffe27a", secondary: "#fff8d0" },
+  priest: { primary: "#ffe7a8", secondary: "#ffd9f0" },
+  necromancer: { primary: "#7fd88f", secondary: "#cfa8ff" },
+  druid: { primary: "#6ff09a", secondary: "#d4ffb0" },
+  monk: { primary: "#ffd08a", secondary: "#fff1cf" },
+  gunslinger: { primary: "#f0c46b", secondary: "#ff9a4a" },
+  berserker: { primary: "#ff6b4a", secondary: "#ffd08a" },
+  summoner: { primary: "#9fe8d8", secondary: "#d8fff5" },
+  ranger: { primary: "#a6f2a0", secondary: "#ffeab0" },
+  spellblade: { primary: "#ffb37a", secondary: "#a6f2ff" },
+  dragonknight: { primary: "#ff7a4a", secondary: "#ffd06b" },
+  warden: { primary: "#b9d1a6", secondary: "#8cf0c0" },
+  oracle: { primary: "#b8c8ff", secondary: "#fff0a8" },
+  battlemage: { primary: "#e0a8ff", secondary: "#ffd08a" },
+  shadowdancer: { primary: "#a06bff", secondary: "#7ff0ff" },
+  artificer: { primary: "#f0c46b", secondary: "#8ce0ff" },
+  beastmaster: { primary: "#d0b779", secondary: "#a6e07a" },
+  duelist: { primary: "#a8f0e0", secondary: "#ffe9a8" },
+  elementalist: { primary: "#a6eef0", secondary: "#ff9a4a" },
+  sentinel: { primary: "#d1e4d7", secondary: "#ffe08a" },
+  stormcaller: { primary: "#f1df7a", secondary: "#8cd4ff" },
+};
+
+/** How far a skill's own damage colour slides toward the class colour. */
+const CLASS_TINT_WEIGHT = 0.38;
+
+function channels(hex: string): [number, number, number] {
+  const clean = hex.replace("#", "");
+  const full = clean.length === 3 ? clean.split("").map((part) => part + part).join("") : clean;
+  const value = Number.parseInt(full, 16);
+  if (!Number.isFinite(value)) return [255, 255, 255];
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+}
+
+/** Blend two hex colours: 0 keeps the first, 1 takes the second. */
+export function mixHex(from: string, to: string, amount: number): string {
+  const a = channels(from);
+  const b = channels(to);
+  const t = Math.max(0, Math.min(1, amount));
+  const part = (index: number): string => {
+    const value = Math.round(a[index] + (b[index] - a[index]) * t);
+    return Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0");
+  };
+  return `#${part(0)}${part(1)}${part(2)}`;
+}
+
+/** The two colours a class wears on its skills. */
+export function classPalette(classId: ClassId, fallback = "#e8c07d"): { primary: string; secondary: string } {
+  return CLASS_PALETTE[classId] ?? { primary: fallback, secondary: fallback };
+}
+
+/** The class's main colour, for rims and glows outside the world. */
+export function classTint(classId: ClassId, fallback = "#e8c07d"): string {
+  return classPalette(classId, fallback).primary;
+}
+
 const STYLE_DURATION: Record<VfxStyle, number> = {
   slash: 220,
   cleave: 300,
@@ -246,7 +312,14 @@ export function resolveAbilityVfx(classId: ClassId, ability: AbilityDef, classAc
   const style = ability.basic ? BASIC_STYLE[classId] ?? "slash" : ABILITY_STYLE[ability.id] ?? fallbackStyle(ability);
   const damageType = primaryDamageType(ability);
   const hasDamage = ability.effects.some((effect) => effect.kind === "damage");
-  const color = hasDamage ? DAMAGE_COLORS[damageType] : style === "heal" ? "#8ef0a0" : classAccent;
+  const palette = classPalette(classId, classAccent);
+  // A hit keeps its damage hue (fire still burns orange, ice still reads cold) but
+  // slides toward the class colour, so two classes casting fire look different.
+  const color = hasDamage
+    ? mixHex(DAMAGE_COLORS[damageType], palette.primary, CLASS_TINT_WEIGHT)
+    : style === "heal"
+      ? mixHex("#8ef0a0", palette.primary, 0.25)
+      : palette.primary;
   const radius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 26);
   const heavy = style === "meteor" || style === "nova" || style === "rain" || style === "summon";
   // Ultimates (signature skills) get a bigger, longer effect and a stronger shake.
@@ -258,7 +331,7 @@ export function resolveAbilityVfx(classId: ClassId, ability: AbilityDef, classAc
   return {
     style,
     color,
-    accent: classAccent,
+    accent: palette.secondary,
     radius: Math.round((signature ? radius * 1.3 : dramatic ? radius * 1.5 : radius) * intensity),
     duration: signature ? Math.round(STYLE_DURATION[style] * 1.25) : dramatic ? Math.round(STYLE_DURATION[style] * 1.4) : STYLE_DURATION[style],
     shake: (signature ? 0.004 : dramatic ? 0.004 : heavy ? 0.0025 : 0) * intensity,

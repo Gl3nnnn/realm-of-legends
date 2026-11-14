@@ -28,6 +28,17 @@ import {
   glowBurst,
   softGlow,
 } from "./effects";
+import {
+  bubbleShellFx,
+  chargeFx,
+  coneSkillFx,
+  impactFx,
+  lightningFx,
+  pillarFx,
+  sigilFx,
+  ultimateFx,
+} from "./skillFx";
+import { bloomFx, debrisFx, groundWaveFx, streakFx, zoomPunch } from "./skillVisuals";
 import { PET_SPECIES } from "@realm/core";
 
 const DAMAGE_TEXT_COLORS: Record<string, string> = {
@@ -107,6 +118,12 @@ export class WorldScene extends Phaser.Scene {
   private decorLayer?: Phaser.Tilemaps.TilemapLayer;
   private tallTileSprites = new Map<string, Phaser.GameObjects.Image>();
   private ambientDots: Phaser.GameObjects.Arc[] = [];
+  private weatherSpecks: Phaser.GameObjects.Rectangle[] = [];
+  private weatherKind = "";
+  private stormTimer?: Phaser.Time.TimerEvent;
+  private daylightShade?: Phaser.GameObjects.Rectangle;
+  private weatherVeil?: Phaser.GameObjects.Rectangle;
+  private daylightKey = "";
   private aim = { x: 0, y: 0 };
   private manualAimAt = 0;
   private lastRumbleAt = 0;
@@ -141,6 +158,11 @@ export class WorldScene extends Phaser.Scene {
     this.chestLabels.clear();
     this.gatherSprites.clear();
     this.ambientDots = [];
+    this.weatherSpecks = [];
+    this.weatherKind = "";
+    this.daylightShade = undefined;
+    this.weatherVeil = undefined;
+    this.daylightKey = "";
     this.pointerMoved = false;
     this.manualAimAt = -10_000;
     this.floatPool = [];
@@ -167,6 +189,8 @@ export class WorldScene extends Phaser.Scene {
     this.createNpcs();
     this.createPlayer();
     this.createAmbience();
+    this.createWeather();
+    this.createDaylight();
     this.floorFx = this.add.graphics().setDepth(4);
     this.interactionFx = this.add.graphics().setDepth(5);
     this.barFx = this.add.graphics().setDepth(9000);
@@ -221,6 +245,18 @@ export class WorldScene extends Phaser.Scene {
     window.addEventListener("realm:preferences", onPreferences);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener("realm:preferences", onPreferences);
+    });
+
+    // Switching tabs or minimising the window stops the world instead of leaving it
+    // running: no hero dying behind a chat window, no day clock racing past while
+    // the player is away. Coming back resumes exactly where the run was.
+    const onVisibility = () => {
+      if (document.hidden) this.scene.pause();
+      else this.scene.resume();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener("visibilitychange", onVisibility);
     });
 
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -751,8 +787,151 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Weather you can see, not just read on the HUD tag: rain streaks, storm rain and
+   * lightning, drifting snow, flakes of ash, and gusts for high wind. The specks sit
+   * in a strip around the camera which follows the hero, so the sky is always full
+   * however far the hero walks, without spawning anything across the whole map.
+   */
+  private createWeather(): void {
+    const preferences = loadPreferences();
+    const weather = this.session.weather;
+    this.weatherKind = weather.kind;
+    const shapes: Record<string, { count: number; color: number; alpha: number; fall: [number, number]; sway: number; long: number }> = {
+      clear: { count: 0, color: 0xffffff, alpha: 0, fall: [0, 0], sway: 0, long: 0 },
+      rain: { count: 90, color: 0x9ec8f0, alpha: 0.35, fall: [420, 760], sway: 60, long: 10 },
+      storm: { count: 140, color: 0xc0d8ff, alpha: 0.42, fall: [560, 900], sway: 110, long: 14 },
+      fog: { count: 0, color: 0xffffff, alpha: 0, fall: [0, 0], sway: 0, long: 0 },
+      snow: { count: 70, color: 0xffffff, alpha: 0.55, fall: [70, 160], sway: 26, long: 0 },
+      ash: { count: 46, color: 0xffbe95, alpha: 0.4, fall: [40, 110], sway: 34, long: 0 },
+      wind: { count: 30, color: 0xa8e8c8, alpha: 0.16, fall: [20, 60], sway: 120, long: 8 },
+    };
+    const shape = shapes[weather.kind] ?? shapes.clear;
+    if (preferences.reducedMotion || shape.count === 0) return;
+    const count = preferences.performanceMode ? Math.ceil(shape.count * 0.4) : shape.count;
+    for (let i = 0; i < count; i += 1) {
+      const speck =
+        shape.long > 0
+          ? this.add
+              .rectangle(Math.random() * this.scale.width, Math.random() * this.scale.height, 1, shape.long, shape.color, shape.alpha)
+              .setScrollFactor(0)
+              .setDepth(9600)
+              .setAngle(18)
+          : this.add
+              .rectangle(Math.random() * this.scale.width, Math.random() * this.scale.height, 2, 2, shape.color, shape.alpha)
+              .setScrollFactor(0)
+              .setDepth(9600);
+      this.weatherSpecks.push(speck);
+      // Each speck falls at its own pace, so the curtain never reads as one moving sheet.
+      // The tween names its own start and end, because a repeating tween otherwise
+      // replays from the speck's first position and only ever rains in one column.
+      this.tweens.add({
+        targets: speck,
+        y: { from: -24, to: this.scale.height + 24 },
+        duration: shape.fall[0] + Math.random() * (shape.fall[1] - shape.fall[0]),
+        repeat: -1,
+        delay: Math.random() * 1200,
+        ease: "Linear",
+      });
+      if (shape.sway > 0) {
+        this.tweens.add({
+          targets: speck,
+          x: speck.x + (Math.random() - 0.5) * shape.sway * 2,
+          duration: 2400 + Math.random() * 1800,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+      }
+    }
+    // A storm is the one sky that hits back visually: a flash of light across the map.
+    if (weather.kind === "storm") {
+      this.stormTimer = this.time.addEvent({
+        delay: 4200 + Math.random() * 3000,
+        loop: true,
+        callback: () => {
+          if (loadPreferences().reducedMotion) return;
+          const flash = this.add
+            .rectangle(0, 0, this.scale.width, this.scale.height, 0xd8e8ff, 0.16)
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(9590);
+          this.tweens.add({ targets: flash, alpha: 0, duration: 260, onComplete: () => flash.destroy() });
+        },
+      });
+    }
+  }
+
+  /**
+   * Night is a blue veil and dusk and dawn warm it, so a zone looks different at
+   * eight in the evening than at noon without repainting any art. Fog, storm and ash
+   * lay their own wash on top, so thick weather reads as thick weather.
+   */
+  private createDaylight(): void {
+    if (loadPreferences().highContrast) return;
+    this.weatherVeil = this.add
+      .rectangle(0, 0, this.scale.width, this.scale.height, 0xc6ccd6, 0)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(8980);
+    this.daylightShade = this.add
+      .rectangle(0, 0, this.scale.width, this.scale.height, 0x081226, 0)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(8990);
+    const onResize = () => {
+      this.daylightShade?.setSize(this.scale.width, this.scale.height);
+      this.weatherVeil?.setSize(this.scale.width, this.scale.height);
+    };
+    this.scale.on("resize", onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off("resize", onResize));
+  }
+
+  /** How strong the night veil is and which colour it takes, from the clock and the sky. */
+  private syncDaylight(): void {
+    const phase = this.session.dayPhase.key;
+    const sky = this.session.weather.kind;
+    const key = `${phase}:${sky}`;
+    if (key === this.daylightKey) return;
+    this.daylightKey = key;
+    if (!this.daylightShade || !this.weatherVeil) return;
+    const palette: Record<string, [number, number]> = {
+      dawn: [0x2a1a2e, 0.18],
+      day: [0x000000, 0],
+      dusk: [0x30161e, 0.24],
+      night: [0x081226, 0.44],
+    };
+    const [color, alpha] = palette[phase] ?? palette.day;
+    this.daylightShade.setFillStyle(color, alpha);
+    const wash: Record<string, number> = { clear: 0, rain: 0.05, storm: 0.09, fog: 0.14, snow: 0.05, ash: 0.06, wind: 0 };
+    const washColor: Record<string, number> = {
+      clear: 0xc6ccd6,
+      rain: 0x9ec8f0,
+      storm: 0x262038,
+      fog: 0xc6ccd6,
+      snow: 0xd8f0ff,
+      ash: 0xffbe95,
+      wind: 0xa8e8c8,
+    };
+    this.weatherVeil.setFillStyle(washColor[sky] ?? 0xc6ccd6, wash[sky] ?? 0);
+  }
+
+  /** Weather is re-rolled a few times a second in the sim, so the sky is rebuilt when it really changes. */
+  private syncWeather(): void {
+    const kind = this.session.weather.kind;
+    if (kind === this.weatherKind) return;
+    this.weatherKind = kind;
+    this.stormTimer?.remove();
+    this.stormTimer = undefined;
+    for (const speck of this.weatherSpecks) speck.destroy();
+    this.weatherSpecks = [];
+    this.createWeather();
+  }
+
   update(time: number, delta: number): void {
     if (!this.session) return;
+    this.syncWeather();
+    this.syncDaylight();
     this.syncGatherSprites();
     this.syncKeybinds();
     const preferences = loadPreferences();
@@ -1127,29 +1306,71 @@ export class WorldScene extends Phaser.Scene {
       this.bowDrawFx(event.x, event.y, angle, color, vfx.duration);
     }
     this.castMotion(this.session.save.classId, event.y, angle, preferences);
+    // Every skill now has a wind-up, and an ultimate announces itself with its
+    // own sigil, shock rings and a brief flash in the skill's colour.
+    const ultimate = ability.signature === true;
+    const heavy = ultimate || vfx.radius >= 60;
+    // Only real skills gather energy; the auto-attack swings straight away, so the
+    // wind-up stays a sign that something bigger is coming.
+    if (!ability.basic) chargeFx(this, event.x, event.y - 6, color, accent, ultimate);
+    if (ultimate) ultimateFx(this, event.x, event.y, color, accent, vfx.radius, vfx.duration);
+    // A heavy skill leans the camera in, which is the one trick that makes a hit
+    // feel physical rather than drawn. Small hits skip it so the view stays calm.
+    if (heavy) zoomPunch(this, ultimate ? 0.05 : 0.022, ultimate ? 230 : 150);
+    // The wind-up plays first and the impact lands a beat later, so the eye reads
+    // "gathering, then releasing" instead of one instant blur. The auto-attack still
+    // fires with no delay - small hits should never feel laggy.
+    if (ability.basic) {
+      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id);
+      return;
+    }
+    this.time.delayedCall(ultimate ? 150 : 85, () => {
+      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id);
+    });
+  }
+
+  /** The landing half of a cast: everything that happens where the skill actually hits. */
+  private deliverVfx(
+    event: Extract<SimEvent, { type: "cast" }>,
+    vfx: VfxDescriptor,
+    color: number,
+    accent: number,
+    angle: number,
+    heavy: boolean,
+    signature: boolean,
+    abilityId: string,
+  ): void {
     switch (vfx.style) {
       case "slash":
         this.arcFx(event.x, event.y, angle, color, 34, 4, 0.95, vfx.duration);
         this.burst(event.targetX, event.targetY, color, 3, 0.6);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.1 : 0.8, vfx.duration);
         break;
       case "cleave":
         this.arcFx(event.x, event.y, angle, color, 50, 6, 1.35, vfx.duration);
         this.arcFx(event.x, event.y, angle, 0xffffff, 42, 2, 1.1, vfx.duration - 40);
         this.burst(event.targetX, event.targetY, color, 6, 0.9);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.5 : 1.2, vfx.duration);
         break;
       case "thrust":
         this.thrustFx(event.x, event.y, event.targetX, event.targetY, color, accent, vfx.duration);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1 : 0.7, Math.max(150, vfx.duration * 0.7));
         break;
       case "bash":
         this.ringFx(event.targetX, event.targetY, 20, color, 3, vfx.duration);
+        groundWaveFx(this, event.targetX, event.targetY, color, 26, 3, Math.max(300, vfx.duration));
+        debrisFx(this, event.targetX, event.targetY, color, accent, 6, 1.1, event.targetY + 4);
         this.arcFx(event.x, event.y, angle, accent, 24, 5, 1.1, vfx.duration);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.4 : 1, vfx.duration);
         break;
       case "flurry":
         this.flurryFx(event.targetX, event.targetY, color, angle, vfx.duration);
+        impactFx(this, event.targetX, event.targetY, color, accent, 1.1, vfx.duration);
         break;
       case "fist":
         this.ringFx(event.targetX, event.targetY, 14, color, 2, vfx.duration);
         this.burst(event.targetX, event.targetY, color, 5, 0.8);
+        impactFx(this, event.targetX, event.targetY, color, accent, 0.9, vfx.duration);
         break;
       case "arrow":
         this.arcFx(event.x, event.y, angle, accent, 20, 3, 1.2, 180);
@@ -1167,38 +1388,66 @@ export class WorldScene extends Phaser.Scene {
       case "bolt":
         this.orbFx(event.x, event.y, color, accent, 10);
         this.burst(event.x + Math.cos(angle) * 16, event.y + Math.sin(angle) * 16, color, 3, 0.35);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1 : 0.65, Math.max(160, vfx.duration * 0.8));
         break;
       case "beam":
         this.beamFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.4 : 1, vfx.duration);
         break;
       case "nova":
         this.novaFx(event.x, event.y, vfx.radius, color, accent, vfx.duration);
+        sigilFx(this, event.x, event.y, color, accent, Math.max(28, vfx.radius * 0.6), vfx.duration);
+        // Two waves leaving the caster's feet, the second a beat behind, plus sparks
+        // that fly out further than the ring: a nova should sweep the room.
+        groundWaveFx(this, event.x, event.y, color, vfx.radius, 3, Math.max(360, vfx.duration));
+        groundWaveFx(this, event.x, event.y, accent, vfx.radius * 0.8, 2, Math.max(320, vfx.duration), 110);
+        streakFx(this, event.x, event.y, color, 10, vfx.radius * 0.35, vfx.radius * 1.15, event.y + 6, 340);
+        impactFx(this, event.x, event.y, color, accent, 1.2, vfx.duration);
         break;
       case "rune":
       case "trap":
         this.runeFx(event.targetX, event.targetY, vfx.radius, color, accent, vfx.duration);
+        sigilFx(this, event.targetX, event.targetY, color, accent, Math.max(22, vfx.radius * 0.8), vfx.duration);
         break;
       case "meteor":
         this.meteorFx(event.targetX, event.targetY, vfx.radius, color, vfx.duration);
+        // The ground takes the hit: a wide wave, a bloom of light and flying debris.
+        this.time.delayedCall(120, () => {
+          groundWaveFx(this, event.targetX, event.targetY, color, vfx.radius, 4, Math.max(420, vfx.duration));
+          groundWaveFx(this, event.targetX, event.targetY, accent, vfx.radius * 0.7, 2, Math.max(360, vfx.duration), 130);
+          bloomFx(this, event.targetX, event.targetY, color, vfx.radius * 2.4, 0.4, Math.max(320, vfx.duration), event.targetY + 3, 1.9);
+          debrisFx(this, event.targetX, event.targetY, color, 0xfff0d0, 12, 1.8, event.targetY + 6, 760);
+        });
         break;
       case "rain":
         this.rainFx(event.targetX, event.targetY, vfx.radius, color, vfx.duration);
+        groundWaveFx(this, event.targetX, event.targetY, accent, vfx.radius * 0.9, 2, Math.max(380, vfx.duration));
         break;
       case "summon":
         this.summonFx(event.x, event.y, color, accent, vfx.duration);
+        sigilFx(this, event.x, event.y, color, accent, 34, vfx.duration, 120);
+        pillarFx(this, event.x, event.y, color, accent, 56, vfx.duration);
         break;
       case "dash":
         this.dashFx(event.x, event.y, event.targetX, event.targetY, color, accent, vfx.duration);
+        // A bloom and speed lines where the hero actually stopped.
+        bloomFx(this, event.targetX, event.targetY, color, 60, 0.3, Math.max(240, vfx.duration), event.targetY + 2, 1.5);
+        streakFx(this, event.targetX, event.targetY, accent, 7, 10, 44, event.targetY + 5, 260);
         break;
       case "heal":
         this.healSparkle(event.x, event.y);
         this.ringFx(event.x, event.y, 24, color, 2, vfx.duration);
+        pillarFx(this, event.x, event.y, color, accent, heavy ? 72 : 52, vfx.duration);
+        sigilFx(this, event.x, event.y, color, accent, 26, vfx.duration, 60);
         break;
       case "shield":
         this.bubbleFx(event.x, event.y, color, accent, vfx.duration);
+        bubbleShellFx(this, event.x, event.y, color, accent, heavy ? 38 : 30, vfx.duration);
         break;
       case "buff":
         this.buffFx(event.x, event.y, color, accent, vfx.duration);
+        pillarFx(this, event.x, event.y, color, accent, heavy ? 76 : 54, vfx.duration);
+        sigilFx(this, event.x, event.y, color, accent, 30, vfx.duration, -60);
         break;
       case "smoke":
         this.smokeFx(event.x, event.y, color, vfx.duration);
@@ -1207,10 +1456,21 @@ export class WorldScene extends Phaser.Scene {
         this.markFx(event.targetX, event.targetY, color, accent, vfx.duration);
         break;
       case "cone":
-        this.coneFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        coneSkillFx(
+          this,
+          event.x,
+          event.y,
+          angle,
+          Math.max(70, Math.hypot(event.targetX - event.x, event.targetY - event.y)),
+          0.42,
+          color,
+          vfx.duration,
+        );
         break;
       case "chain":
         this.chainFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        lightningFx(this, event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
+        impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.2 : 0.9, vfx.duration);
         break;
       default:
         this.burst(event.x, event.y, color, 5, 0.8);
@@ -1218,7 +1478,7 @@ export class WorldScene extends Phaser.Scene {
     }
     // Extra sparks for ultimates and the six strongest normal skills, in the skill's own colour.
     const sparkSkills = ["dragon_breath", "infernal_strike", "holy_nova", "elemental_burst", "meteor", "ground_slam"];
-    if (ability.signature === true || sparkSkills.includes(ability.id)) {
+    if (signature || sparkSkills.includes(abilityId)) {
       this.burst(event.targetX, event.targetY, color, 10, 1.6);
     }
   }
@@ -1543,26 +1803,6 @@ export class WorldScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
       onComplete: () => g.destroy(),
     });
-  }
-
-  private coneFx(x1: number, y1: number, x2: number, y2: number, color: number, duration: number): void {
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const length = Math.max(60, Math.hypot(x2 - x1, y2 - y1));
-    const spread = 0.42;
-    const g = this.add.graphics().setDepth(Math.max(y1, y2) + 2);
-    g.fillStyle(color, 0.18);
-    g.beginPath();
-    g.moveTo(x1, y1);
-    g.lineTo(x1 + Math.cos(angle - spread) * length, y1 + Math.sin(angle - spread) * length);
-    g.lineTo(x1 + Math.cos(angle + spread) * length, y1 + Math.sin(angle + spread) * length);
-    g.closePath();
-    g.fillPath();
-    g.lineStyle(2, color, 0.65);
-    g.beginPath();
-    g.arc(x1, y1, length, angle - spread, angle + spread);
-    g.strokePath();
-    this.tweens.add({ targets: g, alpha: 0, duration, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
-    this.burst(x1 + Math.cos(angle) * length * 0.7, y1 + Math.sin(angle) * length * 0.7, color, 7, 1.1);
   }
 
   private chainFx(x1: number, y1: number, x2: number, y2: number, color: number, duration: number): void {

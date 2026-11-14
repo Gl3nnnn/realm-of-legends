@@ -192,18 +192,27 @@ export function floatText(scene: WorldScene, x: number, y: number, text: string,
     .setOrigin(0.5, 1)
     .setDepth(9400);
   scene.tweens.killTweensOf(label);
+  // Big numbers (crits and level-ups) land with a pop, so the eye catches them
+  // before the text settles, and a small sideways drift keeps two hits on the
+  // same monster from stacking into one unreadable smudge.
+  const big = size >= 11;
+  const drift = (Math.random() - 0.5) * 12;
   label
     .setText(text)
     .setColor(color)
     .setFontSize(size)
     .setPosition(x, y)
     .setAlpha(1)
+    .setScale(big ? 1.5 : 1.2)
     .setVisible(true);
   scene.tweens.add({
     targets: label,
-    y: y - 20,
+    x: x + drift,
+    y: y - (big ? 30 : 22),
+    scaleX: 1,
+    scaleY: 1,
     alpha: 0,
-    duration: 720,
+    duration: big ? 900 : 720,
     ease: "Cubic.easeOut",
     onComplete: () => {
       label.setVisible(false);

@@ -21,6 +21,66 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.28.0",
+    date: "November 17, 2026",
+    title: "The Impact Update",
+    summary:
+      "Skills now gather, then land. Every cast starts with a glow swelling at your hero, a beat later the hit lands with light, shockwaves, flying debris and a camera punch. Big skills leave a scorch mark on the floor for a moment afterwards, and the cooldown on the bar is now a clock face instead of a bar.",
+    changes: [
+      { tag: "improved", text: "A cast gathers energy first and lands a beat later, so a skill reads as a wind-up and a release instead of one flash." },
+      { tag: "new", text: "Every hit now draws a bloom of light, speed lines and small flying chips shaped by the skill's own colours." },
+      { tag: "new", text: "Nova, slam, meteor and ultimate skills send flattened shockwaves running across the floor." },
+      { tag: "new", text: "Heavy skills punch the camera in for a moment, and big hits leave a scorch mark that fades out." },
+      { tag: "improved", text: "The skill bar is a carved tile now: a breathing rim on ready skills, a dimmed icon while cooling, and a clock-face cooldown sweep." },
+    ],
+  },
+  {
+    version: "1.27.0",
+    date: "November 16, 2026",
+    title: "The Class Colour Update",
+    summary:
+      "Every class now casts in its own colours. A skill keeps its damage hue - fire still burns orange, ice still reads cold - but slides toward your class colour, and every ring, shard and magic circle takes the class's second shade. Two heroes casting the same fireball no longer look identical. The skill bar wears the same colour: ready buttons take its rim and a thin underline, and the hover glow matches.",
+    changes: [
+      { tag: "new", text: "Each of the 25 classes has a two-colour palette, so a kit reads as one family on screen." },
+      { tag: "improved", text: "Damaging skills blend their damage colour with the class colour, keeping fire, ice, holy and shadow readable." },
+      { tag: "improved", text: "Impact rings, shards and magic circles take the class accent instead of one shared gold." },
+      { tag: "improved", text: "The skill bar is painted in the class colour: ready rims, an underline and the hover glow." },
+    ],
+  },
+  {
+    version: "1.26.0",
+    date: "November 15, 2026",
+    title: "The Skill Pizzazz Update",
+    summary:
+      "Skills no longer just happen - they build. A cast gathers energy at your hero first, lands with a burst ring and flying shards, and area skills draw a turning magic circle under them. Ultimates announce themselves with their own sigil, two shock rings and a flash of the skill's colour. Heals and buffs reach upward in a column of light, wards flash as a hexagonal shell, dragon breath breathes a layered cone and chain lightning forks. On the bar, the ultimate button wears a gold rim and a slow shine, and a cooldown shows its seconds in the middle.",
+    changes: [
+      { tag: "new", text: "Every skill has a wind-up: energy gathers at your hero before the effect fires." },
+      { tag: "new", text: "Hits land with a flash, a colour ring, a white ring and a fan of shards, so damage has a shape instead of one flat spark." },
+      { tag: "new", text: "Area skills and buffs draw a turning magic circle, tick marks and star included." },
+      { tag: "new", text: "Ultimates fire a sigil, two racing shock rings and a short screen flash in their own colour." },
+      { tag: "new", text: "Heals and blessings rise in a soft column of light with motes drifting up through it." },
+      { tag: "new", text: "Shields show as a hexagonal ward shell, dragon breath as a three-layer cone, and chain lightning forks into branches." },
+      { tag: "improved", text: "The ultimate slot on the bar wears a gold rim and a slow shine, so the big button is easy to find." },
+      { tag: "improved", text: "A skill on cooldown now shows the seconds ticking in the middle of the button." },
+      { tag: "improved", text: "Reduced motion and Performance mode turn the new layers off or thin them, so slower devices stay smooth." },
+    ],
+  },
+  {
+    version: "1.25.0",
+    date: "November 14, 2026",
+    title: "The Living Sky Update",
+    summary:
+      "The weather tag in the corner now has something behind it: rain falls across the screen, snow drifts, ash floats up from the Hollow Throne and a storm flashes lightning. Night darkens the world in blue and the day brightens it again, and big hits land with a pop instead of a flat number. Stepping away from the tab pauses the world instead of letting it play on without you.",
+    changes: [
+      { tag: "new", text: "Rain, storm, snow, ash and high wind are drawn over the world, so the weather you read about is the weather you see." },
+      { tag: "new", text: "A storm now flashes lightning across the screen every few seconds." },
+      { tag: "new", text: "Night puts a blue veil over every zone, and dawn and dusk warm it, so a place looks different at eight in the evening than at noon." },
+      { tag: "new", text: "Critical hits and level-ups burst in at a larger size before settling, and two hits on one monster no longer stack into the same line." },
+      { tag: "improved", text: "Switching tabs or minimising the window now pauses the game; nothing happens to your hero while you are away." },
+      { tag: "improved", text: "Performance mode and reduced motion still thin out or skip every new effect, so the sky costs nothing on a slower device." },
+    ],
+  },
+  {
     version: "1.24.0",
     date: "November 13, 2026",
     title: "The Readable Fight Update",
