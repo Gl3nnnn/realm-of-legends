@@ -3138,12 +3138,12 @@ export class GameSession {
     const reaction = findReaction(carried, incoming);
     if (!reaction) return 0;
     this.lastReactionAt = this.elapsed;
+    // The reaction is announced where it happened, in its own words and its own icon:
+    // a second meaning on screen, not just another number under the damage.
+    this.emit({ type: "reaction", id: reaction.id, name: reaction.name, text: reaction.text, icon: reaction.icon, x: monster.x, y: monster.y });
     if (!this.save.reactionsSeen.includes(reaction.id)) {
       this.save.reactionsSeen.push(reaction.id);
-      this.emit({ type: "log", text: `${reaction.name}! ${reaction.text}`, tone: "good" });
       writeDiary(this.save, "kill", `Discovered ${reaction.name} in ${this.zone.name}.`);
-    } else {
-      this.emit({ type: "log", text: `${reaction.name}!`, tone: "info" });
     }
     return reaction.bonus;
   }

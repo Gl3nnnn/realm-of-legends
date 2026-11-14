@@ -304,7 +304,8 @@ function fallbackStyle(ability: AbilityDef): VfxStyle {
   return "bolt";
 }
 
-function primaryDamageType(ability: AbilityDef): DamageType {
+/** The element a skill is built on, for sounds and trails: fire, ice, steel and so on. */
+export function primaryDamageType(ability: AbilityDef): DamageType {
   return ability.effects.find((effect) => effect.damageType)?.damageType ?? "physical";
 }
 

@@ -2029,6 +2029,22 @@ html[data-motion="reduced"] .ability-slot.ready:not(.cooling) {
   border-color: #fff3c4;
 }
 
+/* The bar answers the press: a quick kick and flash when a skill actually fires. */
+.ability-slot.punch {
+  animation: slot-punch 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes slot-punch {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 240, 200, 0.9); }
+  35% { transform: scale(1.12); box-shadow: 0 0 14px 4px rgba(255, 240, 200, 0.5); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 240, 200, 0); }
+}
+
+html[data-motion="reduced"] .ability-slot.punch {
+  animation: none;
+  border-color: #fff3c4;
+}
+
 html[data-motion="reduced"] .ultimate-shine {
   animation: none;
 }

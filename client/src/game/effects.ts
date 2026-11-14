@@ -277,9 +277,33 @@ export function drawProjectile(scene: WorldScene, g: Phaser.GameObjects.Graphics
     g.fillStyle(color, 0.3);
     g.fillCircle(projectile.x, projectile.y, projectile.radius + 3);
     const trail = loadPreferences().performanceMode ? 1 : 4;
+    // Every element drags its own trail behind it, so the thing flying at you says what
+    // it is before it lands: embers for fire, shards for ice, arcs for magic.
     for (let i = 1; i <= trail; i += 1) {
-      g.fillStyle(color, 0.34 - i * 0.07);
-      g.fillCircle(projectile.x - dx * i * 4, projectile.y - dy * i * 4, Math.max(1, projectile.radius * (1 - i * 0.15)));
+      const tx2 = projectile.x - dx * i * 4;
+      const ty2 = projectile.y - dy * i * 4;
+      const fade = 0.34 - i * 0.07;
+      if (projectile.damageType === "fire") {
+        // Embers drift upward as they cool.
+        g.fillStyle(i % 2 === 0 ? 0xffd06a : color, fade);
+        g.fillCircle(tx2, ty2 - i * 1.4, Math.max(1, projectile.radius * (1 - i * 0.16)));
+      } else if (projectile.damageType === "ice") {
+        // Shards point back along the path.
+        const size = Math.max(1.5, projectile.radius * (1 - i * 0.16));
+        g.fillStyle(color, fade + 0.08);
+        g.fillTriangle(tx2 - dy * size, ty2 + dx * size, tx2 + dy * size, ty2 - dx * size, tx2 - dx * size * 2.2, ty2 - dy * size * 2.2);
+      } else if (projectile.damageType === "arcane" || projectile.damageType === "holy" || projectile.damageType === "shadow") {
+        // Arcane, holy and shadow leave rings that widen as they fade.
+        g.lineStyle(1.5, color, fade);
+        g.strokeCircle(tx2, ty2, Math.max(1.5, projectile.radius * (1 + i * 0.35)));
+      } else if (projectile.damageType === "nature" || projectile.damageType === "poison") {
+        // Spores and venom bubbles float, not fall.
+        g.fillStyle(color, fade);
+        g.fillCircle(tx2 - dy * i * 1.2, ty2 + dx * i * 1.2, Math.max(1, projectile.radius * (0.6 - i * 0.08)));
+      } else {
+        g.fillStyle(color, fade);
+        g.fillCircle(tx2, ty2, Math.max(1, projectile.radius * (1 - i * 0.15)));
+      }
     }
     g.fillStyle(color, 1);
     g.fillCircle(projectile.x, projectile.y, projectile.radius);

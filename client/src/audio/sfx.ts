@@ -233,10 +233,63 @@ export class Sfx {
     this.tone(640, 0.06, "sine", 0.05, 140, 0.04);
   }
 
+  /**
+   * Every element has its own voice: a fireball crackles and roars, an ice shard chimes
+   * and cuts, shadow swallows the sound. Before this, all eight elements played the same
+   * two notes, so a fight read as "something happened" instead of "what happened".
+   */
   cast(kind = "physical"): void {
-    const base = kind === "fire" ? 320 : kind === "ice" ? 520 : kind === "shadow" ? 190 : 380;
-    this.tone(base, 0.16, "triangle", 0.2, 180);
-    this.tone(base * 1.5, 0.12, "sine", 0.12, 120, 0.03);
+    switch (kind) {
+      case "fire":
+        this.noise(0.14, 0.1);
+        this.tone(300, 0.18, "sawtooth", 0.16, 250);
+        this.tone(540, 0.11, "triangle", 0.08, 180, 0.04);
+        break;
+      case "ice":
+        this.tone(660, 0.15, "sine", 0.14, -140);
+        this.tone(920, 0.12, "sine", 0.09, 60, 0.05);
+        this.noise(0.05, 0.06);
+        break;
+      case "arcane":
+        this.tone(420, 0.2, "triangle", 0.15, 240);
+        this.tone(700, 0.15, "sine", 0.09, 180, 0.05);
+        this.noise(0.06, 0.05);
+        break;
+      case "holy":
+        this.tone(660, 0.22, "sine", 0.13, 300);
+        this.tone(990, 0.18, "sine", 0.09, 200, 0.06);
+        break;
+      case "shadow":
+        this.tone(150, 0.24, "sawtooth", 0.15, -60);
+        this.tone(330, 0.16, "triangle", 0.09, -120, 0.05);
+        this.noise(0.12, 0.07);
+        break;
+      case "nature":
+        this.tone(380, 0.16, "triangle", 0.11, 140);
+        this.tone(560, 0.1, "sine", 0.07, 120, 0.05);
+        this.noise(0.1, 0.05);
+        break;
+      case "poison":
+        this.tone(260, 0.2, "square", 0.11, -90);
+        this.noise(0.18, 0.07);
+        break;
+      default:
+        this.tone(380, 0.16, "triangle", 0.2, 180);
+        this.tone(570, 0.12, "sine", 0.12, 120, 0.03);
+        break;
+    }
+  }
+
+  /** An elemental reaction woke: a rising shimmer, so the puzzle moment has a sound of its own. */
+  reaction(): void {
+    [760, 940, 1180].forEach((f, i) => this.tone(f, 0.16, "triangle", 0.12, 40, i * 0.05));
+    this.noise(0.1, 0.05);
+  }
+
+  /** A swing that hit nothing: air moving, no impact. */
+  miss(): void {
+    this.noise(0.09, 0.05);
+    this.tone(260, 0.1, "sine", 0.05, -120);
   }
 
   pickup(): void {

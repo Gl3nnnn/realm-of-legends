@@ -773,6 +773,13 @@ export type SimEvent =
       icon: string;
     }
   | { type: "telegraph"; x: number; y: number; radius: number; remaining: number; shape?: "ring" | "line" | "cone" | "spot"; angle?: number }
+  /** A skill that found nothing: the swing still needs a sound and a shape on screen. */
+  | { type: "miss"; abilityId: string; x: number; y: number; angle: number }
+  /**
+   * An elemental reaction woke on a monster. It carries the name, the icon and where it
+   * happened, so the shell can shout it on screen instead of burying it in the log.
+   */
+  | { type: "reaction"; id: string; name: string; text: string; icon: string; x: number; y: number }
   | { type: "run-recap"; mode: "ring" | "descent" | "gauntlet"; depth: number; seconds: number; tier: "gold" | "silver" | "bronze" | null; gold: number; xp: number; shards: number; kills: number; bestWave: number }
   | { type: "blood-moon"; phase: "warning" | "rising"; remaining: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }

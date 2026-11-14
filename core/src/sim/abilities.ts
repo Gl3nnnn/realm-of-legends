@@ -84,7 +84,10 @@ export function castPoint(s: GameSession, ability: AbilityDef, point: Vec2): voi
       : s.hasLineOfSight(s.save.x, s.save.y, point.x, point.y)
         && s.hasLineOfSight(point.x, point.y, m.x, m.y)));
   if (targets.length === 0) {
-    s.emit({ type: "log", text: `${ability.name} missed: nothing was in the area.`, tone: "info" });
+    // A swing at nothing still makes a sound and draws a ring where the air was cut,
+    // so a miss never feels like the key did not register.
+    const angle = Math.atan2(point.y - s.save.y, point.x - s.save.x);
+    s.emit({ type: "miss", abilityId: ability.id, x: point.x, y: point.y, angle });
   }
   const projectileEffects = ability.effects.filter((effect) => effect.kind === "damage" && effect.projectile);
   if (projectileEffects.length > 0) {
@@ -151,7 +154,9 @@ export function castMelee(s: GameSession, ability: AbilityDef, dir: Vec2): void 
     : [];
   if (targets.length === 0) {
     if (ability.targeting === "melee" && dir.x !== 0) s.facing = dir.x > 0 ? "right" : "left";
-    s.emit({ type: "log", text: `${ability.name} missed: no enemy within reach.`, tone: "info" });
+    const angle = Math.atan2(dir.y, dir.x);
+    const reach = ability.range > 0 ? ability.range : 30;
+    s.emit({ type: "miss", abilityId: ability.id, x: s.save.x + dir.x * reach, y: s.save.y + dir.y * reach, angle });
   }
   applyEffects(s, ability, targets, primary ? { x: primary.x, y: primary.y } : { x: s.save.x + dir.x * 30, y: s.save.y + dir.y * 30 });
 }

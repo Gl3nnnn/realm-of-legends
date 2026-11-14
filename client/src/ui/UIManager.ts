@@ -991,6 +991,33 @@ export class UIManager {
     this.openPanel("controls");
   }
 
+  /** The world asks the shell for sounds, so one place owns what a fight sounds like. */
+  playCastSound(element: string): void {
+    this.sfx.cast(element);
+  }
+
+  playMiss(): void {
+    this.sfx.miss();
+  }
+
+  playReaction(): void {
+    this.sfx.reaction();
+  }
+
+  /**
+   * The skill button kicks when its skill is cast: the bar answers every press, so the
+   * player feels the key land even when the eye is on the fight.
+   */
+  barPunch(abilityId: string): void {
+    const button = this.dom.abilityBar.querySelector<HTMLElement>(`[data-cast="${abilityId}"]`);
+    if (!button) return;
+    button.classList.remove("punch");
+    // Reading the offset forces the class to be seen again on a quick second cast.
+    void button.offsetWidth;
+    button.classList.add("punch");
+    window.setTimeout(() => button.classList.remove("punch"), 220);
+  }
+
   /**
    * Use the potion bound to a quick slot. When that slot is empty or the bottle is gone,
    * drink the best matching potion in the bag instead, so a fight is never lost to bookkeeping.
@@ -2812,11 +2839,17 @@ export class UIManager {
         }
         case "loot":
           break;
+        case "reaction":
+          this.pushLog(`${event.name}! ${event.text}`, "good");
+          break;
+        case "miss":
+          break;
         case "heal":
           this.sfx.heal();
           break;
         case "cast":
-          this.sfx.cast();
+          // The sound is played where the skill is drawn, so each element gets its own
+          // voice. Nothing is played here, or every cast would fire twice.
           break;
         case "respawn":
           this.toast(t("elaraRestores"), "good");

@@ -19,7 +19,7 @@ import {
 } from "@realm/core";
 import type { UIManager } from "../ui/UIManager";
 import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
-import { damageColor, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
+import { damageColor, classTint, primaryDamageType, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
 import { isDown, justDown, readGamepad, rumblePad, syncKeybinds, type GamepadState } from "./input";
 import {
   renderFloorEffects as renderFloorEffectsFx,
@@ -39,7 +39,13 @@ import {
   ultimateFx,
 } from "./skillFx";
 import { bloomFx, debrisFx, groundWaveFx, streakFx, zoomPunch } from "./skillVisuals";
+import { comboHeatAlpha, comboHeatColor, flinchOffset, reactionColor, reactionFx, whiffFx } from "./hitFeel";
 import { PET_SPECIES } from "@realm/core";
+
+/** How long a skill pressed too early waits for its cooldown before it is forgotten. */
+const CAST_BUFFER_MS = 220;
+/** How long a shoved body takes to spring back after a hit. */
+const FLINCH_MS = 170;
 
 const DAMAGE_TEXT_COLORS: Record<string, string> = {
   physical: "#fff0cc",
@@ -104,6 +110,8 @@ export class WorldScene extends Phaser.Scene {
   private npcSprites: { id: string; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Text; baseY: number; lastMark: string }[] = [];
   private buffGlow!: Phaser.GameObjects.Image;
   floorFx!: Phaser.GameObjects.Graphics;
+  rangeFx!: Phaser.GameObjects.Graphics;
+  private comboGlow!: Phaser.GameObjects.Image;
   interactionFx!: Phaser.GameObjects.Graphics;
   barFx!: Phaser.GameObjects.Graphics;
   monsterSprites = new Map<string, Phaser.GameObjects.Sprite>();
@@ -128,6 +136,12 @@ export class WorldScene extends Phaser.Scene {
   private manualAimAt = 0;
   private lastRumbleAt = 0;
   private hitPauseLeft = 0;
+  /** Which swing of the basic attack chain comes next: left, right, then the finisher. */
+  private swingIndex = 0;
+  /** A skill pressed a beat too early is kept this long, then fired the moment it returns. */
+  private bufferedCast: { id: string; until: number } | null = null;
+  /** The shove a monster is still riding out, so a hit moves the body and not only the tint. */
+  private flinches = new Map<string, { dx: number; dy: number; power: number; start: number }>();
   /** Seconds left of the slow crawl after a boss falls. */
   private slowmoLeft = 0;
   private pointerMoved = false;
@@ -169,6 +183,10 @@ export class WorldScene extends Phaser.Scene {
     this.burstPool = [];
     this.padPrev = [];
     this.keybindVersion = -1;
+    // Bodies from the old zone are gone, so their shoves go with them.
+    this.flinches.clear();
+    this.bufferedCast = null;
+    this.swingIndex = 0;
   }
 
   create(): void {
@@ -192,8 +210,12 @@ export class WorldScene extends Phaser.Scene {
     this.createWeather();
     this.createDaylight();
     this.floorFx = this.add.graphics().setDepth(4);
+    this.rangeFx = this.add.graphics().setDepth(9500);
     this.interactionFx = this.add.graphics().setDepth(5);
     this.barFx = this.add.graphics().setDepth(9000);
+    // The glow that warms under the hero as the hit chain climbs. Under the sprite, so
+    // it never covers the character, only the floor around his feet.
+    this.comboGlow = softGlow(this, session.save.x, session.save.y + 10, 0xffe9a0, 70, 0, session.save.y - 2).setScale(1, 0.55);
 
     for (const monster of session.monsters) this.spawnMonster(monster);
     for (const pet of session.pets) this.spawnPet(pet.uid, pet.kind);
@@ -582,6 +604,26 @@ export class WorldScene extends Phaser.Scene {
     this.tweens.add(config);
   }
 
+  /**
+   * The hero heats up as the hit chain climbs: a gold glow at ten hits, hot orange at
+   * fifty. Same numbers the chain already pays out on, so the look always tells the truth.
+   */
+  private updateComboHeat(): void {
+    if (!this.comboGlow) return;
+    const combo = this.session.dead ? 0 : this.session.combo;
+    const save = this.session.save;
+    this.comboGlow.setPosition(save.x, save.y + 10).setDepth(save.y - 2);
+    const alpha = comboHeatAlpha(combo);
+    if (alpha <= 0) {
+      this.comboGlow.setVisible(false);
+      return;
+    }
+    this.comboGlow.setVisible(true).setTint(comboHeatColor(combo));
+    // It breathes with the chain, faster the hotter it gets, so a long run reads as alive.
+    const pulse = loadPreferences().reducedMotion ? 0 : 0.5 + 0.5 * Math.sin(this.session.animationTime * (3 + Math.min(6, combo / 12)));
+    this.comboGlow.setAlpha(alpha * (0.85 + pulse * 0.3));
+  }
+
   private updateBuffGlow(active: boolean): void {
     const save = this.session.save;
     this.buffGlow.setPosition(save.x, save.y + 12).setDepth(save.y - 1);
@@ -651,15 +693,27 @@ export class WorldScene extends Phaser.Scene {
     const abilities = [this.session.classInfo.basic, ...this.session.classInfo.abilities];
     const ability = abilities.find((entry) => entry.id === id);
     if (!ability) return;
+    // The basic attack is a three-swing chain - left, then right, then a wider finisher -
+    // so a held attack reads as a combo instead of the same arc on repeat.
+    const swing = id === "basic" ? this.swingIndex : 0;
     if (this.session.castAbility(id, this.aim)) {
+      if (id === "basic") this.swingIndex = (this.swingIndex + 1) % 3;
+      this.ui.barPunch(id);
       const events = this.session.drainEvents();
-      this.handleSimEvents(events);
+      this.handleSimEvents(events, swing);
     }
   }
 
   private castSlot(index: number): void {
     const ability = this.session.classInfo.abilities[index];
-    if (ability) this.cast(ability.id);
+    if (!ability) return;
+    // A press that lands during a cooldown is remembered for a moment and fires the
+    // instant the skill comes back, instead of being swallowed silently.
+    if (this.session.abilityCooldown(ability.id) > 0) {
+      this.bufferedCast = { id: ability.id, until: this.time.now + CAST_BUFFER_MS };
+      return;
+    }
+    this.cast(ability.id);
   }
 
   /**
@@ -979,6 +1033,15 @@ export class WorldScene extends Phaser.Scene {
     if (touchFire) {
       this.cast("basic");
     }
+    // A skill pressed a beat early fires the moment its cooldown ends, or is dropped.
+    if (this.bufferedCast) {
+      if (this.time.now > this.bufferedCast.until) this.bufferedCast = null;
+      else if (!this.ui.modalOpen && this.session.abilityCooldown(this.bufferedCast.id) <= 0) {
+        const id = this.bufferedCast.id;
+        this.bufferedCast = null;
+        this.cast(id);
+      }
+    }
 
     const touch = this.ui.touchVector;
     const left = this.keys.LEFT.isDown || this.isDown("left") || touch.x < -0.25 || pad.moveX < -0.25;
@@ -1030,10 +1093,62 @@ export class WorldScene extends Phaser.Scene {
 
     this.syncEntities();
     this.renderFloorEffects(time);
+    this.renderRangePreview();
     this.ui.update(delta / 1000);
   }
 
-  private handleSimEvents(events: SimEvent[]): void {
+  /**
+   * The reach of the skill under the pointer, drawn before it is cast. Holding a skill
+   * key shows its ring and line of fire, so range stops being something the player has
+   * to learn by missing. Nothing is drawn when no skill key is held.
+   */
+  private renderRangePreview(): void {
+    const g = this.rangeFx;
+    if (!g) return;
+    g.clear();
+    const preferences = loadPreferences();
+    if (preferences.reducedMotion || this.session.dead || this.ui.modalOpen) return;
+    const held = this.heldSkill();
+    if (!held) return;
+    const save = this.session.save;
+    const angle = Math.atan2(this.aim.y - save.y, this.aim.x - save.x);
+    const color = this.hexColor(classTint(this.session.save.classId, "#e8c07d"));
+    // A ring of squares, so the preview reads as drawn help and not as part of the world.
+    const radius = held.range > 0 ? held.range : 40;
+    g.lineStyle(2, color, 0.55);
+    g.strokeCircle(save.x, save.y, radius);
+    if (held.radius > 0) {
+      const distance = Math.min(radius, Math.hypot(this.aim.x - save.x, this.aim.y - save.y));
+      const px = save.x + Math.cos(angle) * distance;
+      const py = save.y + Math.sin(angle) * distance;
+      g.lineStyle(1.5, color, 0.4);
+      g.strokeCircle(px, py, held.radius);
+      g.fillStyle(color, 0.08);
+      g.fillCircle(px, py, held.radius);
+    }
+    g.lineStyle(1, color, 0.35);
+    g.lineBetween(save.x, save.y, save.x + Math.cos(angle) * radius, save.y + Math.sin(angle) * radius);
+  }
+
+  /** The skill whose key the player is holding down, or null when none is held. */
+  private heldSkill(): { range: number; radius: number } | null {
+    const checks = [
+      [this.keys.ONE, this.session.classInfo.abilities[0]],
+      [this.keys.TWO, this.session.classInfo.abilities[1]],
+      [this.keys.THREE, this.session.classInfo.abilities[2]],
+      [this.keys.FOUR, this.session.classInfo.abilities[3]],
+      [this.keys.FIVE, this.session.classInfo.abilities[4]],
+    ] as const;
+    for (const [key, ability] of checks) {
+      if (!key?.isDown || !ability) continue;
+      if (this.session.save.level < ability.unlockLevel) continue;
+      const radius = ability.effects.find((effect) => effect.radius)?.radius ?? 0;
+      return { range: ability.range > 0 ? ability.range : ability.targeting === "self" ? 72 : 40, radius };
+    }
+    return null;
+  }
+
+  private handleSimEvents(events: SimEvent[], swing = 0): void {
     const preferences = loadPreferences();
     for (const event of events) {
       switch (event.type) {
@@ -1062,8 +1177,24 @@ export class WorldScene extends Phaser.Scene {
           }
           // A gamepad says the hit landed in the hand, not just on the screen.
           this.rumble(event.crit ? 1 : 0);
+          if (event.target === "monster" && event.amount > 0) {
+            this.flinchMonster(event.x, event.y, event.amount, event.crit);
+          }
           this.flashMonster(event.x, event.y);
           this.burst(event.x, event.y, Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color, 4, 0.6);
+          break;
+        case "miss":
+          // A swing that hit nothing still gets a sound and a mark in the air, so the
+          // key always answers - silence is what makes a miss feel broken.
+          this.ui.playMiss();
+          whiffFx(this, event.x, event.y, event.angle, this.hexColor(classTint(this.session.save.classId, "#ffe6a0")));
+          break;
+        case "reaction":
+          // A reaction is its own moment: its colour, its rings, its word above the
+          // monster and a sound that only a reaction makes.
+          this.floatText(event.x, event.y - 26, `${event.icon} ${event.name}`, "#ffe9a0", 11);
+          reactionFx(this, event.x, event.y, reactionColor(event.id));
+          this.ui.playReaction();
           break;
         case "heal":
           if (preferences.showDamage) this.floatText(event.x, event.y - 12, `+${Math.round(event.amount)}`, "#8ef0a0", 9);
@@ -1085,7 +1216,7 @@ export class WorldScene extends Phaser.Scene {
           }
           break;
         case "cast":
-          this.playCastVfx(event, preferences);
+          this.playCastVfx(event, preferences, swing);
           break;
         case "levelup":
           this.floatText(this.session.save.x, this.session.save.y - 24, "LEVEL UP", "#ffe27a", 12);
@@ -1143,6 +1274,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateGearIcon();
     this.playerShadow.setPosition(save.x, save.y + 12).setDepth(save.y - 1).setAlpha(session.dead ? 0.12 : 0.32);
     this.updateBuffGlow(session.buffs.length > 0 && !session.dead);
+    this.updateComboHeat();
 
     const activeMonsters = new Set<string>();
     for (const monster of session.monsters) {
@@ -1159,14 +1291,20 @@ export class WorldScene extends Phaser.Scene {
       this.monsterGlows.get(monster.uid)?.setVisible(!dead);
       if (dead) {
         this.updateStatusMarkers(monster.uid, monster.x, monster.y, []);
+        this.flinches.delete(monster.uid);
         continue;
       }
       activeMonsters.add(monster.uid);
-      sprite.setPosition(monster.x, monster.y);
+      // A body still riding out a hit is drawn at the shove, while the simulation keeps
+      // the real position: the picture flinches, the fight stays fair.
+      const shove = this.flinchOf(monster.uid);
+      const drawX = monster.x + shove.x;
+      const drawY = monster.y + shove.y;
+      sprite.setPosition(drawX, drawY);
       sprite.setDepth(monster.y);
       this.monsterShadows.get(monster.uid)?.setPosition(monster.x, monster.y + 10).setDepth(monster.y - 1);
-      this.monsterGlows.get(monster.uid)?.setPosition(monster.x, monster.y).setDepth(monster.y - 2);
-      this.monsterOutlines.get(monster.uid)?.setPosition(monster.x, monster.y).setDepth(monster.y - 0.5).setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1))).setFlipX(monster.facing < 0);
+      this.monsterGlows.get(monster.uid)?.setPosition(drawX, drawY).setDepth(monster.y - 2);
+      this.monsterOutlines.get(monster.uid)?.setPosition(drawX, drawY).setDepth(monster.y - 0.5).setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1))).setFlipX(monster.facing < 0);
       sprite.setFrame(monsterFrame(def?.sprite ?? "slime", Math.floor(this.time.now / 180) + (def?.boss ? 0 : 1)));
       sprite.setFlipX(monster.facing < 0);
       if (monster.statuses.some((status) => status.kind === "poison")) sprite.setTint(0x9fe8a0);
@@ -1289,12 +1427,15 @@ export class WorldScene extends Phaser.Scene {
     floatTextFx(this, x, y, text, color, size);
   }
 
-  private playCastVfx(event: Extract<SimEvent, { type: "cast" }>, preferences: GamePreferences): void {
+  private playCastVfx(event: Extract<SimEvent, { type: "cast" }>, preferences: GamePreferences, swing = 0): void {
     const ability =
       event.abilityId === "basic"
         ? this.session.classInfo.basic
         : this.session.classInfo.abilities.find((entry) => entry.id === event.abilityId);
     if (!ability) return;
+    // Every element casts with its own voice, so a fireball and an ice shard stop
+    // sounding like the same spell with different colours.
+    this.ui.playCastSound(primaryDamageType(ability));
     const vfx: VfxDescriptor = resolveAbilityVfx(this.session.save.classId, ability, event.color);
     const color = this.hexColor(vfx.color);
     const accent = this.hexColor(vfx.accent);
@@ -1321,11 +1462,11 @@ export class WorldScene extends Phaser.Scene {
     // "gathering, then releasing" instead of one instant blur. The auto-attack still
     // fires with no delay - small hits should never feel laggy.
     if (ability.basic) {
-      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id);
+      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id, swing);
       return;
     }
     this.time.delayedCall(ultimate ? 150 : 85, () => {
-      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id);
+      this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id, swing);
     });
   }
 
@@ -1339,13 +1480,29 @@ export class WorldScene extends Phaser.Scene {
     heavy: boolean,
     signature: boolean,
     abilityId: string,
+    swing = 0,
   ): void {
     switch (vfx.style) {
-      case "slash":
-        this.arcFx(event.x, event.y, angle, color, 34, 4, 0.95, vfx.duration);
+      case "slash": {
+        // The basic chain: a cut from each shoulder in turn, then a wide finisher. The
+        // shoulder the arc hangs off is what makes the second swing a mirror of the
+        // first - negating the aim angle drew the very same arc twice whenever the
+        // target sat straight left, right, up or down.
+        const chain = abilityId === "basic" ? swing : -1;
+        const finisher = chain === 2;
+        const shoulder = chain === 1 ? -1 : chain === 0 ? 1 : 0;
+        const arcRadius = finisher ? 44 : 34;
+        const arcWidth = finisher ? 6 : 4;
+        const spread = finisher ? 1.15 : 0.95;
+        this.arcFx(event.x, event.y, angle, color, arcRadius, arcWidth, spread, vfx.duration, shoulder);
+        if (finisher) {
+          streakFx(this, event.targetX, event.targetY, color, 8, 10, 34, event.targetY + 5, vfx.duration);
+          this.burst(event.targetX, event.targetY, color, 5, 0.8);
+        }
         this.burst(event.targetX, event.targetY, color, 3, 0.6);
         impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.1 : 0.8, vfx.duration);
         break;
+      }
       case "cleave":
         this.arcFx(event.x, event.y, angle, color, 50, 6, 1.35, vfx.duration);
         this.arcFx(event.x, event.y, angle, 0xffffff, 42, 2, 1.1, vfx.duration - 40);
@@ -1522,27 +1679,55 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private arcFx(x: number, y: number, angle: number, color: number, radius: number, width: number, spread: number, duration: number): void {
+  /**
+   * A slash arc. `shoulder` -1 or 1 hangs the band off one of the hero's shoulders
+   * instead of ringing him evenly, which is how a left cut and a right cut end up as
+   * two mirrored shapes rather than one shape drawn twice. Leave it at 0 for a plain
+   * symmetric arc (skill slashes, flurries, volleys).
+   */
+  private arcFx(
+    x: number,
+    y: number,
+    angle: number,
+    color: number,
+    radius: number,
+    width: number,
+    spread: number,
+    duration: number,
+    shoulder = 0,
+  ): void {
     const g = this.add.graphics().setPosition(x, y).setDepth(y + 3);
     g.rotation = angle;
+    // The band's centre slides a little under four tenths of a radius off the starting
+    // shoulder, and the arc leans past the aim line, so the blade reads as trailing in
+    // from one side and finishing on the other.
+    const off = radius * 0.38 * shoulder;
+    const lean = 0.18 * shoulder;
+    const from = -spread + lean;
+    const to = spread + lean;
+    // The bright edge goes at the end the blade arrives at, so the eye follows the cut.
+    const edgeFrom = shoulder === 0 ? -spread * 0.8 : shoulder > 0 ? to - spread * 0.8 : from;
+    const edgeTo = shoulder === 0 ? spread * 0.8 : shoulder > 0 ? to : from + spread * 0.8;
     // A wide, faint halo under the slash so it glows instead of looking like wire.
     g.lineStyle(width * 3.2, color, 0.22);
     g.beginPath();
-    g.arc(0, 0, radius, -spread, spread);
+    g.arc(0, off, radius, from, to);
     g.strokePath();
     g.lineStyle(width, color, 0.9);
     g.beginPath();
-    g.arc(0, 0, radius, -spread, spread);
+    g.arc(0, off, radius, from, to);
     g.strokePath();
     g.lineStyle(Math.max(1, width - 2), 0xffffff, 0.75);
     g.beginPath();
-    g.arc(0, 0, radius - 2, -spread * 0.8, spread * 0.8);
+    g.arc(0, off, radius - 2, edgeFrom, edgeTo);
     g.strokePath();
     this.tweens.add({
       targets: g,
       alpha: 0,
       scaleX: 1.25,
       scaleY: 1.25,
+      // A shoulder cut follows through as it fades; the plain arcs stay put.
+      rotation: angle + shoulder * 0.26,
       duration,
       ease: "Cubic.easeOut",
       onComplete: () => g.destroy(),
@@ -1876,6 +2061,44 @@ export class WorldScene extends Phaser.Scene {
     } catch {
       // Vibration can be blocked by the browser or the device; the game plays on.
     }
+  }
+
+  /** The offset a monster is still riding out, so a hit moves the body and not just the tint. */
+  private flinchOf(uid: string): { x: number; y: number } {
+    const flinch = this.flinches.get(uid);
+    if (!flinch) return { x: 0, y: 0 };
+    const progress = (this.time.now - flinch.start) / FLINCH_MS;
+    if (progress >= 1) {
+      this.flinches.delete(uid);
+      return { x: 0, y: 0 };
+    }
+    return flinchOffset(flinch.dx, flinch.dy, flinch.power, progress);
+  }
+
+  /**
+   * A landed blow shoves the body away from the hero, harder on a crit or a big number.
+   * Small hits still nudge: a flinch on every hit is what separates a fight from two
+   * sprites standing still while numbers appear.
+   */
+  private flinchMonster(x: number, y: number, amount: number, crit: boolean): void {
+    if (loadPreferences().reducedMotion) return;
+    let bestUid = "";
+    let bestDistance = 24;
+    for (const monster of this.session.monsters) {
+      if (monster.state === "dead") continue;
+      const distance = Math.hypot(monster.x - x, monster.y - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestUid = monster.uid;
+      }
+    }
+    if (!bestUid) return;
+    const save = this.session.save;
+    const dx = Math.sign(x - save.x) || 0;
+    const dy = Math.abs(x - save.x) < 4 ? Math.sign(y - save.y) || 0 : 0;
+    // Bigger numbers shove harder, but never so far that a monster looks teleported.
+    const power = Math.min(11, 2.5 + Math.sqrt(amount) * 0.42 + (crit ? 3 : 0));
+    this.flinches.set(bestUid, { dx, dy, power, start: this.time.now });
   }
 
   private flashMonster(x: number, y: number): void {

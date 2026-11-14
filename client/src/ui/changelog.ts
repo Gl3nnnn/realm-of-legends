@@ -21,6 +21,24 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.29.0",
+    date: "November 17, 2026",
+    title: "The Read It Update",
+    summary:
+      "A fight now tells you what is happening. Every element has its own sound, monsters flinch when hit, the basic attack is a three-swing chain, and a reaction shouts its own name. Holding a skill key shows its reach before you cast, and the skill bar kicks back when it fires.",
+    changes: [
+      { tag: "new", text: "Every element casts with its own voice - fire roars, ice chimes, shadow drops low - instead of one shared note." },
+      { tag: "new", text: "A hit shoves a monster's body away from you, harder on a crit, so a blow moves something." },
+      { tag: "new", text: "The basic attack is a three-swing chain: a left swing, a right swing, then a wider finisher with sparks." },
+      { tag: "new", text: "Holding a skill key draws its range ring and blast area, so reach is seen before the cast." },
+      { tag: "improved", text: "Elemental reactions now call out their own name above the monster with a matching burst of colour and sound." },
+      { tag: "improved", text: "The hero warms up as the hit chain climbs, from a gold glow at ten hits to hot orange past fifty." },
+      { tag: "improved", text: "Projectiles drag their own trail: embers for fire, shards for ice, widening rings for magic, spores for poison." },
+      { tag: "improved", text: "A swing that hits nothing still shows a mark in the air and makes a soft sound, so a miss never feels ignored." },
+      { tag: "improved", text: "A skill pressed a moment too early waits for its cooldown and fires, instead of being silently dropped. The skill button also kicks when it fires." },
+    ],
+  },
+  {
     version: "1.28.0",
     date: "November 17, 2026",
     title: "The Impact Update",
