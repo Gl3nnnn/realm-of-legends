@@ -79,6 +79,7 @@ import { bossLore } from "../data/boss-lore";
 import { isWeaknessHit, monsterWeakness, weaknessMultiplier } from "../data/weakness";
 import { arenaWave, gauntletBoss, gauntletReward, GAUNTLET_BOSSES } from "../data/arena";
 import {
+  DESCENT_SEED_MAX,
   boonChoiceIds,
   descentBoon,
   descentPact,
@@ -809,6 +810,14 @@ export class GameSession {
       wanderY: spawn.y,
       elite,
       phase: 0,
+      // A guard comes from size and armour: a boss holds out far longer than a whelp.
+      ...(dummy
+        ? {}
+        : {
+            poiseMax: Math.max(30, Math.round((def.boss ? 150 : def.maxHp * 0.05) * (elite ? 1.25 : 1))),
+            poise: Math.max(30, Math.round((def.boss ? 150 : def.maxHp * 0.05) * (elite ? 1.25 : 1))),
+            poiseDelay: 0,
+          }),
       ...(dummy ? { invulnerable: true } : {}),
     };
   }
@@ -1241,6 +1250,14 @@ export class GameSession {
       const slowed = monster.statuses.find((s) => s.kind === "slow");
       const marked = monster.statuses.some((s) => s.kind === "mark");
       monster.attackTimer = Math.max(0, monster.attackTimer - dt);
+      // A guard fills back up once nothing has hit the body for a moment, so a long
+      // fight of small blows never leaves a monster permanently broken.
+      if (monster.poiseMax) {
+        monster.poiseDelay = Math.max(0, (monster.poiseDelay ?? 0) - dt);
+        if (monster.poiseDelay <= 0 && (monster.poise ?? 0) < monster.poiseMax) {
+          monster.poise = Math.min(monster.poiseMax, (monster.poise ?? 0) + monster.poiseMax * 0.35 * dt);
+        }
+      }
       monster.wanderTimer -= dt;
 
       const playerDist = length(player.x - monster.x, player.y - monster.y);
@@ -1998,8 +2015,9 @@ export class GameSession {
     return true;
   }
 
-  /** Walk into the Descent. A run is free, and every wave pays shards. */
-  enterDescent(): boolean {
+  /** Walk into the Descent. A run is free, and every wave pays shards.
+   * Pass a seed to race a friend's exact floors; leave it out for today's own run. */
+  enterDescent(seed?: number): boolean {
     if (this.dead) return false;
     if (this.arenaActive) {
       this.emit({ type: "log", text: "Leave the Hollow Ring before descending.", tone: "info" });
@@ -2010,6 +2028,12 @@ export class GameSession {
       this.emit({ type: "log", text: "Finish the gauntlet before descending.", tone: "info" });
       return false;
     }
+    // A seed the run cannot hold is refused, never wrapped: wrapping would hand the
+    // hero a different run from the one they meant to race.
+    if (seed !== undefined && !(Number.isFinite(seed) && Math.floor(seed) > 0 && Math.floor(seed) <= DESCENT_SEED_MAX)) {
+      this.emit({ type: "log", text: "That seed is out of range, so the Descent stays closed.", tone: "bad" });
+      return false;
+    }
     this.descentActive = true;
     this.descentWaveNumber = 0;
     this.descentClock = 0;
@@ -2018,7 +2042,9 @@ export class GameSession {
     this.descentBoonIds = [];
     this.descentPendingBoons = [];
     this.descentAnnounced = -1;
-    this.descentSeed = (dailySeed(dayKey(), this.save.id) ^ this.weeklyRunSeed) >>> 0;
+    // A pasted seed wins when it is a real number, so two heroes can fight the same floors.
+    const chosen = seed === undefined ? 0 : Math.floor(seed);
+    this.descentSeed = chosen || ((dailySeed(dayKey(), this.save.id) ^ this.weeklyRunSeed) >>> 0);
     const pact = this.pact;
     this.emit({ type: "log", text: "You start down the Endless Descent. Every second wave offers a boon, and every fifth a boss.", tone: "quest" });
     if (pact.level > 0) this.emit({ type: "log", text: `${pact.name}: ${pact.description}`, tone: "bad" });
@@ -3145,6 +3171,29 @@ export class GameSession {
       this.save.reactionsSeen.push(reaction.id);
       writeDiary(this.save, "kill", `Discovered ${reaction.name} in ${this.zone.name}.`);
     }
+    // A shatter or a steam burst does not stop at one body. The same reaction carries a
+    // step into the monsters packed around the target, at a smaller share, so a crowd
+    // fought beside a burning target pays off. The chain is announced separately and
+    // never wakes a second reaction of its own, which is what stops it looping.
+    const chainRadius = 96;
+    const chainShare = 0.55;
+    const chained: string[] = [];
+    for (const other of this.monsters) {
+      if (other === monster || other.state === "dead" || other.invulnerable) continue;
+      if (length(other.x - monster.x, other.y - monster.y) > chainRadius) continue;
+      const spill = Math.max(1, Math.round(reaction.bonus * chainShare));
+      other.hp -= spill;
+      chained.push(other.uid);
+      this.emit({ type: "chain", id: reaction.id, name: reaction.name, x: other.x, y: other.y, amount: spill, toUid: other.uid });
+      if (other.hp <= 0) this.killMonster(other);
+    }
+    if (chained.length > 0) {
+      this.emit({
+        type: "log",
+        text: `${reaction.name} carries into ${chained.length} more ${chained.length === 1 ? "body" : "bodies"}.`,
+        tone: "good",
+      });
+    }
     return reaction.bonus;
   }
 
@@ -3311,6 +3360,9 @@ export class GameSession {
       this.cooldowns[id] = Math.max(0, this.cooldowns[id] - 0.6);
     }
     this.emit({ type: "log", text: "Perfect dodge! Restore 12 resource and reduce skill cooldowns.", tone: "good" });
+    // The world gets its own event, not just a line in the log, so the moment can land
+    // on screen the way it already lands in the numbers.
+    this.emit({ type: "perfectDodge", x: this.save.x, y: this.save.y });
   }
 
   learnTalent(talentId: string): boolean {

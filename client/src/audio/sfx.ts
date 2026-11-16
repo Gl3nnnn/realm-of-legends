@@ -286,6 +286,20 @@ export class Sfx {
     this.noise(0.1, 0.05);
   }
 
+  /** A perfect dodge: a bright rising chime with a breath of air under it. */
+  perfect(): void {
+    this.tone(560, 0.14, "sine", 0.16, 220);
+    this.tone(880, 0.18, "sine", 0.11, 140, 0.05);
+    this.noise(0.06, 0.05);
+  }
+
+  /** A guard breaking or a body hitting stone: a low thud with grit under it. */
+  slam(): void {
+    this.tone(110, 0.22, "square", 0.18, -70);
+    this.noise(0.16, 0.09);
+    this.tone(180, 0.12, "triangle", 0.1, -50, 0.04);
+  }
+
   /** A swing that hit nothing: air moving, no impact. */
   miss(): void {
     this.noise(0.09, 0.05);

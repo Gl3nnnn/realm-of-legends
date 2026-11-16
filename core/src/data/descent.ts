@@ -151,6 +151,25 @@ export function descentBoon(id: string): DescentBoon | undefined {
   return DESCENT_BOONS.find((boon) => boon.id === id);
 }
 
+/** The largest seed the Descent can run: its randomness is 32-bit, so nothing bigger fits. */
+export const DESCENT_SEED_MAX = 0xffffffff;
+
+/**
+ * The seed a pasted line stands for, or null when it cannot be a run.
+ *
+ * Only the digits count, so a copied seed with spaces or a stray word still works.
+ * A seed too large to fit the 32-bit roll is refused rather than wrapped: wrapping
+ * it would quietly hand the hero a completely different run from the one they
+ * meant to race.
+ */
+export function parseDescentSeed(text: string | undefined | null): number | null {
+  const digits = (text ?? "").replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const seed = Number(digits);
+  if (!Number.isSafeInteger(seed) || seed <= 0 || seed > DESCENT_SEED_MAX) return null;
+  return seed;
+}
+
 /**
  * A relic: permanent, bought with shards between runs, and never lost.
  * These are the reason a bad run is never a wasted run.

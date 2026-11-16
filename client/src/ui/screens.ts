@@ -1238,6 +1238,9 @@ export function descentSection(session: GameSession): string {
       : `<button class="btn" data-action="enter-descent">Enter the Descent</button>`}
     ${boons ? `<div class="boon-list">${boons}</div>` : ""}
     <div class="small muted">Seed ${descent.seed}. ${esc("Share it to race the same floors.")}</div>
+    ${descent.active ? "" : `<div class="seed-race"><label class="class-search" style="margin:8px 0"><span>Race a friend</span><input type="search" data-descent-seed placeholder="Paste their seed" aria-label="Paste a friend's seed" /></label>
+    <button class="btn ghost small" data-action="enter-descent-shared">Run their seed</button>
+    <div class="seed-error" data-descent-seed-error role="alert" hidden></div></div>`}
     <div class="descent-tools">
       <button class="btn ghost small" data-action="share-seed" data-seed="${descent.seed}">Copy seed</button>
       <button class="btn ghost small" data-action="cash-shards" ${descent.shards > 0 ? "" : "disabled"}>Trade ${descent.shards} shards for ${descent.shards * 20} gold</button>

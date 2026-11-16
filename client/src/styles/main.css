@@ -1817,6 +1817,12 @@ input[type="text"]:focus {
   color: var(--gold);
 }
 
+.seed-error {
+  margin-top: 4px;
+  font-size: 0.85em;
+  color: var(--red);
+}
+
 .ability-wrap {
   display: grid;
   justify-items: center;
@@ -1990,6 +1996,30 @@ html[data-motion="reduced"] .ability-slot.ready:not(.cooling) {
 .ability-slot.ultimate {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px rgba(232, 192, 90, 0.35), 0 0 12px rgba(232, 192, 90, 0.28) inset;
+}
+
+/* The last quarter of a cooldown: the rim warms toward the class colour, so a skill
+   that is about to return looks different from one that just went out. */
+.ability-slot.warming:not(.ready) {
+  border-color: color-mix(in srgb, var(--class-tint, #8a74a8) 60%, #ffffff);
+  filter: saturate(0.9) brightness(1);
+}
+
+/* A soft inner glow on every live slot, so the bar reads as lit tiles rather than
+   flat squares with an emoji on them. */
+.ability-slot:not(.empty)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.16), transparent 62%);
+  mix-blend-mode: screen;
+}
+
+/* A cut-corner bevel: the tile looks carved out of a slab instead of drawn as a box. */
+.ability-slot:not(.empty) {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 
 /* A slow shine that sweeps the ultimate button, so it reads as the big one. */

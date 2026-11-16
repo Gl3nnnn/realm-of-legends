@@ -21,6 +21,114 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.36.1",
+    date: "November 30, 2026",
+    title: "The Clean Seed Update",
+    summary:
+      "A pasted Descent seed that cannot be a run is now refused with a clear message, instead of quietly starting a different run from the one your friend sent.",
+    changes: [
+      { tag: "fixed", text: "The 'Race a friend' field shows a red line under it when the seed is out of range, and the message toasts too." },
+      { tag: "fixed", text: "A seed larger than 4,294,967,295 is refused instead of wrapping around to a different run. The digits your friend copied are the digits that run." },
+      { tag: "improved", text: "An empty field still says 'Paste a friend's seed first', so the two mistakes read differently." },
+    ],
+  },
+  {
+    version: "1.36.0",
+    date: "November 30, 2026",
+    title: "The Rival Seed Update",
+    summary:
+      "The Endless Descent can now be started on a seed you paste in, so a friend's exact run is yours to race. Copy your seed, send it, and they fight the same floors, the same bosses and the same boons.",
+    changes: [
+      { tag: "new", text: "The Descent panel has a 'Race a friend' field: paste a seed, press Run their seed, and today's own run is swapped for theirs." },
+      { tag: "new", text: "The pasted seed overrides the daily one, so both heroes roll the same floors, boons and boss order." },
+      { tag: "improved", text: "A pasted seed only needs the digits, so a copied seed with spaces or a stray word still works." },
+      { tag: "improved", text: "The field hides while a run is already going, so you cannot switch seeds mid-Descent by accident." },
+    ],
+  },
+  {
+    version: "1.35.0",
+    date: "November 29, 2026",
+    title: "The Momentum Update",
+    summary:
+      "Elemental reactions no longer stop at one body: a Shatter or Steam Burst carries into everything packed around the target at a smaller share. Killing something also gives back a slice of every cooldown, so a clean chain of fights keeps your skills coming.",
+    changes: [
+      { tag: "new", text: "A reaction spills into every monster within a short distance of the target, at just over half its strength, printed above each body it hits." },
+      { tag: "new", text: "The log says how far the reaction carried: 'Shatter carries into 3 more bodies.'" },
+      { tag: "improved", text: "Every kill shaves time off all your skill cooldowns, and a boss kill shaves about three times as much, so a steady chain never leaves you standing with nothing to press." },
+      { tag: "balance", text: "Reaction chains never wake a second reaction of their own, so a crowd cannot loop damage forever." },
+    ],
+  },
+  {
+    version: "1.34.0",
+    date: "November 28, 2026",
+    title: "The Guard Update",
+    summary:
+      "Heavy bodies now hold their ground. Every monster carries a guard under its health bar: small blows chip it, big ones break it, and a broken guard staggers the body for half a second. A blow that shoves a monster into stone deals extra damage and sends dust up.",
+    changes: [
+      { tag: "new", text: "A thin blue guard bar sits under every monster's health, chipped by your blows and refilled once the fight calms." },
+      { tag: "new", text: "Breaking a guard prints STAGGER over the monster and stuns it for half a second — the window a light class needs against a heavy one." },
+      { tag: "new", text: "Hitting a monster that stands against a wall deals a bonus slam of damage, printed as WALL +N with dust and a low thud." },
+      { tag: "balance", text: "Bosses carry a much larger guard than normal monsters, and elites hold a quarter more than a plain one of their kind." },
+    ],
+  },
+  {
+    version: "1.33.0",
+    date: "November 27, 2026",
+    title: "The Timing Update",
+    summary:
+      "Three moments that already had numbers behind them now have something to see and hear. A perfect dodge is called out with its own word, colour and chime; an ultimate lands with a frame of colour across the whole screen; and a skill caught mid wind-up finishes the instant you dodge instead of making you wait out the beat.",
+    changes: [
+      { tag: "new", text: "A perfect dodge prints PERFECT over the hero, flashes blue, sends two rings out and plays a chime that nothing else in the game makes." },
+      { tag: "new", text: "Ultimates land with one short frame of colour across the screen, in the skill's own shade." },
+      { tag: "improved", text: "A dodge pressed during a skill's wind-up now finishes that cast on the spot, so the beat never costs you the press." },
+      { tag: "improved", text: "The perfect dodge reward is unchanged: 12 resource back and six tenths off every cooldown." },
+    ],
+  },
+  {
+    version: "1.32.0",
+    date: "November 26, 2026",
+    title: "The Depth Update",
+    summary:
+      "The map is no longer a flat sheet of tiles. A colour wash sits under everything, slow cloud shadows slide past at their own pace, and ground mist drifts near the floor, so the world reads as air with a floor inside it rather than a painted board.",
+    changes: [
+      { tag: "new", text: "Slow cloud shadows drift behind the map at their own speed, so the world has depth as you walk." },
+      { tag: "new", text: "A soft band of mist glows near the floor in every zone, its colour taken from the zone itself." },
+      { tag: "improved", text: "Every zone carries its own colour wash, so the village, the marsh and the throne each feel like their own place." },
+      { tag: "improved", text: "High contrast mode skips the wash, so the tiles stay plain and readable for anyone who needs that." },
+    ],
+  },
+  {
+    version: "1.31.0",
+    date: "November 18, 2026",
+    title: "The Last Moments Update",
+    summary:
+      "Death now has a body and a boss has a turning point. A monster that falls sinks, fades, rolls over and leaves a puff of colour behind instead of blinking out, and a boss crossing into its second or final phase shakes the screen, flashes red and shouts its own name.",
+    changes: [
+      { tag: "new", text: "A defeated monster sinks, fades and rolls over where it stood, with a soft burst of colour left behind." },
+      { tag: "new", text: "A boss kill is a bigger, slower fall with a wide glow and drifting embers, so the end of a fight reads as one moment." },
+      { tag: "new", text: "A boss entering a new phase shakes the screen, flashes the floor red and calls out PHASE TWO or FINAL PHASE over its head." },
+      { tag: "improved", text: "Bodies that fall stay visible while they fade, instead of disappearing the instant the health bar empties." },
+      { tag: "fixed", text: "With Reduce motion or Performance mode on, a fallen monster is removed cleanly and nothing is left behind on screen." },
+    ],
+  },
+  {
+    version: "1.30.0",
+    date: "November 18, 2026",
+    title: "The Lit World Update",
+    summary:
+      "Every effect now lights the ground it lands on. A hit drops a pool of colour, a big hit sends a flat wave running across the floor, and the centre of any bright moment gets a white-hot point the eye can land on. Slashes are a real tapered blade now instead of an even line, and the skill bar is carved and bevelled with a rim that warms as a cooldown finishes.",
+    changes: [
+      { tag: "new", text: "A hit lights the floor it lands on, so the ground looks lit by the skill instead of painted over." },
+      { tag: "new", text: "A big hit or a crit sends a flat shockwave running across the ground away from the point of impact." },
+      { tag: "new", text: "The centre of every bright hit gets a small white-hot flash, so a busy effect has a point to focus on." },
+      { tag: "improved", text: "Slashes are a tapered crescent that is thin where the blade enters and thick where it lands, instead of a line of even thickness." },
+      { tag: "improved", text: "Magic circles, heals, wards, lightning and dragon breath all light the floor beneath them." },
+      { tag: "improved", text: "A hit monster now kicks in scale for a moment on top of the white flash, so the body reacts as well as the colour." },
+      { tag: "improved", text: "A long hit chain widens the hero's heat glow and adds a live rim, so a big combo reads at a glance." },
+      { tag: "improved", text: "Skill buttons are bevelled with cut corners and an inner glow, and the rim warms up in the last quarter of a cooldown." },
+    ],
+  },
+  {
     version: "1.29.0",
     date: "November 17, 2026",
     title: "The Read It Update",

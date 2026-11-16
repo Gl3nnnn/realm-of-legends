@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { loadPreferences } from "../ui/preferences";
 import { bloomFx, debrisFx, groundWaveFx, scarFx, streakFx, zoomPunch } from "./skillVisuals";
+import { coreFlashFx, lightPoolFx, rimGlowFx, shockwaveFx } from "./fxKit";
 
 const ADD = Phaser.BlendModes.ADD;
 
@@ -71,8 +72,12 @@ export function impactFx(
 ): void {
   const allowed = budget();
   // Light first, then shape: a bloom under everything else is what stops a hit
-  // from looking like a flat sticker pasted on the floor.
+  // from looking like a flat sticker pasted on the floor. The floor pool is what
+  // makes the ground look lit by the skill instead of just painted over.
   bloomFx(scene, x, y, color, 40 * scale + 18, 0.5, Math.max(220, duration * 0.9), y + 6, 2.2);
+  lightPoolFx(scene, x, y, color, 26 * scale + 10, Math.max(220, duration), 0.3 + Math.min(0.25, scale * 0.12));
+  // The white core is the eye-catcher: without it a bright hit reads as coloured fog.
+  coreFlashFx(scene, x, y - 4, 7 * scale, Math.max(160, duration), y + 12);
   const flash = scene.add.circle(x, y, 14 * scale, color, 0.3).setDepth(y + 6).setBlendMode(ADD);
   scene.tweens.add({
     targets: flash,
@@ -105,6 +110,9 @@ export function impactFx(
     onComplete: () => inner.destroy(),
   });
 
+  // A bigger hit sends a flat wave running across the floor, so force spreads outward
+  // instead of stopping at the pixel the skill touched.
+  if (scale >= 0.9) shockwaveFx(scene, x, y, color, 40 * scale, Math.max(320, duration * 1.2), 0, scale >= 1.4 ? 3 : 2);
   // Speed lines and flying chips read as force, and the scorch mark keeps the hit
   // visible for a moment after the sparks have gone.
   streakFx(scene, x, y, accent, Math.round(6 * scale) + 2, 8 * scale, 30 * scale, y + 9, Math.max(180, duration * 0.9));
@@ -149,6 +157,9 @@ export function sigilFx(
   // A pool of light under the circle: a magic circle should light the floor it sits on.
   bloomFx(scene, x, y, color, radius * 2.6, 0.18, duration, y + 1, 1.25);
   groundWaveFx(scene, x, y, accent, radius, 2, Math.max(320, duration));
+  // The circle lights the floor it is carved on, and its edge gets a crisp leading ring.
+  lightPoolFx(scene, x, y, color, radius * 1.1, Math.max(360, duration), 0.26);
+  shockwaveFx(scene, x, y, accent, radius * 1.15, Math.max(360, duration * 1.2), 40);
   const g = scene.add.graphics().setPosition(x, y).setDepth(y + 2).setBlendMode(ADD);
   g.lineStyle(2, color, 0.85);
   g.strokeCircle(0, 0, radius);
@@ -209,6 +220,8 @@ export function pillarFx(
   });
   bloomFx(scene, x, y - height * 0.35, color, height * 1.1, 0.2, Math.max(280, duration), y + 1, 1.2);
   groundWaveFx(scene, x, y, accent, 28, 2, Math.max(260, duration));
+  lightPoolFx(scene, x, y, color, 34, Math.max(320, duration), 0.3);
+  coreFlashFx(scene, x, y - height * 0.2, 10, Math.max(220, duration), y + 6);
   const core = scene.add
     .rectangle(x, y - height / 2, 10, height, 0xffffff, 0.22)
     .setDepth(y + 3)
@@ -263,6 +276,9 @@ export function bubbleShellFx(
   shell.strokePoints(hex(radius * 0.62), true);
   shell.setBlendMode(ADD);
   bloomFx(scene, x, y, accent, radius * 2.4, 0.24, duration, y + 1, 1.3);
+  // A warded body wears its shield as a rim of light as well as a drawn shell.
+  rimGlowFx(scene, x, y, accent, radius * 0.72, 0.5, Math.max(260, duration), y + 4);
+  lightPoolFx(scene, x, y, color, radius * 0.9, Math.max(300, duration), 0.22);
   scene.tweens.add({
     targets: shell,
     scaleX: 1.2,
@@ -289,6 +305,9 @@ export function lightningFx(
   // A glow at both ends of the bolt, so the strike lights the caster and the target.
   bloomFx(scene, x1, y1, color, 54, 0.3, Math.max(160, duration), Math.max(y1, y2) + 2, 1.4);
   bloomFx(scene, x2, y2, color, 80, 0.45, Math.max(200, duration * 1.2), Math.max(y1, y2) + 4, 1.6);
+  // A strike lights the floor it lands on and leaves a hot point at the impact.
+  lightPoolFx(scene, x2, y2, color, 30, Math.max(260, duration * 1.4), 0.34);
+  coreFlashFx(scene, x2, y2, 9, Math.max(180, duration), Math.max(y1, y2) + 6);
   const path = (jitter: number): { x: number; y: number }[] => {
     const steps = 5;
     const points: { x: number; y: number }[] = [{ x: x1, y: y1 }];
@@ -365,6 +384,9 @@ export function coneSkillFx(
   layer(length * 0.78, spread * 0.82, color, 0.24, 0.75);
   layer(length * 0.5, spread * 0.6, 0xfff0d0, 0.3, 0.5);
   g.setBlendMode(ADD);
+  // The breath also lights the floor it sweeps and glows at its own mouth.
+  lightPoolFx(scene, x + Math.cos(angle) * length * 0.4, y + Math.sin(angle) * length * 0.4, color, length * 0.5, Math.max(300, duration), 0.28);
+  coreFlashFx(scene, x, y - 2, 11, Math.max(200, duration), y + 5);
   // The cone lights the ground along its length, and debris flies from its tip.
   for (let step = 1; step <= 3; step += 1) {
     const reach = (length * step) / 3.4;
@@ -415,6 +437,8 @@ export function ultimateFx(
   zoomPunch(scene, 0.05, 220);
   scarFx(scene, x, y, color, Math.max(44, radius * 0.9));
   groundWaveFx(scene, x, y, accent, Math.max(60, radius), 3, Math.max(420, duration * 1.2), 80);
+  lightPoolFx(scene, x, y, color, Math.max(52, radius * 0.85), Math.max(520, duration * 1.3), 0.42);
+  coreFlashFx(scene, x, y - 6, 16, Math.max(260, duration * 0.9), y + 8);
   const ring = (delay: number, reach: number): void => {
     const shock = scene.add.circle(x, y, 20, 0, 0).setDepth(y + 4).setBlendMode(ADD);
     shock.setStrokeStyle(4, color, 0.9);

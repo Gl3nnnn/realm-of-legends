@@ -85,6 +85,46 @@ export function flinchOffset(dx: number, dy: number, power: number, progress: nu
 }
 
 /**
+ * A perfect dodge: the world holds its breath for a beat. A blue flash on the hero, two
+ * rings racing out and a soft trail where the body passed, so the reward is seen and not
+ * only read in the log.
+ */
+export function perfectDodgeFx(scene: Phaser.Scene, x: number, y: number, color: number): void {
+  const preferences = loadPreferences();
+  if (preferences.reducedMotion) return;
+  const flash = softGlow(scene, x, y - 6, color, 74, 0.55, y + 4).setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: flash,
+    scaleX: 2.2,
+    scaleY: 2.2,
+    alpha: 0,
+    duration: 420,
+    ease: "Cubic.easeOut",
+    onComplete: () => flash.destroy(),
+  });
+  for (const [radius, width, delay] of [
+    [26, 3, 0],
+    [18, 1.5, 110],
+  ] as const) {
+    const ring = scene.add.ellipse(x, y, radius * 2, radius * 1.05, color, 0).setDepth(3).setBlendMode(Phaser.BlendModes.ADD);
+    ring.setStrokeStyle(width, color, 0.85).setScale(0.35);
+    scene.tweens.add({
+      targets: ring,
+      scaleX: 3,
+      scaleY: 3,
+      alpha: 0,
+      delay,
+      duration: 480,
+      ease: "Quart.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+  }
+  if (!preferences.performanceMode) {
+    streakFx(scene, x, y - 4, color, 10, 5, 36, y + 4, 340);
+  }
+}
+
+/**
  * An elemental reaction waking: its own colour in a burst, two racing rings and a fan of
  * sparks. The word itself is drawn by the scene's float text, on top of this.
  */

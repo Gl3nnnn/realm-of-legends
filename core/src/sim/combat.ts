@@ -102,6 +102,13 @@ export function killMonster(s: GameSession, monster: MonsterInstance): void {
     writeDiary(s.save, "loot", `${s.save.companion?.name ?? "Your companion"} grew into a ${s.petStage.name}.`);
   }
   s.bumpKillStreak();
+  // A kill gives back a slice of every cooldown. It is small on purpose: a clean chain
+  // speeds a fight up without ever letting a skill be held down forever.
+  const killRefund = def.boss ? 4 : 1.4;
+  for (const key of Object.keys(s.cooldowns)) {
+    if (s.cooldowns[key] > 0) s.cooldowns[key] = Math.max(0, s.cooldowns[key] - killRefund);
+  }
+  if (s.dodgeCooldown > 0) s.dodgeCooldown = Math.max(0, s.dodgeCooldown - killRefund * 0.5);
   s.recordBountyKill(def.id);
   if (monster.elite === "volatile" && length(s.save.x - monster.x, s.save.y - monster.y) <= 90) {
     damagePlayer(s, def.attack * s.difficultyScale.attack * 1.4, `${def.name} (Volatile)`, "physical", monster.uid);
@@ -193,6 +200,29 @@ export function hitMonster(
   // A landed hit builds the momentum chain, which is what a clean fight is made of.
   s.bumpCombo();
   monster.hp -= mitigated;
+  // Small blows chip a heavy body's guard and big ones knock it out. A broken guard
+  // staggers, which is the window a light class needs to win a heavy fight.
+  if (monster.poiseMax && monster.poise !== undefined) {
+    monster.poise -= Math.max(1, Math.round(mitigated * 0.45 + (crit ? 6 : 0)));
+    if (monster.poise <= 0) {
+      monster.poise = monster.poiseMax;
+      monster.poiseDelay = 2;
+      monster.statuses.push({ kind: "stun", remaining: 0.55, value: 0 });
+      s.emit({ type: "poise-break", uid: monster.uid, x: monster.x, y: monster.y });
+    }
+  }
+  // A shove that ends against stone hurts more than one that ends in open ground.
+  if (monster.poiseMax && (monster.slamLock ?? 0) <= s.elapsed) {
+    const dx = monster.x - s.save.x;
+    const dy = monster.y - s.save.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (s.isBlockedAt(monster.x + (dx / dist) * (def.radius + 5), monster.y + (dy / dist) * (def.radius + 5), 2)) {
+      const slam = Math.max(1, Math.round(mitigated * 0.6));
+      monster.hp -= slam;
+      monster.slamLock = s.elapsed + 1.2;
+      s.emit({ type: "wall-slam", x: monster.x, y: monster.y, amount: slam });
+    }
+  }
   // Hitting a burning or frozen thing with a different element wakes a reaction for a little extra.
   const reactionBonus = s.wakeReaction(monster, damageType);
   if (reactionBonus > 0) {

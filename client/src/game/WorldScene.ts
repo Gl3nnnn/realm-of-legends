@@ -39,7 +39,8 @@ import {
   ultimateFx,
 } from "./skillFx";
 import { bloomFx, debrisFx, groundWaveFx, streakFx, zoomPunch } from "./skillVisuals";
-import { comboHeatAlpha, comboHeatColor, flinchOffset, reactionColor, reactionFx, whiffFx } from "./hitFeel";
+import { bladeBandFx, coreFlashFx, lightPoolFx, rimGlowFx, shockwaveFx } from "./fxKit";
+import { comboHeatAlpha, comboHeatColor, flinchOffset, perfectDodgeFx, reactionColor, reactionFx, whiffFx } from "./hitFeel";
 import { PET_SPECIES } from "@realm/core";
 
 /** How long a skill pressed too early waits for its cooldown before it is forgotten. */
@@ -119,12 +120,16 @@ export class WorldScene extends Phaser.Scene {
   private monsterShadows = new Map<string, Phaser.GameObjects.Ellipse>();
   private monsterGlows = new Map<string, Phaser.GameObjects.Image>();
   private petSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /** The last boss phase the shell has seen, per monster, so a change can be announced once. */
+  private bossPhaseSeen = new Map<string, number>();
   private lootSprites = new Map<string, { icon: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Arc; beam?: Phaser.GameObjects.Rectangle }>();
   private chestSprites = new Map<string, Phaser.GameObjects.Image>();
   private chestLabels = new Map<string, Phaser.GameObjects.Text>();
   private gatherSprites = new Map<string, Phaser.GameObjects.Container>();
   private decorLayer?: Phaser.Tilemaps.TilemapLayer;
   private tallTileSprites = new Map<string, Phaser.GameObjects.Image>();
+  /** Haze and drifting shadows that sit behind the tiles, so the map has depth. */
+  private backdropPieces: Phaser.GameObjects.GameObject[] = [];
   private ambientDots: Phaser.GameObjects.Arc[] = [];
   private weatherSpecks: Phaser.GameObjects.Rectangle[] = [];
   private weatherKind = "";
@@ -140,6 +145,9 @@ export class WorldScene extends Phaser.Scene {
   private swingIndex = 0;
   /** A skill pressed a beat too early is kept this long, then fired the moment it returns. */
   private bufferedCast: { id: string; until: number } | null = null;
+  /** A cast sitting in its wind-up, kept so a dodge in that beat can finish it early. */
+  private pendingDeliver: (() => void) | null = null;
+  private pendingTimer: Phaser.Time.TimerEvent | null = null;
   /** The shove a monster is still riding out, so a hit moves the body and not only the tint. */
   private flinches = new Map<string, { dx: number; dy: number; power: number; start: number }>();
   /** Seconds left of the slow crawl after a boss falls. */
@@ -171,6 +179,8 @@ export class WorldScene extends Phaser.Scene {
     this.chestSprites.clear();
     this.chestLabels.clear();
     this.gatherSprites.clear();
+    // The old zone's backdrop is destroyed with the scene, so only the list is cleared.
+    this.backdropPieces = [];
     this.ambientDots = [];
     this.weatherSpecks = [];
     this.weatherKind = "";
@@ -186,6 +196,8 @@ export class WorldScene extends Phaser.Scene {
     // Bodies from the old zone are gone, so their shoves go with them.
     this.flinches.clear();
     this.bufferedCast = null;
+    this.pendingDeliver = null;
+    this.pendingTimer = null;
     this.swingIndex = 0;
   }
 
@@ -201,6 +213,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(bg);
     const preferences = loadPreferences();
     this.buildMap();
+    this.createBackdrop();
     this.createPortals();
     this.createChests();
     this.createGatherNodes();
@@ -597,6 +610,103 @@ export class WorldScene extends Phaser.Scene {
     marker.setText(text).setPosition(x, y - 30).setDepth(y + 1);
   }
 
+  /**
+   * A monster leaving the world: its body sinks, fades and rolls over instead of blinking
+   * out, and a soft puff of dust settles where it stood. Bosses get a bigger, longer version
+   * so the fight's last moment reads as one.
+   */
+  private deathKnell(x: number, y: number, color: number, boss: boolean): void {
+    for (const [uid, sprite] of this.monsterSprites) {
+      if (!sprite.visible) continue;
+      if (Math.abs(sprite.x - x) > 2 || Math.abs(sprite.y - y) > 2) continue;
+      this.monsterSprites.delete(uid);
+      const outline = this.monsterOutlines.get(uid);
+      const shadow = this.monsterShadows.get(uid);
+      const glow = this.monsterGlows.get(uid);
+      this.monsterOutlines.delete(uid);
+      this.monsterShadows.delete(uid);
+      this.monsterGlows.delete(uid);
+      const fall = boss ? 720 : 420;
+      const calm = loadPreferences();
+      if (calm.reducedMotion || calm.performanceMode) {
+        sprite.destroy();
+        outline?.destroy();
+        glow?.destroy();
+        shadow?.destroy();
+      } else {
+        this.calmTween({
+          targets: sprite,
+          alpha: { from: 1, to: 0 },
+          scaleY: sprite.scaleY * 0.62,
+          y: sprite.y + (boss ? 10 : 6),
+          angle: boss ? 0 : Phaser.Math.Between(-16, 16),
+          duration: fall,
+          ease: "Quad.easeIn",
+          onComplete: () => sprite.destroy(),
+        });
+        for (const part of [outline, glow]) {
+          if (!part) continue;
+          part.setVisible(false);
+          this.calmTween({ targets: part, alpha: 0, duration: fall, onComplete: () => part.destroy() });
+        }
+        if (shadow) {
+          this.calmTween({ targets: shadow, alpha: 0, scaleX: shadow.scaleX * 0.5, duration: fall, onComplete: () => shadow.destroy() });
+        }
+      }
+      break;
+    }
+    glowBurst(this, x, y, color, boss ? 120 : 64, boss ? 0.5 : 0.3, boss ? 620 : 380);
+    if (!loadPreferences().reducedMotion) {
+      for (let i = 0; i < (boss ? 12 : 5); i += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const reach = 10 + Math.random() * (boss ? 40 : 20);
+        const mote = this.add.circle(x, y + 4, boss ? 3 : 2, color, 0.5).setDepth(y + 2);
+        this.calmTween({
+          targets: mote,
+          x: x + Math.cos(angle) * reach,
+          y: y + 4 - Math.random() * (boss ? 26 : 14),
+          alpha: 0,
+          duration: boss ? 620 : 420,
+          ease: "Sine.easeOut",
+          onComplete: () => mote.destroy(),
+        });
+      }
+    }
+  }
+
+  /**
+   * A boss crossing into a new phase is the beat the whole fight is built around. The sim
+   * already changes its shape and speed; this gives the change a body: a hard shake, a red
+   * flash on the floor, a burst of the new colour and one line of text over the boss.
+   */
+  private checkBossPhase(uid: string, phase: number, x: number, y: number, name: string): void {
+    const seen = this.bossPhaseSeen.get(uid);
+    if (seen === undefined) {
+      this.bossPhaseSeen.set(uid, phase);
+      return;
+    }
+    if (phase <= seen) return;
+    this.bossPhaseSeen.set(uid, phase);
+    const color = phase >= 2 ? 0xff5a4a : 0xffb347;
+    this.floatText(x, y - 34, phase >= 2 ? "FINAL PHASE" : "PHASE TWO", phase >= 2 ? "#ff7a6a" : "#ffd27a", 11);
+    this.floatText(x, y - 16, name, "#ffe9c2", 9);
+    glowBurst(this, x, y, color, 150, 0.6, 700);
+    const wave = this.add.circle(x, y, 18, color, 0.25).setDepth(y + 1).setStrokeStyle(3, color, 0.9);
+    this.calmTween({
+      targets: wave,
+      radius: 140,
+      alpha: 0,
+      duration: 520,
+      ease: "Sine.easeOut",
+      onComplete: () => wave.destroy(),
+    });
+    const preferences = loadPreferences();
+    if (preferences.reducedMotion) return;
+    this.cameras.main.shake(phase >= 2 ? 320 : 200, phase >= 2 ? 0.009 : 0.005);
+    this.cameras.main.flash(180, 120, 40, 30);
+    this.rumble(2);
+  }
+
   /** Starts a small decorative tween (idle bobs, glows, quest hops). Under Reduce motion it is skipped, so the scene stays calm. */
   private calmTween(config: Phaser.Types.Tweens.TweenBuilderConfig): void {
     const preferences = loadPreferences();
@@ -619,6 +729,13 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     this.comboGlow.setVisible(true).setTint(comboHeatColor(combo));
+    // The hotter the chain, the wider the glow and the more its rim shows, so a long
+    // combo is visible at a glance instead of only as a slight colour change.
+    const heat = Math.min(1, combo / 50);
+    this.comboGlow.setScale(1 + heat * 0.35, (0.55 + heat * 0.2) * (1 + heat * 0.1));
+    if (heat > 0.15 && !loadPreferences().reducedMotion) {
+      rimGlowFx(this, save.x, save.y + 10, comboHeatColor(combo), 16 + heat * 14, 0.22 + heat * 0.3, 340, save.y - 1);
+    }
     // It breathes with the chain, faster the hotter it gets, so a long run reads as alive.
     const pulse = loadPreferences().reducedMotion ? 0 : 0.5 + 0.5 * Math.sin(this.session.animationTime * (3 + Math.min(6, combo / 12)));
     this.comboGlow.setAlpha(alpha * (0.85 + pulse * 0.3));
@@ -806,6 +923,93 @@ export class WorldScene extends Phaser.Scene {
         this.gatherSprites.delete(target.id);
       }
       this.ui.requestSave();
+    }
+  }
+
+  /**
+   * Depth behind the tiles: a colour wash over the whole map plus slow clouds that
+   * drift at a different speed to the camera. The ground layer covers every tile,
+   * so the layers sit *over* the ground (-10) yet under decor (-5) and the torch
+   * glows (-6), which reads as air between the floor and the things standing on it.
+   */
+  private createBackdrop(): void {
+    const zone = this.session.zone;
+    const width = zone.width * zone.tileWidth;
+    const height = zone.height * zone.tileHeight;
+    const preferences = loadPreferences();
+    // High contrast mode trades atmosphere for clarity, so the wash is left out.
+    if (!preferences.highContrast) {
+      const palette: Record<string, { top: number; bottom: number; cloud: number }> = {
+        village: { top: 0x2b2a1c, bottom: 0x14120c, cloud: 0x2a2418 },
+        forest: { top: 0x16281a, bottom: 0x0a120c, cloud: 0x10200f },
+        marsh: { top: 0x1a2418, bottom: 0x0c120b, cloud: 0x16220f },
+        dungeon: { top: 0x1a1424, bottom: 0x0a0710, cloud: 0x201630 },
+        frost: { top: 0x24384e, bottom: 0x0e1a26, cloud: 0x2a4058 },
+        throne: { top: 0x2a1614, bottom: 0x120809, cloud: 0x361a16 },
+      };
+      const tone = palette[zone.ambience] ?? palette.village;
+      const wash = this.add.graphics().setDepth(-9.5);
+      wash.fillGradientStyle(tone.top, tone.top, tone.bottom, tone.bottom, 0.32, 0.32, 0.1, 0.1);
+      wash.fillRect(0, 0, width, height);
+      this.backdropPieces.push(wash);
+
+      // Slow cloud shadows: their scroll factor is under 1, so they slide past the
+      // hero instead of travelling with him. That is what makes the map feel deep.
+      const clouds = preferences.performanceMode ? 3 : 6;
+      for (let i = 0; i < clouds; i += 1) {
+        const rx = 90 + Math.random() * 140;
+        const ry = 40 + Math.random() * 60;
+        const cloud = this.add
+          .ellipse(Math.random() * width, Math.random() * height, rx * 2, ry * 2, tone.cloud, 0.16)
+          .setScrollFactor(0.86)
+          .setDepth(-9);
+        this.backdropPieces.push(cloud);
+        this.calmTween({
+          targets: cloud,
+          x: cloud.x + (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * 160),
+          y: cloud.y + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 70),
+          alpha: { from: 0.16, to: 0.09 },
+          duration: 9000 + Math.random() * 9000,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+      }
+    }
+
+    // Ground mist: a soft band of light drifting near the floor, one per zone tone.
+    const mistColors: Record<string, number> = {
+      village: 0xffe6a8,
+      forest: 0xa8e8a0,
+      marsh: 0x9fe8b0,
+      dungeon: 0xc9b8e8,
+      frost: 0xd8f0ff,
+      throne: 0xffb070,
+    };
+    const mist = mistColors[zone.ambience] ?? mistColors.village;
+    const bandCount = preferences.performanceMode ? 2 : 4;
+    for (let i = 0; i < bandCount; i += 1) {
+      const band = this.add
+        .ellipse(
+          Math.random() * width,
+          Math.random() * height,
+          260 + Math.random() * 220,
+          70 + Math.random() * 50,
+          mist,
+          preferences.reducedMotion ? 0.05 : 0.07,
+        )
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(-8);
+      this.backdropPieces.push(band);
+      this.calmTween({
+        targets: band,
+        x: band.x + (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 120),
+        alpha: { from: 0.07, to: 0.03 },
+        duration: 7000 + Math.random() * 6000,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
     }
   }
 
@@ -1051,7 +1255,16 @@ export class WorldScene extends Phaser.Scene {
     const moveX = Math.max(-1, Math.min(1, (right ? 1 : 0) - (left ? 1 : 0) + (Math.abs(touch.x) > 0.25 ? touch.x : 0) + (Math.abs(pad.moveX) > 0.25 ? pad.moveX : 0)));
     const moveY = Math.max(-1, Math.min(1, (down ? 1 : 0) - (up ? 1 : 0) + (Math.abs(touch.y) > 0.25 ? touch.y : 0) + (Math.abs(pad.moveY) > 0.25 ? pad.moveY : 0)));
     if (this.justDown("dodge") || pad.dodge) {
-      this.session.dodge(moveX, moveY);
+      const dodged = this.session.dodge(moveX, moveY);
+      // A dodge in the wind-up finishes the cast on the spot: the skill was already
+      // paid for, so the beat should not make the player feel late.
+      if (dodged && this.pendingDeliver) {
+        this.pendingTimer?.remove();
+        const run = this.pendingDeliver;
+        this.pendingDeliver = null;
+        this.pendingTimer = null;
+        run();
+      }
       this.handleSimEvents(this.session.drainEvents());
     }
 
@@ -1182,6 +1395,14 @@ export class WorldScene extends Phaser.Scene {
           }
           this.flashMonster(event.x, event.y);
           this.burst(event.x, event.y, Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color, 4, 0.6);
+          // A crit also lights the floor it lands on and sends a wave out from the body,
+          // so the biggest numbers have a shape of their own instead of more sparks.
+          if (event.crit && event.target === "monster" && !preferences.reducedMotion) {
+            const critColor = Phaser.Display.Color.HexStringToColor(damageColor(event.damageType)).color;
+            lightPoolFx(this, event.x, event.y, critColor, 30, 340, 0.3);
+            shockwaveFx(this, event.x, event.y, critColor, 34, 320, 0, 2);
+            coreFlashFx(this, event.x, event.y - 4, 8, 240, event.y + 8);
+          }
           break;
         case "miss":
           // A swing that hit nothing still gets a sound and a mark in the air, so the
@@ -1196,6 +1417,26 @@ export class WorldScene extends Phaser.Scene {
           reactionFx(this, event.x, event.y, reactionColor(event.id));
           this.ui.playReaction();
           break;
+        case "chain":
+          // The reaction carrying into another body: a smaller echo of the same moment,
+          // so a crowd pays off visibly instead of silently losing health.
+          this.floatText(event.x, event.y - 22, `${event.name} +${Math.round(event.amount)}`, "#ffd9a0", 9);
+          this.burst(event.x, event.y, 0xffd9a0, 4, 0.45);
+          break;
+        case "poise-break":
+          // The guard came off: the body staggers for a moment, and the window is shown.
+          this.floatText(event.x, event.y - 30, "STAGGER", "#a8d4ff", 11);
+          this.burst(event.x, event.y, 0x9ecbff, 6, 0.7);
+          this.ui.playSlam();
+          this.rumble(1);
+          break;
+        case "wall-slam":
+          // A body driven into stone: dust, a thud and the extra number that explains it.
+          this.floatText(event.x, event.y - 18, `WALL +${Math.round(event.amount)}`, "#e8d0a0", 10);
+          this.burst(event.x, event.y, 0x8a7a5c, 7, 0.8);
+          this.ui.playSlam();
+          this.rumble(1);
+          break;
         case "heal":
           if (preferences.showDamage) this.floatText(event.x, event.y - 12, `+${Math.round(event.amount)}`, "#8ef0a0", 9);
           this.healSparkle(event.x, event.y);
@@ -1204,11 +1445,22 @@ export class WorldScene extends Phaser.Scene {
           this.floatText(event.x, event.y - 18, "DODGE", "#9ecbff", 8);
           this.burst(event.x, event.y, 0x7fd4ff);
           break;
+        case "perfectDodge":
+          // The reward for dodging at the last moment gets its own word, its own colour and
+          // its own sound, so the timing lesson is felt instead of only counted.
+          this.floatText(event.x, event.y - 26, "PERFECT", "#9fe4ff", 12);
+          perfectDodgeFx(this, event.x, event.y, this.hexColor(classTint(this.session.save.classId, "#9fe4ff")));
+          this.ui.playPerfect();
+          break;
         case "immune":
           this.floatText(event.x, event.y - 18, "IMMUNE", "#9ecbff", 8);
           break;
         case "death":
-          if (event.who === "monster") this.burst(event.x, event.y, 0xb24a4a);
+          if (event.who === "monster") {
+            this.burst(event.x, event.y, 0xb24a4a);
+            if (event.boss) this.deathKnell(event.x, event.y, 0xffc46a, true);
+            else this.deathKnell(event.x, event.y, 0xd08a8a, false);
+          }
           // A boss kill is the one moment the whole run was for: crawl, rumble, breathe.
           if (event.who === "monster" && event.boss) {
             if (!preferences.reducedMotion) this.slowmoLeft = BOSS_KILL_SLOWMO_SECONDS;
@@ -1318,12 +1570,20 @@ export class WorldScene extends Phaser.Scene {
       else if (def?.id && MONSTER_TINTS[def.id] !== undefined) sprite.setTint(MONSTER_TINTS[def.id]);
       else sprite.clearTint();
       this.updateStatusMarkers(monster.uid, monster.x, monster.y, [...monster.statuses.map((status) => status.kind), ...(monster.elite ? ["elite"] : [])]);
+      if (def?.boss) this.checkBossPhase(monster.uid, monster.phase ?? 0, monster.x, monster.y, def.name);
     }
     for (const [uid, sprite] of this.monsterSprites) {
       const monster = session.monsters.find((m) => m.uid === uid);
       const dead = !activeMonsters.has(uid) && (!monster || monster.state === "dead");
-      if (dead) {
-        sprite.setVisible(false);
+      // A body that fell is already fading on its own tween, so it is left to finish
+      // rather than hidden a frame after its death effect began.
+      if (dead && !sprite.getData("falling")) {
+        if (sprite.alpha <= 0.02 || !sprite.visible) {
+          sprite.setVisible(false);
+        } else {
+          sprite.setVisible(true);
+          sprite.setData("falling", true);
+        }
         this.updateStatusMarkers(uid, 0, 0, []);
       }
       this.monsterOutlines.get(uid)?.setVisible(!dead);
@@ -1465,8 +1725,24 @@ export class WorldScene extends Phaser.Scene {
       this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id, swing);
       return;
     }
-    this.time.delayedCall(ultimate ? 150 : 85, () => {
+    // The wind-up is remembered, so a dodge in that beat can finish the cast early
+    // instead of leaving the player waiting on a skill they already committed to.
+    this.pendingDeliver = () => {
+      this.pendingDeliver = null;
+      this.pendingTimer = null;
       this.deliverVfx(event, vfx, color, accent, angle, heavy, ability.signature === true, ability.id, swing);
+    };
+    this.pendingTimer = this.time.delayedCall(ultimate ? 150 : 85, () => {
+      const run = this.pendingDeliver;
+      this.pendingDeliver = null;
+      this.pendingTimer = null;
+      if (run) run();
+      // An ultimate lands with one frame of colour across the whole screen, which is
+      // the cheapest trick a fight scene has for making a blow feel final.
+      if (ultimate && !preferences.reducedMotion && preferences.screenShake) {
+        const c = Phaser.Display.Color.IntegerToColor(color);
+        this.cameras.main.flash(90, c.red, c.green, c.blue);
+      }
     });
   }
 
@@ -1708,6 +1984,11 @@ export class WorldScene extends Phaser.Scene {
     // The bright edge goes at the end the blade arrives at, so the eye follows the cut.
     const edgeFrom = shoulder === 0 ? -spread * 0.8 : shoulder > 0 ? to - spread * 0.8 : from;
     const edgeTo = shoulder === 0 ? spread * 0.8 : shoulder > 0 ? to : from + spread * 0.8;
+    // The solid part of the cut: a tapered crescent of blade, tapering from a thin
+    // entry to a thick finish, drawn under the bright line.
+    bladeBandFx(this, x, y, angle, radius, width, spread, color, duration, shoulder);
+    // A pool of light where the blade passes, so a swing lights the ground under it.
+    lightPoolFx(this, x, y, color, radius * 0.9, Math.max(180, duration), shoulder === 0 ? 0.16 : 0.22);
     // A wide, faint halo under the slash so it glows instead of looking like wire.
     g.lineStyle(width * 3.2, color, 0.22);
     g.beginPath();
@@ -1747,6 +2028,9 @@ export class WorldScene extends Phaser.Scene {
   private ringFx(x: number, y: number, radius: number, color: number, width: number, duration: number): void {
     const ring = this.add.circle(x, y, radius, color, 0.12).setDepth(y + 3);
     ring.setStrokeStyle(width * 2.6, color, 0.3);
+    // A soft light pool and a flat wave under the ring, so the ring lands on lit floor.
+    lightPoolFx(this, x, y, color, radius * 0.85, Math.max(240, duration), 0.22);
+    shockwaveFx(this, x, y, color, radius * 1.4, Math.max(260, duration), 0, width);
     this.tweens.add({
       targets: ring,
       scale: 1.45,
@@ -2021,8 +2305,10 @@ export class WorldScene extends Phaser.Scene {
 
   private burst(x: number, y: number, color: number, count = 7, spread = 1): void {
     const trimmed = loadPreferences().performanceMode;
-    // One soft bright flash under the sparks, sized by how big the burst is.
+    // One soft bright flash under the sparks, sized by how big the burst is, and a
+    // white point at the centre so a big burst has something to focus on.
     if (!trimmed) glowBurst(this, x, y, color, Math.min(90, 18 + count * 3 * spread), 0.5, 280 + spread * 80, 9280);
+    if (!trimmed && spread >= 1.2) coreFlashFx(this, x, y - 2, 6, 260, 9270);
     const shown = trimmed ? Math.max(1, Math.ceil(count / 3)) : count;
     for (let i = 0; i < shown; i += 1) {
       const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
@@ -2117,6 +2403,21 @@ export class WorldScene extends Phaser.Scene {
     if (!best) return;
     const target = best as Phaser.GameObjects.Sprite;
     target.setTintFill(0xffffff);
+    // A hit kicks the body: a quick scale pop on top of the white flash, so the sprite
+    // reacts instead of only changing colour.
+    if (!loadPreferences().reducedMotion) {
+      this.tweens.killTweensOf(target);
+      const baseX = target.scaleX;
+      const baseY = target.scaleY;
+      target.setScale(baseX * 1.14, baseY * 0.9);
+      this.tweens.add({
+        targets: target,
+        scaleX: baseX,
+        scaleY: baseY,
+        duration: 130,
+        ease: "Back.easeOut",
+      });
+    }
     this.time.delayedCall(70, () => {
       if (target.active) target.clearTint();
     });

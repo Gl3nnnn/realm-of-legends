@@ -277,6 +277,14 @@ export interface MonsterInstance {
   wanderY: number;
   elite?: EliteAffix;
   phase?: number;
+  /** The guard a body still has: small hits chip it, and at zero the monster staggers. */
+  poise?: number;
+  /** The guard it starts with. Zero or missing means this monster never staggers. */
+  poiseMax?: number;
+  /** Seconds before an unbroken guard starts filling back up. */
+  poiseDelay?: number;
+  /** For how long a shove is cool, so one wall cannot be farmed for damage. */
+  slamLock?: number;
   /** Cannot be hurt: the training dummy soaks hits and never hits back. */
   invulnerable?: boolean;
   /** Seconds left before a fleeing thief escapes with its purse. */
@@ -746,6 +754,7 @@ export type SimEvent =
     }
   | { type: "heal"; amount: number; x: number; y: number }
   | { type: "dodge"; x: number; y: number }
+  | { type: "perfectDodge"; x: number; y: number }
   | { type: "immune"; x: number; y: number }
   | { type: "death"; who: "player" | "monster"; defId?: string; x: number; y: number; boss?: boolean }
   | { type: "levelup"; level: number }
@@ -780,6 +789,11 @@ export type SimEvent =
    * happened, so the shell can shout it on screen instead of burying it in the log.
    */
   | { type: "reaction"; id: string; name: string; text: string; icon: string; x: number; y: number }
+  | { type: "chain"; id: string; name: string; x: number; y: number; amount: number; toUid: string }
+  /** A monster's guard ran out and it staggered: the shell shouts the break. */
+  | { type: "poise-break"; uid: string; x: number; y: number }
+  /** A shove ended against stone: the body takes extra damage and dust flies. */
+  | { type: "wall-slam"; x: number; y: number; amount: number }
   | { type: "run-recap"; mode: "ring" | "descent" | "gauntlet"; depth: number; seconds: number; tier: "gold" | "silver" | "bronze" | null; gold: number; xp: number; shards: number; kills: number; bestWave: number }
   | { type: "blood-moon"; phase: "warning" | "rising"; remaining: number }
   | { type: "interact"; kind: "npc" | "portal" | "chest" | "gather"; id: string }

@@ -142,6 +142,15 @@ export function renderFloorEffects(scene: WorldScene, time: number): void {
       bars.lineStyle(1, 0xe8c46a, 0.85);
       bars.strokeRect(monster.x - width / 2 - 2, y - 2, width + 4, 6);
     }
+    // The guard sits under the health bar: chip it away and the body can be staggered.
+    if (monster.poiseMax && (monster.poise ?? monster.poiseMax) < monster.poiseMax - 0.5) {
+      const poiseRatio = Math.max(0, Math.min(1, (monster.poise ?? 0) / monster.poiseMax));
+      const poiseY = y + (boss ? 6 : 5);
+      bars.fillStyle(0x08060c, 0.8);
+      bars.fillRect(monster.x - width / 2, poiseY, width, 2);
+      bars.fillStyle(preferences.highContrast ? 0xffffff : 0x8fb6e8, 0.95);
+      bars.fillRect(monster.x - width / 2, poiseY, width * poiseRatio, 2);
+    }
   }
 }
 

@@ -1,6 +1,8 @@
 import {
+  DESCENT_SEED_MAX,
   MAX_CHARACTERS,
   MONSTERS,
+  parseDescentSeed,
   NPCS,
   QUESTS,
   SHOPS,
@@ -1004,6 +1006,14 @@ export class UIManager {
     this.sfx.reaction();
   }
 
+  playSlam(): void {
+    this.sfx.slam();
+  }
+
+  playPerfect(): void {
+    this.sfx.perfect();
+  }
+
   /**
    * The skill button kicks when its skill is cast: the bar answers every press, so the
    * player feels the key land even when the eye is on the fight.
@@ -1715,6 +1725,29 @@ export class UIManager {
           this.toast("You start down the Endless Descent.", "good");
           this.closePanel(false);
         }
+      } else if (action === "enter-descent-shared") {
+        const field = this.dom.overlay.querySelector<HTMLInputElement>("[data-descent-seed]");
+        const typedDigits = (field?.value ?? "").replace(/[^0-9]/g, "");
+        const seed = parseDescentSeed(field?.value);
+        const error = this.dom.overlay.querySelector<HTMLElement>("[data-descent-seed-error]");
+        if (!seed) {
+          // Say why the seed was refused instead of quietly starting a different run.
+          const message = typedDigits
+            ? `That seed is out of range. Seeds run from 1 to ${DESCENT_SEED_MAX.toLocaleString("en-US")} - paste the exact digits your friend copied.`
+            : "Paste a friend's seed first.";
+          if (error) {
+            error.textContent = message;
+            error.hidden = false;
+          }
+          this.toast(message, "bad");
+        } else {
+          if (error) error.hidden = true;
+          changed = session.enterDescent(seed);
+          if (changed) {
+            this.toast(`Racing seed ${seed}.`, "good");
+            this.closePanel(false);
+          }
+        }
       } else if (action === "leave-descent") {
         changed = session.leaveDescent();
         if (changed) this.toast("You climb out of the Descent.", "info");
@@ -2086,6 +2119,9 @@ export class UIManager {
         const sweep = button.querySelector<HTMLElement>(`[data-cdsweep="${ability.id}"]`);
         if (sweep) {
           button.classList.toggle("cooling", remaining > 0);
+          // The last quarter of the wait warms the rim, so a skill about to return
+          // announces itself before you press it.
+          button.classList.toggle("warming", remaining > 0 && pct <= 25);
           sweep.style.setProperty("--cd-deg", `${Math.round(pct * 3.6)}deg`);
         }
         if (counter) {
