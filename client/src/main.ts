@@ -20,6 +20,15 @@ const ui = new UIManager({
     game.scene.start("world", { session, ui });
     ui.attachSession(session);
   },
+  onSnapshot: () =>
+    new Promise<CanvasImageSource>((resolve, reject) => {
+      const guard = setTimeout(() => reject(new Error("No frame came back.")), 2000);
+      game.renderer.snapshot((image) => {
+        clearTimeout(guard);
+        if (image) resolve(image as unknown as CanvasImageSource);
+        else reject(new Error("No frame came back."));
+      }, "image/png");
+    }),
   onExitToMenu: () => {
     if (game.scene.isActive("world")) game.scene.stop("world");
   },

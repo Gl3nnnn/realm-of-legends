@@ -7663,3 +7663,12 @@ html[data-motion="reduced"] .setting-switch-track::after {
 .ability-shell {
   position: relative;
 }
+
+/* Photo mode: the shell hides the HUD but leaves the game canvas exactly where it is,
+   so the picture taken from the canvas is the world and nothing else. */
+html[data-photo="on"] #hud > *,
+html[data-photo="on"] #touch-controls {
+  opacity: 0;
+  transition: opacity 160ms ease;
+  pointer-events: none;
+}

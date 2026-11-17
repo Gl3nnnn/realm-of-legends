@@ -2057,6 +2057,7 @@ export function controlsPanelHtml(preferences: GamePreferences, session: GameSes
       rows: [
         ["Go home", "H", "Recall to the village. Not in a boss fight"],
         ["Map", "M", "Show or hide the minimap"],
+        ["Photo mode", "P", "Hides the HUD, then saves a clean picture"],
       ],
     },
     {

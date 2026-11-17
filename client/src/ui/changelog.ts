@@ -21,6 +21,20 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.40.0",
+    date: "December 5, 2026",
+    title: "The Picture and the Pulse Update",
+    summary:
+      "Photo mode hides the HUD and saves a clean picture of the world with your hero's name, class, level and zone in the corner. The music now answers the fight too: a boss lifts it, low health lifts it further, and a slow heartbeat joins in when things turn dire.",
+    changes: [
+      { tag: "new", text: "Photo mode on P: the first press hides the HUD, the second takes the shot and saves it, or opens your phone's share sheet. Escape cancels without taking one." },
+      { tag: "new", text: "Every shot is signed: hero name, class and level, plus the zone and your title in the corner of the picture." },
+      { tag: "improved", text: "The soundtrack follows the fight. A living boss raises it about a third, and health under half raises it further, so the music warns you before the bar does." },
+      { tag: "improved", text: "Once the pressure passes the halfway mark, a low heartbeat and a soft hit join the theme, so a dire fight sounds different from a calm walk." },
+      { tag: "improved", text: "The controls sheet now lists photo mode with the other keys." },
+    ],
+  },
+  {
     version: "1.39.1",
     date: "December 5, 2026",
     title: "The Quieter Shape Update",

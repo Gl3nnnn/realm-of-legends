@@ -29,6 +29,7 @@ import { downloadJson, readJsonFile, type SaveRepository } from "../persistence/
 import { addMemorialEntry, readMemorial } from "../persistence/memorial";
 import { STORAGE_ADVICE, classifyStorageError, storageSummary } from "../persistence/storageMessages";
 import { downloadShareCard } from "./shareCard";
+import { composePhoto, deliverPhoto } from "./photo";
 import { classColor, classPortrait, charIconHtml, esc, formatNumber, questObjectiveText, bountyLabel } from "./helpers";
 import { LATEST_UPDATE, hasUnreadUpdates, markUpdatesSeen, unreadUpdateCount, updateBoardHtml } from "./changelog";
 import { t } from "./text";
@@ -94,6 +95,8 @@ interface UIOptions {
   sfx: Sfx;
   onPlay: (save: CharacterSave) => void | Promise<void>;
   onExitToMenu: () => void;
+  /** One frame of the world, for photo mode. */
+  onSnapshot: () => Promise<CanvasImageSource>;
 }
 
 const IMPORTS_MAX_BYTES = 2 * 1024 * 1024;
@@ -128,6 +131,9 @@ export class UIManager {
   private readonly sfx: Sfx;
   private readonly onPlay: UIOptions["onPlay"];
   private readonly onExitToMenu: () => void;
+  private readonly onSnapshot: UIOptions["onSnapshot"];
+  /** True while the picture is being taken: the HUD is hidden and input is paused. */
+  private photoMode = false;
 
   private session: GameSession | null = null;
   private panel: PanelState | null = null;
@@ -276,6 +282,7 @@ export class UIManager {
     this.sfx = options.sfx;
     this.onPlay = options.onPlay;
     this.onExitToMenu = options.onExitToMenu;
+    this.onSnapshot = options.onSnapshot;
     applyPreferences(this.preferences);
     setLanguage(this.preferences.language);
     this.updateMinimapLabel();
@@ -954,6 +961,10 @@ export class UIManager {
     if (this.introActive) return;
     if (event.key === "Escape") {
       event.preventDefault();
+      if (this.photoMode) {
+        this.leavePhotoMode();
+        return;
+      }
       if (!this.dom.tutorial.classList.contains("hidden")) this.dismissTutorial();
       else if (this.panel) this.closePanel();
       else if (!this.session.dead) this.openPanel("settings");
@@ -985,7 +996,10 @@ export class UIManager {
     } else if (event.key === "h" || event.key === "H") {
       event.preventDefault();
       this.recallHome();
-    } else if (event.key === "?") {
+    } else if (event.key === "p" || event.key === "P") {
+      event.preventDefault();
+      this.togglePhotoMode();
+    } else if (event.key === "?" ) {
       event.preventDefault();
       this.openControlsSheet();
     } else if (keyNameFromEvent(event) === this.preferences.keybinds.quick1 || keyNameFromEvent(event) === this.preferences.keybinds.quick2) {
@@ -993,6 +1007,48 @@ export class UIManager {
       this.useQuickSlotOrBest(keyNameFromEvent(event) === this.preferences.keybinds.quick1 ? 0 : 1);
       this.updateHud(true);
       this.handleEvents(this.session.drainEvents());
+    }
+  }
+
+  /**
+   * Photo mode: the HUD steps out of the way so the world can be seen whole, and the
+   * next press takes the picture. Escape brings the HUD back without taking one.
+   */
+  private togglePhotoMode(): void {
+    const session = this.session;
+    if (!session || session.dead || this.panel) return;
+    this.photoMode = !this.photoMode;
+    document.documentElement.dataset.photo = this.photoMode ? "on" : "off";
+    if (!this.photoMode) {
+      void this.capturePhoto(session);
+      return;
+    }
+    this.toast("Photo mode. Press P again to take the shot.", "info");
+  }
+
+  private leavePhotoMode(): void {
+    if (!this.photoMode) return;
+    this.photoMode = false;
+    document.documentElement.dataset.photo = "off";
+  }
+
+  /** Take the clean frame, print the hero on it and hand it over. */
+  private async capturePhoto(session: GameSession): Promise<void> {
+    const card = {
+      name: session.save.name,
+      className: session.classInfo.name,
+      level: session.save.level,
+      zone: session.zone.name,
+      title: session.save.title === DEFAULT_TITLE ? "" : session.save.title,
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    const filename = `realm-${session.save.name}-${stamp}.png`.replace(/[^a-z0-9._-]/gi, "-").toLowerCase();
+    try {
+      const frame = await this.onSnapshot();
+      const picture = composePhoto(frame, card);
+      this.toast(await deliverPhoto(picture, filename), "good");
+    } catch {
+      this.toast("The picture could not be taken. Try again.", "bad");
     }
   }
 
@@ -2104,6 +2160,7 @@ export class UIManager {
     const save = session.save;
     const stats = session.stats;
     const hpPct = Math.max(0, Math.min(100, (save.hp / stats.maxHp) * 100));
+    this.updateMusicTension();
     const resPct = Math.max(0, Math.min(100, (save.resource / stats.maxResource) * 100));
     const next = xpToNext(save.level);
     const xpPct = next <= 0 ? 100 : Math.max(0, Math.min(100, (save.xp / next) * 100));
@@ -2413,6 +2470,20 @@ export class UIManager {
     this.dom.buffBar.innerHTML = buffs
       .map((buff) => `<span class="buff-chip">${esc(buff.name)} ${Math.ceil(buff.remaining)}s</span>`)
       .join("");
+  }
+
+  /**
+   * The soundtrack follows the fight: a living boss lifts it, and blood under half lifts
+   * it further, so the music tightens before the player has to read the health bar.
+   */
+  private updateMusicTension(): void {
+    const session = this.session;
+    if (!session) return;
+    const maxHp = session.stats.maxHp;
+    const hpRatio = maxHp > 0 ? Math.max(0, Math.min(1, session.save.hp / maxHp)) : 1;
+    const bossAlive = session.monsters.some((monster) => Boolean(MONSTERS[monster.defId]?.boss) && monster.state !== "dead");
+    const hurt = Math.max(0, Math.min(1, (0.5 - hpRatio) / 0.5));
+    this.sfx.setMusicTension(Math.min(1, hurt * 0.8 + (bossAlive ? 0.45 : 0)));
   }
 
   private updateBoss(): void {

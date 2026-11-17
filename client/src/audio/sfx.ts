@@ -31,6 +31,8 @@ export class Sfx {
   private currentTheme: MusicTheme | null = null;
   private musicStep = 0;
   private musicVolume = 0.3;
+  /** How much pressure the fight is under, 0 calm to 1 dire. Lifts the music and adds a pulse. */
+  private musicTension = 0;
   private volume = 0.35;
   private muted = false;
 
@@ -62,10 +64,30 @@ export class Sfx {
   setMusicVolume(volume: number): void {
     this.musicVolume = Math.max(0, Math.min(1, volume));
     localStorage.setItem("realm.musicVolume", String(this.musicVolume));
-    if (this.musicOutput && this.ctx) {
-      this.musicOutput.gain.cancelScheduledValues(this.ctx.currentTime);
-      this.musicOutput.gain.setTargetAtTime(this.musicVolume * 0.55, this.ctx.currentTime, 0.08);
-    }
+    this.applyMusicGain(0.08);
+  }
+
+  /**
+   * The fight tells the music how bad things are: a boss raises it, low health raises it
+   * further, and the step scheduler adds a low heartbeat once the pressure is high. It is
+   * one number, so the whole soundtrack answers the same way.
+   */
+  setMusicTension(tension: number): void {
+    const next = Math.max(0, Math.min(1, tension));
+    if (Math.abs(next - this.musicTension) < 0.02) return;
+    this.musicTension = next;
+    this.applyMusicGain(0.35);
+  }
+
+  get currentMusicTension(): number {
+    return this.musicTension;
+  }
+
+  private applyMusicGain(timeConstant: number): void {
+    if (!this.musicOutput || !this.ctx) return;
+    const gain = this.musicVolume * 0.55 * (1 + 0.34 * this.musicTension);
+    this.musicOutput.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.musicOutput.gain.setTargetAtTime(gain, this.ctx.currentTime, timeConstant);
   }
 
   playMusic(theme: MusicTheme): void {
@@ -121,6 +143,13 @@ export class Sfx {
     }
     if (def.percussion && step % 4 === 2) this.musicNoise(0.06, 0.05, bus);
     if (def.percussion && step % 8 === 0) this.musicNoise(0.12, 0.08, bus);
+    // Under real pressure the theme grows a slow heartbeat under it, so the music
+    // tightens even when the zone theme itself never changes.
+    if (this.musicTension > 0.45) {
+      const weight = (this.musicTension - 0.45) / 0.55;
+      if (step % 4 === 0) this.musicTone(note(0) / 4, beat * 1.6, "sine", 0.09 * weight, bus);
+      if (step % 4 === 2) this.musicNoise(0.05, 0.04 * weight, bus);
+    }
   }
 
   private musicTone(freq: number, duration: number, type: Wave, gain: number, bus: GainNode): void {
@@ -179,7 +208,7 @@ export class Sfx {
       this.master.gain.value = this.muted ? 0 : this.volume * 0.35;
       this.master.connect(this.ctx.destination);
       this.musicOutput = this.ctx.createGain();
-      this.musicOutput.gain.value = this.musicVolume * 0.55;
+      this.musicOutput.gain.value = this.musicVolume * 0.55 * (1 + 0.34 * this.musicTension);
       this.musicOutput.connect(this.ctx.destination);
     }
     return this.ctx;
