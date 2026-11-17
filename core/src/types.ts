@@ -542,6 +542,10 @@ export interface CharacterSave {
   equipment: Equipment;
   quests: QuestState[];
   openedChests: string[];
+  /** Walls this hero has already broken open, so a room is found once. */
+  secretWalls: string[];
+  /** The affixes the hero is hunting; a drop carrying one glows gold. */
+  wishlist: string[];
   difficulty: GameDifficulty;
   ngPlus: number;
   defeatedBosses: string[];
@@ -802,6 +806,10 @@ export type SimEvent =
   | { type: "pet-stage"; stage: number; name: string }
   | { type: "boss-intro"; monsterId: string; name: string; text: string; warning: string; level: number }
   | { type: "treasure"; zone: ZoneId; x: number; y: number; claimX: number; claimY: number; hint: string }
+  /** A heavy blow cracked a wall apart, and something was hidden behind it. */
+  | { type: "secret-room"; zone: ZoneId; x: number; y: number; count: number }
+  /** The zone moving on its own: an ambush sprung on the hero, or a supply cart to find. */
+  | { type: "zone-event"; kind: "ambush" | "supply"; label: string; x: number; y: number }
   | { type: "error"; message: string }
   /** A hardcore hero has died for good; the shell writes the entry to the wall and removes the save. */
   | { type: "hardcore-end"; entry: MemorialEntry };

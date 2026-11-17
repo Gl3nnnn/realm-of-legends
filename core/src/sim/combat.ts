@@ -212,6 +212,8 @@ export function hitMonster(
     }
   }
   // A shove that ends against stone hurts more than one that ends in open ground.
+  // A heavy blow near a secret wall breaks it open and the room behind pays out.
+  s.crackSecretWall(monster.x, monster.y, mitigated, crit);
   if (monster.poiseMax && (monster.slamLock ?? 0) <= s.elapsed) {
     const dx = monster.x - s.save.x;
     const dy = monster.y - s.save.y;

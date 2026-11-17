@@ -21,6 +21,19 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.41.0",
+    date: "December 6, 2026",
+    title: "The Hidden Room Update",
+    summary: "One wall in every wild zone hides a room. A hard enough blow finds it, the world sends things at you on its own, and a dodge now folds an unfinished swing away.",
+    changes: [
+      { tag: "new", text: "Secret rooms - one wall in each wild zone hides gold and gear. A crit or a hit over 40 damage near it breaks it open." },
+      { tag: "new", text: "Zone events - every few minutes a zone may send a supply cart past you to chase, or spring an ambush of three creatures." },
+      { tag: "new", text: "Wish list - on any item in your backpack, wish for one of its affixes. Drops carrying it glow gold with a tall shaft of light." },
+      { tag: "improved", text: "Attack cancel - dodging within a moment of a swing folds the rest of the chain away and starts the next combo clean." },
+      { tag: "improved", text: "Broken walls are remembered per hero, and the rubble clears in the world the moment the room opens." },
+    ],
+  },
+  {
     version: "1.40.0",
     date: "December 5, 2026",
     title: "The Picture and the Pulse Update",

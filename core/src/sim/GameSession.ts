@@ -247,6 +247,10 @@ export class GameSession {
   autoSalvageJunk = true;
   private fleeTimer = 0;
   private treasureTimer = 0;
+  /** The one wall in each zone that hides a room, until a hard enough blow finds it. */
+  private secretWall: { id: string; tx: number; ty: number } | null = null;
+  /** The zone's own clock for ambushes and supply carts. */
+  private zoneEventTimer = 60;
   /** The training dummy's meter: hits, total damage and clean chain since it was last reset. */
   dummyHits = 0;
   dummyDamage = 0;
@@ -717,6 +721,7 @@ export class GameSession {
       monsterSpawns: [...baseZone.monsterSpawns],
     };
     this.zone = zone;
+    this.findSecretWall();
     if (zone.id === "dungeon" && this.save.defeatedBosses.includes("bone_warden")) {
       this.openDungeonWing(false);
     }
@@ -1173,6 +1178,7 @@ export class GameSession {
         this.emit({ type: "log", text: "A purse imp bolts past you, dragging a fat purse. Hit it before it gets away!", tone: "quest" });
       }
     }
+    this.updateZoneEvent(dt);
     this.treasureTimer -= dt;
     if (this.treasureTimer <= 0) {
       this.treasureTimer = this.rng.between(90, 180);
@@ -1198,6 +1204,139 @@ export class GameSession {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Pick the one wall in this zone that hides something. It is chosen from the zone
+   * and the hero's save, so the same zone always hides it in the same place, and a
+   * room already opened is never chosen twice.
+   */
+  private findSecretWall(): void {
+    this.secretWall = null;
+    if (this.zone.safe) return;
+    const zone = this.zone;
+    const candidates: { tx: number; ty: number; id: string }[] = [];
+    for (let ty = 2; ty < zone.height - 2; ty += 1) {
+      for (let tx = 2; tx < zone.width - 2; tx += 1) {
+        if (!zone.blocked[ty * zone.width + tx]) continue;
+        // It must be a wall, not the inside of a block of rock: it needs open ground
+        // on all four sides, so the room behind it is a room and not solid stone.
+        const above = zone.blocked[(ty - 1) * zone.width + tx];
+        const below = zone.blocked[(ty + 1) * zone.width + tx];
+        const left = zone.blocked[ty * zone.width + tx - 1];
+        const right = zone.blocked[ty * zone.width + tx + 1];
+        if (above || below || left || right) continue;
+        candidates.push({ tx, ty, id: `${zone.id}_secret_${tx}_${ty}` });
+      }
+    }
+    if (candidates.length === 0) return;
+    // Sorted by id so the pick is stable for everyone in the same zone.
+    candidates.sort((a, b) => (a.id < b.id ? -1 : 1));
+    const unopened = candidates.filter((entry) => !this.save.secretWalls.includes(entry.id));
+    if (unopened.length === 0) return;
+    const seed = zone.id.length * 7 + zone.width * 3 + zone.height;
+    const pick = unopened[seed % unopened.length];
+    this.secretWall = { id: pick.id, tx: pick.tx, ty: pick.ty };
+  }
+
+  /**
+   * A blow lands near the hidden wall. A small hit only rattles it; a heavy one -
+   * a crit, or anything past forty damage - breaks it open and pays for the find.
+   */
+  crackSecretWall(hitX: number, hitY: number, damage: number, crit: boolean): boolean {
+    const wall = this.secretWall;
+    if (!wall) return false;
+    const px = wall.tx * this.zone.tileWidth + this.zone.tileWidth / 2;
+    const py = wall.ty * this.zone.tileHeight + this.zone.tileHeight / 2;
+    if (length(hitX - px, hitY - py) > 48) return false;
+    if (!crit && damage < 40) return false;
+    this.zone.blocked[wall.ty * this.zone.width + wall.tx] = false;
+    this.save.secretWalls.push(wall.id);
+    this.secretWall = null;
+    // The room behind it holds three things worth the walk: gold, a gem or a drink, and gear.
+    this.gainGold(this.rng.int(40, 120));
+    const bonus = this.rng.pick(["health_potion", "mana_potion", "gem_ruby"] as const);
+    const gear = this.rng.pick(["iron_sword", "oak_staff", "steel_sword"] as const);
+    const dropped: string[] = [];
+    for (const itemId of [bonus, gear]) {
+      const def = ITEMS[itemId];
+      if (!def) continue;
+      const instance = isEquippable(def) ? createItemInstance(itemId, this.rng, 1) : undefined;
+      this.loot.push({
+        uid: this.nextUid("l"),
+        itemId,
+        qty: instance ? 1 : 2,
+        x: px + this.rng.between(-14, 14),
+        y: py + this.rng.between(-10, 10),
+        ttl: 120,
+        instance,
+      });
+      dropped.push(def.name);
+    }
+    this.emit({ type: "secret-room", zone: this.zone.id, x: px, y: py, count: dropped.length });
+    this.emit({ type: "log", text: "The wall gives way. A hidden room behind it, and something still inside.", tone: "good" });
+    return true;
+  }
+
+  /**
+   * The zone lives on its own clock. Every so often something happens that the hero
+   * did not start: a supply cart to chase down, or an ambush that starts on them.
+   */
+  private updateZoneEvent(dt: number): void {
+    this.zoneEventTimer -= dt;
+    if (this.zoneEventTimer > 0) return;
+    this.zoneEventTimer = this.rng.between(150, 260);
+    if (this.zone.safe || this.dead) return;
+    if (!this.rng.chance(0.2)) return;
+    if (this.rng.chance(0.5)) {
+      const kind = this.rng.pick(["loot_imp"] as const);
+      const angle = this.rng.between(0, Math.PI * 2);
+      const x = Math.min(this.zone.width * this.zone.tileWidth - 20, Math.max(20, this.save.x + Math.cos(angle) * 200));
+      const y = Math.min(this.zone.height * this.zone.tileHeight - 20, Math.max(20, this.save.y + Math.sin(angle) * 200));
+      const imp = this.makeMonster({ id: kind, x, y }, `event_${this.nextUid("e")}`);
+      imp.state = "chase";
+      this.monsters.push(imp);
+      this.emit({ type: "zone-event", kind: "supply", label: "A supply cart rattles past - chase it down", x, y });
+      this.emit({ type: "log", text: "A supply cart rattles past you. Run it down before it escapes.", tone: "quest" });
+      return;
+    }
+    // An ambush: three of the zone's own creatures close in, so the fight starts on them.
+    const species = this.zone.monsterSpawns.filter((spawn) => !getMonster(spawn.id).boss).map((spawn) => spawn.id);
+    if (species.length === 0) return;
+    for (let i = 0; i < 3; i += 1) {
+      const angle = (Math.PI * 2 * i) / 3 + this.rng.between(0, 1);
+      const x = Math.min(this.zone.width * this.zone.tileWidth - 20, Math.max(20, this.save.x + Math.cos(angle) * 130));
+      const y = Math.min(this.zone.height * this.zone.tileHeight - 20, Math.max(20, this.save.y + Math.sin(angle) * 130));
+      if (this.isBlockedAt(x, y, 10)) continue;
+      const ambusher = this.makeMonster({ id: this.rng.pick(species), x, y }, `event_${this.nextUid("e")}`);
+      ambusher.state = "chase";
+      this.monsters.push(ambusher);
+    }
+    this.emit({ type: "zone-event", kind: "ambush", label: "Ambush!", x: this.save.x, y: this.save.y });
+    this.emit({ type: "log", text: "An ambush! Something was waiting for you here.", tone: "bad" });
+  }
+
+  /** The affixes this hero is hunting: a drop that carries one glows like a beacon. */
+  get wishlistItems(): string[] {
+    return this.save.wishlist;
+  }
+
+  toggleWish(affixId: string): boolean {
+    const list = this.save.wishlist;
+    const at = list.indexOf(affixId);
+    if (at >= 0) {
+      list.splice(at, 1);
+      return false;
+    }
+    if (list.length >= 8) return false;
+    list.push(affixId);
+    return true;
+  }
+
+  /** True when an item on the ground carries at least one wanted affix. */
+  isWanted(instance: { affixes: string[] } | undefined): boolean {
+    if (!instance || this.save.wishlist.length === 0) return false;
+    return instance.affixes.some((affix) => this.save.wishlist.includes(affix));
   }
 
   /** A plain-words direction, so the hint is readable without a map marker. */

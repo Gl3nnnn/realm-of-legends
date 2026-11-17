@@ -62,6 +62,8 @@ import { PET_SPECIES } from "@realm/core";
 
 /** How long a skill pressed too early waits for its cooldown before it is forgotten. */
 const CAST_BUFFER_MS = 220;
+/** A dodge this soon after a swing folds the rest of the chain away. */
+const SWING_CANCEL_MS = 420;
 /** How long a shoved body takes to spring back after a hit. */
 const FLINCH_MS = 170;
 
@@ -169,6 +171,12 @@ export class WorldScene extends Phaser.Scene {
   private flinches = new Map<string, { dx: number; dy: number; power: number; start: number }>();
   /** Seconds left of the slow crawl after a boss falls. */
   private slowmoLeft = 0;
+  /** The beat a swing can still be cancelled in, so a dodge folds the follow-through away. */
+  private swingLockUntil = 0;
+  /** When the last basic swing landed, so a dodge inside that beat can cancel the chain. */
+  private lastSwingAt = -1e9;
+  /** Room already broken open in this zone, so the rubble is not painted twice. */
+  private secretRoomKey = "";
   private pointerMoved = false;
   private zoneId = "";
 
@@ -216,6 +224,7 @@ export class WorldScene extends Phaser.Scene {
     this.pendingDeliver = null;
     this.pendingTimer = null;
     this.swingIndex = 0;
+    this.secretRoomKey = "";
   }
 
   create(): void {
@@ -831,7 +840,10 @@ export class WorldScene extends Phaser.Scene {
     // so a held attack reads as a combo instead of the same arc on repeat.
     const swing = id === "basic" ? this.swingIndex : 0;
     if (this.session.castAbility(id, this.aim)) {
-      if (id === "basic") this.swingIndex = (this.swingIndex + 1) % 3;
+      if (id === "basic") {
+        this.swingIndex = (this.swingIndex + 1) % 3;
+        this.lastSwingAt = this.time.now;
+      }
       this.ui.barPunch(id);
       const events = this.session.drainEvents();
       this.handleSimEvents(events, swing);
@@ -1282,6 +1294,18 @@ export class WorldScene extends Phaser.Scene {
         this.pendingTimer = null;
         run();
       }
+      // Dodging out of a swing cancels the rest of the chain: the hero rolls away
+      // instead of finishing a cut into empty air, and the next swing starts clean.
+      if (dodged && this.time.now - this.lastSwingAt <= SWING_CANCEL_MS) {
+        this.swingIndex = 0;
+        this.swingLockUntil = this.time.now + 160;
+        this.floatText(this.session.save.x, this.session.save.y - 26, "CANCEL", "#b6e6ff", 10);
+      }
+      // While the cancel beat runs, a held attack does not restart the chain early.
+      if (this.time.now < this.swingLockUntil && (this.isDown("attack") || pad.attack)) {
+        this.handleSimEvents(this.session.drainEvents());
+        return;
+      }
       this.handleSimEvents(this.session.drainEvents());
     }
 
@@ -1512,6 +1536,32 @@ export class WorldScene extends Phaser.Scene {
             if (event.portal) this.createPortal(event.portal);
           }
           break;
+        case "secret-room": {
+          // The wall comes down and the hidden room behind it is shown, not just logged.
+          const key = `${event.zone}:${Math.round(event.x)}:${Math.round(event.y)}`;
+          if (this.secretRoomKey === key) break;
+          this.secretRoomKey = key;
+          const tx = Math.floor(event.x / this.session.zone.tileWidth);
+          const ty = Math.floor(event.y / this.session.zone.tileHeight);
+          if (this.decorLayer) this.decorLayer.removeTileAt(tx, ty);
+          this.tallTileSprites.get(`${tx},${ty}`)?.destroy();
+          this.tallTileSprites.delete(`${tx},${ty}`);
+          this.floatText(event.x, event.y - 26, "SECRET ROOM", "#ffd76a", 12);
+          this.burst(event.x, event.y, 0xd8c08a, 12, 1.1);
+          this.rumble(2);
+          this.ui.playSlam();
+          break;
+        }
+        case "zone-event":
+          // Something the hero did not start: a cart to chase, or a fight that starts on them.
+          if (event.kind === "ambush") {
+            this.floatText(event.x, event.y - 30, "AMBUSH!", "#ff8e7a", 13);
+            this.rumble(2);
+          } else {
+            this.floatText(event.x, event.y - 30, "SUPPLY CART", "#ffd76a", 11);
+          }
+          this.burst(event.x, event.y, event.kind === "ambush" ? 0xff8e7a : 0xffd76a, 8, 0.9);
+          break;
         default:
           break;
       }
@@ -1662,7 +1712,10 @@ export class WorldScene extends Phaser.Scene {
       if (!entry) {
         const def = getItem(drop.itemId);
         const rarityColor = Phaser.Display.Color.HexStringToColor(RARITY_COLORS[def.rarity as Rarity]).color;
-        const glow = this.add.circle(drop.x, drop.y + 3, 8, rarityColor, 0.1).setDepth(drop.y - 1);
+        // A drop carrying an affix the hero wished for burns gold instead of sitting
+        // quietly in its rarity colour, so the wish list is answered on the floor.
+        const wanted = session.isWanted(drop.instance);
+        const glow = this.add.circle(drop.x, drop.y + 3, wanted ? 10 : 8, wanted ? 0xffd76a : rarityColor, wanted ? 0.16 : 0.1).setDepth(drop.y - 1);
         const icon = this.add.sprite(drop.x, drop.y, "items", itemIcon(def.icon)).setDepth(drop.y);
         // Rare and better gear throws a coloured shaft of light, so a good drop is
         // spotted from the other side of a room instead of walked over by accident.
@@ -1677,6 +1730,16 @@ export class WorldScene extends Phaser.Scene {
         }
         this.calmTween({ targets: icon, y: drop.y - 3, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         this.calmTween({ targets: glow, alpha: { from: 0.1, to: 0.32 }, duration: 700, yoyo: true, repeat: -1 });
+        // A wished-for drop draws its own tall gold shaft and a slow halo around it.
+        if (wanted && drop.instance) {
+          const shaft = this.add.rectangle(drop.x, drop.y - 24, 4, 48, 0xffd76a, 0.55)
+            .setDepth(drop.y - 2)
+            .setBlendMode(Phaser.BlendModes.ADD);
+          this.calmTween({ targets: shaft, alpha: { from: 0.55, to: 0.2 }, duration: 800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+          entry = { icon, glow, beam: shaft };
+          this.lootSprites.set(drop.uid, entry);
+          continue;
+        }
         entry = { icon, glow, beam };
         this.lootSprites.set(drop.uid, entry);
       }

@@ -490,6 +490,18 @@ export function inventoryPanelHtml(
       .map((id, index) => `<button class="btn ghost small" data-action="reroll-affix" ${target} data-index="${index}" ${canReroll ? "" : "disabled"}>Reroll ${esc(AFFIXES[id]?.name ?? id)} (${rerollCost.gold}g + ${rerollCost.ore} ore)</button>`)
       .join("");
   }
+  // A wish is a note to the world: any drop carrying this affix glows gold on the floor.
+  if (stack) {
+    const wished = session.wishlistItems;
+    const ownAffixes = stack.instance?.affixes ?? [];
+    const wishRow = ownAffixes
+      .map((id) => {
+        const on = wished.includes(id);
+        return `<button class="btn ${on ? "small" : "ghost small"}" data-action="toggle-wish" data-affix="${esc(id)}">${on ? "Wanted: " : "Wish for "}${esc(AFFIXES[id]?.name ?? id)}</button>`;
+      })
+      .join("");
+    if (wishRow) actions += `<div class="small muted">Wish list: ${wished.length} of 8 affixes${wished.length > 0 ? " - wanted drops glow gold on the floor" : ""}</div>${wishRow}`;
+  }
   // Sockets: a gem set into gear keeps working while the item is worn, so this row is
   // the whole gem system in one place, on any selected item that can hold one.
   const sockets = stack ? socketCount(stack) : 0;

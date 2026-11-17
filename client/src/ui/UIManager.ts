@@ -1676,6 +1676,11 @@ export class UIManager {
             : false;
         if (changed) this.sfx.level();
         else this.toast("A reroll needs gold and Iron Ore.", "bad");
+      } else if (action === "toggle-wish" && target.dataset.affix) {
+        const on = session.toggleWish(target.dataset.affix);
+        changed = true;
+        this.sfx.ui();
+        this.toast(on ? "Added to your wish list." : "Taken off your wish list.", on ? "good" : "info");
       } else if (action === "socket-gem" && target.dataset.gem) {
         const held = target.dataset.equip
           ? session.save.equipment[target.dataset.equip as keyof CharacterSave["equipment"]]

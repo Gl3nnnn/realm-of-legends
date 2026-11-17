@@ -132,6 +132,9 @@ export const saveSchema = z.object({
   equipment: equipmentSchema,
   quests: z.array(questSchema),
   openedChests: z.array(z.string()),
+  // Walls the hero has already broken open, and the affixes they are hunting for.
+  secretWalls: z.array(z.string().max(40)).max(64).default([]),
+  wishlist: z.array(z.string().max(24)).max(8).default([]),
   difficulty: z.enum(DIFFICULTIES),
   ngPlus: z.number().int().min(0).max(99),
   defeatedBosses: z.array(z.enum(BOSS_IDS)).max(32),
@@ -323,6 +326,8 @@ export function createCharacter(name: string, classId: ClassId, options: { id?: 
     equipment,
     quests: [],
     openedChests: [],
+    secretWalls: [],
+    wishlist: [],
     difficulty: "normal",
     ngPlus: 0,
     defeatedBosses: [],
