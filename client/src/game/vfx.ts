@@ -27,7 +27,24 @@ export type VfxStyle =
   | "smoke"
   | "mark"
   | "cone"
-  | "chain";
+  | "chain"
+  // Styles added so a skill's picture matches what its text promises.
+  | "fireball"
+  | "iceShard"
+  | "arcaneBlast"
+  | "drain"
+  | "roots"
+  | "quake"
+  | "smash"
+  | "smite"
+  | "venom"
+  | "spin"
+  | "spear"
+  // Shapes for skills whose text promises something none of the above draws.
+  | "explosion"
+  | "roar"
+  | "stoneRing"
+  | "tide";
 
 export interface VfxDescriptor {
   style: VfxStyle;
@@ -78,86 +95,120 @@ const BASIC_STYLE: Record<ClassId, VfxStyle> = {
 };
 
 const ABILITY_STYLE: Record<string, VfxStyle> = {
+  // Warrior: steel, guard and a wide spin
   shield_bash: "bash",
-  whirlwind: "cleave",
+  whirlwind: "spin",
   iron_defense: "shield",
-  berserker_strike: "cleave",
-  fortified_stance: "nova",
-  fireball: "beam",
-  ice_shard: "beam",
-  arcane_blast: "beam",
+  berserker_strike: "smash",
+  fortified_stance: "shield",
+  // Mage: fire, ice and raw arcane
+  fireball: "fireball",
+  ice_shard: "iceShard",
+  arcane_blast: "arcaneBlast",
   meteor: "meteor",
-  arcane_overload: "beam",
-  multi_shot: "gunVolley",
-  piercing_arrow: "gun",
-  poison_arrow: "trap",
+  arcane_overload: "buff",
+  // Archer
+  multi_shot: "arrowVolley",
+  piercing_arrow: "arrow",
+  poison_arrow: "venom",
   rain_of_arrows: "rain",
   eagles_volley: "rain",
+  // Assassin: vanish and cut
   shadow_strike: "dash",
   backstab: "thrust",
   smoke_bomb: "smoke",
   blade_flurry: "flurry",
-  shadow_execution: "cleave",
+  // Text: "a devastating strike that demands close range" - one heavy blow, not a wide sweep.
+  shadow_execution: "smash",
+  // Paladin: radiant steel
   holy_strike: "thrust",
-  divine_shield: "nova",
+  divine_shield: "shield",
   healing_light: "heal",
-  judgment: "nova",
-  divine_aegis: "buff",
+  judgment: "smite",
+  divine_aegis: "shield",
+  // Priest: light and ward
   heal: "heal",
-  blessing: "nova",
-  purification: "shield",
-  holy_nova: "rune",
-  sanctuary: "shield",
-  soul_drain: "bolt",
-  bone_spear: "bolt",
+  blessing: "buff",
+  purification: "heal",
+  holy_nova: "nova",
+  sanctuary: "heal",
+  // Necromancer: graves and rot
+  soul_drain: "drain",
+  bone_spear: "spear",
   raise_skeleton: "summon",
   curse: "rune",
   army_of_the_fallen: "summon",
-  thorn_burst: "nova",
+  // Druid: thorn and root
+  thorn_burst: "roots",
   natures_embrace: "heal",
-  entangling_roots: "rune",
-  beast_form: "flurry",
-  primal_transformation: "nova",
+  entangling_roots: "roots",
+  beast_form: "buff",
+  primal_transformation: "buff",
+  // Monk
   rapid_strike: "flurry",
-  flying_kick: "thrust",
-  focused_breath: "beam",
+  // Text: "leap forward" - a lunge, so the dash trail is what sells it.
+  flying_kick: "dash",
+  focused_breath: "heal",
   dragon_combo: "flurry",
-  dragon_ascension: "nova",
+  dragon_ascension: "buff",
+  // Gunslinger
   quick_draw: "gun",
   ricochet_shot: "chain",
   evasive_roll: "dash",
   bullet_storm: "gunVolley",
-  deadeye: "buff",
-  rage: "slash",
+  deadeye: "mark",
+  // Berserker
+  rage: "buff",
   blood_cleave: "cleave",
-  ground_slam: "bash",
-  frenzy: "flurry",
-  unrelenting_fury: "bash",
+  ground_slam: "quake",
+  frenzy: "buff",
+  // Text: "trade defense for overwhelming attack" - it is a self-buff, not a swing.
+  unrelenting_fury: "buff",
+  // Summoner
   summon_wolf: "summon",
   arcane_familiar: "summon",
   spirit_link: "heal",
   command_minions: "buff",
   primal_convergence: "summon",
+  // Ranger
   trap_snare: "trap",
+  // Text: "sharpen your senses, increasing attack" - a self-buff, not a mark on the ground.
   eagle_eye: "buff",
   twin_arrow: "arrowVolley",
   camouflage: "smoke",
   hunters_mark: "mark",
+  // Spellblade
   flame_slash: "slash",
   frost_blade: "slash",
   arcane_dash: "dash",
-  elemental_burst: "meteor",
+  elemental_burst: "nova",
   elemental_convergence: "buff",
+  // Dragon Knight
   dragon_breath: "cone",
   scaled_armor: "shield",
-  dragon_leap: "nova",
-  infernal_strike: "slash",
+  dragon_leap: "quake",
+  infernal_strike: "smash",
   dragons_wrath: "nova",
+  // Warden, oracle and the rest
   warden_cleave: "cleave",
-  oracle_bolt: "beam",
+  bulwark_pulse: "shield",
+  // Text: "drive your weapon into the ground" - the floor breaks.
+  anchor_step: "quake",
+  // Text: "a rallying roar" - a shout of rings, not a quiet buff glow.
+  guardian_roar: "roar",
+  last_stand: "shield",
+  // Text: "launch a focused bolt" - a bolt, not a full laser beam.
+  oracle_bolt: "bolt",
+  oracle_solace: "heal",
+  // Text: "mark a point with a radiant glyph" - drawn where it lands.
+  oracle_glyph: "rune",
   oracle_ray: "beam",
+  // Text: "a circle of light that heals you and punishes nearby enemies".
+  oracle_prophecy: "nova",
   battlemage_arcane_cut: "slash",
   battlemage_ember_burst: "nova",
+  // Text: "shape mana into a shield" / "blink forward" / "a storm of arcane power".
+  battlemage_mana_guard: "shield",
   battlemage_blink_strike: "dash",
   battlemage_spellstorm: "nova",
   shadowdancer_fan: "arrowVolley",
@@ -167,27 +218,39 @@ const ABILITY_STYLE: Record<string, VfxStyle> = {
   shadowdancer_execution: "cleave",
   artificer_rivet: "gun",
   artificer_spring_trap: "trap",
-  artificer_blast_charge: "meteor",
+  // Text: "deploy a quick shield from spare plating".
+  artificer_scrap_shield: "shield",
+  // Text: "toss an explosive charge that detonates" - thrown and exploded, not a falling rock.
+  artificer_blast_charge: "explosion",
   artificer_overclock: "buff",
   beastmaster_barbed_arrow: "arrow",
   beastmaster_call_wolf: "summon",
+  // Text: "rally yourself and your companion with a powerful howl".
+  beastmaster_pack_howl: "roar",
   beastmaster_net: "trap",
   beastmaster_stampede: "summon",
   duelist_lunge: "thrust",
+  // Text: "raise your guard" - a deflecting shell, not a buff glow.
+  duelist_parry: "shield",
   duelist_feint: "dash",
   duelist_riposte: "flurry",
   duelist_finale: "flurry",
-  elementalist_fire: "beam",
-  elementalist_ice: "beam",
-  elementalist_tide: "nova",
-  elementalist_primal: "meteor",
+  elementalist_fire: "spear",
+  elementalist_ice: "iceShard",
+  // Text: "raise a ring of stone" - rock rising in a circle, not plant roots.
+  elementalist_stone: "stoneRing",
+  // Text: "send a surge of water" - a wave washing outward.
+  elementalist_tide: "tide",
+  elementalist_primal: "nova",
   sentinel_halberd: "cleave",
+  sentinel_aegis: "shield",
+  sentinel_rally: "heal",
   sentinel_charge: "dash",
-  sentinel_oath: "nova",
+  sentinel_oath: "shield",
   stormcaller_bolt: "chain",
   stormcaller_gust: "dash",
   stormcaller_static: "nova",
-  stormcaller_tempest: "beam",
+  stormcaller_tempest: "spear",
   stormcaller_eye: "nova",
 };
 
@@ -203,17 +266,17 @@ export const CLASS_PALETTE: Record<ClassId, { primary: string; secondary: string
   assassin: { primary: "#8c6bd8", secondary: "#e6dcff" },
   paladin: { primary: "#ffe27a", secondary: "#fff8d0" },
   priest: { primary: "#ffe7a8", secondary: "#ffd9f0" },
-  necromancer: { primary: "#7fd88f", secondary: "#cfa8ff" },
+  necromancer: { primary: "#b06bff", secondary: "#8fe8b0" },
   druid: { primary: "#6ff09a", secondary: "#d4ffb0" },
   monk: { primary: "#ffd08a", secondary: "#fff1cf" },
   gunslinger: { primary: "#f0c46b", secondary: "#ff9a4a" },
   berserker: { primary: "#ff6b4a", secondary: "#ffd08a" },
   summoner: { primary: "#9fe8d8", secondary: "#d8fff5" },
-  ranger: { primary: "#a6f2a0", secondary: "#ffeab0" },
-  spellblade: { primary: "#ffb37a", secondary: "#a6f2ff" },
+  ranger: { primary: "#e8c88a", secondary: "#a6f2a0" },
+  spellblade: { primary: "#a6f2ff", secondary: "#ffb37a" },
   dragonknight: { primary: "#ff7a4a", secondary: "#ffd06b" },
   warden: { primary: "#b9d1a6", secondary: "#8cf0c0" },
-  oracle: { primary: "#b8c8ff", secondary: "#fff0a8" },
+  oracle: { primary: "#ffe08a", secondary: "#fff6cc" },
   battlemage: { primary: "#e0a8ff", secondary: "#ffd08a" },
   shadowdancer: { primary: "#a06bff", secondary: "#7ff0ff" },
   artificer: { primary: "#f0c46b", secondary: "#8ce0ff" },
@@ -221,7 +284,7 @@ export const CLASS_PALETTE: Record<ClassId, { primary: string; secondary: string
   duelist: { primary: "#a8f0e0", secondary: "#ffe9a8" },
   elementalist: { primary: "#a6eef0", secondary: "#ff9a4a" },
   sentinel: { primary: "#d1e4d7", secondary: "#ffe08a" },
-  stormcaller: { primary: "#f1df7a", secondary: "#8cd4ff" },
+  stormcaller: { primary: "#8cd4ff", secondary: "#f1df7a" },
 };
 
 /** How far a skill's own damage colour slides toward the class colour. */
@@ -284,6 +347,21 @@ const STYLE_DURATION: Record<VfxStyle, number> = {
   mark: 600,
   cone: 460,
   chain: 380,
+  fireball: 520,
+  iceShard: 420,
+  arcaneBlast: 480,
+  drain: 620,
+  roots: 620,
+  quake: 560,
+  smash: 380,
+  smite: 620,
+  venom: 420,
+  spin: 420,
+  spear: 340,
+  explosion: 520,
+  roar: 620,
+  stoneRing: 600,
+  tide: 560,
 };
 
 function fallbackStyle(ability: AbilityDef): VfxStyle {
@@ -322,7 +400,7 @@ export function resolveAbilityVfx(classId: ClassId, ability: AbilityDef, classAc
       ? mixHex("#8ef0a0", palette.primary, 0.25)
       : palette.primary;
   const radius = ability.effects.find((effect) => effect.radius)?.radius ?? (ability.targeting === "self" ? 72 : 26);
-  const heavy = style === "meteor" || style === "nova" || style === "rain" || style === "summon";
+  const heavy = style === "meteor" || style === "nova" || style === "rain" || style === "summon" || style === "quake" || style === "smite" || style === "roots" || style === "drain";
   // Ultimates (signature skills) get a bigger, longer effect and a stronger shake.
   const signature = ability.signature === true;
   // Spirit Storm is made more dramatic: a wider, longer burst with a bigger shake.
@@ -346,4 +424,62 @@ export function projectileStyle(abilityId: string, classId: ClassId): VfxStyle {
 
 export function damageColor(damageType: DamageType): string {
   return DAMAGE_COLORS[damageType];
+}
+
+/**
+ * The family of sound a skill belongs to. Before this, a 40-second ultimate and a
+ * 5-second poke played the same two notes, because only the damage element reached
+ * the ear. The shape of the skill decides which family it speaks in.
+ */
+export type SkillVoice = "strike" | "shot" | "burst" | "ward" | "summon" | "wisp";
+
+const STYLE_VOICE: Record<VfxStyle, SkillVoice> = {
+  slash: "strike",
+  cleave: "strike",
+  thrust: "strike",
+  bash: "strike",
+  flurry: "strike",
+  fist: "strike",
+  smash: "strike",
+  spin: "strike",
+  arrow: "shot",
+  arrowVolley: "shot",
+  gun: "shot",
+  gunVolley: "shot",
+  bolt: "shot",
+  beam: "shot",
+  fireball: "shot",
+  iceShard: "shot",
+  arcaneBlast: "shot",
+  spear: "shot",
+  venom: "shot",
+  nova: "burst",
+  explosion: "burst",
+  quake: "burst",
+  meteor: "burst",
+  rain: "burst",
+  cone: "burst",
+  chain: "burst",
+  tide: "burst",
+  stoneRing: "burst",
+  drain: "burst",
+  smite: "burst",
+  roots: "burst",
+  shield: "ward",
+  heal: "ward",
+  buff: "ward",
+  roar: "ward",
+  rune: "ward",
+  mark: "ward",
+  trap: "summon",
+  summon: "summon",
+  dash: "wisp",
+  smoke: "wisp",
+};
+
+/** Which voice a skill speaks in, from the shape it is drawn with. */
+export function abilityVoice(ability: AbilityDef, style: VfxStyle): SkillVoice {
+  // Basics follow their own drawing too, so a bow's shot stays a shot and a sword stays a hit.
+  void ability;
+  return STYLE_VOICE[style] ?? "strike";
 }

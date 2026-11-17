@@ -19,7 +19,7 @@ import {
 } from "@realm/core";
 import type { UIManager } from "../ui/UIManager";
 import { loadPreferences, type GamePreferences, type KeybindAction } from "../ui/preferences";
-import { damageColor, classTint, primaryDamageType, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
+import { damageColor, classTint, primaryDamageType, abilityVoice, projectileStyle, resolveAbilityVfx, type VfxDescriptor } from "./vfx";
 import { isDown, justDown, readGamepad, rumblePad, syncKeybinds, type GamepadState } from "./input";
 import {
   renderFloorEffects as renderFloorEffectsFx,
@@ -41,6 +41,23 @@ import {
 import { bloomFx, debrisFx, groundWaveFx, streakFx, zoomPunch } from "./skillVisuals";
 import { bladeBandFx, coreFlashFx, lightPoolFx, rimGlowFx, shockwaveFx } from "./fxKit";
 import { comboHeatAlpha, comboHeatColor, flinchOffset, perfectDodgeFx, reactionColor, reactionFx, whiffFx } from "./hitFeel";
+import {
+  arcaneBlastShape,
+  drainShape,
+  explosionShape,
+  fireballShape,
+  iceShardShape,
+  quakeShape,
+  roarShape,
+  rootsShape,
+  smiteShape,
+  smashShape,
+  spearShape,
+  spinShape,
+  stoneRingShape,
+  tideShape,
+  venomShape,
+} from "./skillShapes";
 import { PET_SPECIES } from "@realm/core";
 
 /** How long a skill pressed too early waits for its cooldown before it is forgotten. */
@@ -1695,7 +1712,7 @@ export class WorldScene extends Phaser.Scene {
     if (!ability) return;
     // Every element casts with its own voice, so a fireball and an ice shard stop
     // sounding like the same spell with different colours.
-    this.ui.playCastSound(primaryDamageType(ability));
+    this.ui.playCastSound(primaryDamageType(ability), abilityVoice(ability, projectileStyle(event.abilityId, this.session.save.classId)));
     const vfx: VfxDescriptor = resolveAbilityVfx(this.session.save.classId, ability, event.color);
     const color = this.hexColor(vfx.color);
     const accent = this.hexColor(vfx.accent);
@@ -1758,6 +1775,19 @@ export class WorldScene extends Phaser.Scene {
     abilityId: string,
     swing = 0,
   ): void {
+    // One argument bundle every shape reads: where the caster stands, where the skill
+    // lands, and the two colours the class owns.
+    const shapeArgs = {
+      scene: this as Phaser.Scene,
+      x: event.x,
+      y: event.y,
+      targetX: event.targetX,
+      targetY: event.targetY,
+      color,
+      accent,
+      duration: vfx.duration,
+      radius: vfx.radius,
+    };
     switch (vfx.style) {
       case "slash": {
         // The basic chain: a cut from each shoulder in turn, then a wide finisher. The
@@ -1904,6 +1934,52 @@ export class WorldScene extends Phaser.Scene {
         this.chainFx(event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
         lightningFx(this, event.x, event.y, event.targetX, event.targetY, color, vfx.duration);
         impactFx(this, event.targetX, event.targetY, color, accent, heavy ? 1.2 : 0.9, vfx.duration);
+        break;
+      // The skills whose text promised a shape the shared effects could not draw.
+      case "fireball":
+        fireballShape(shapeArgs);
+        break;
+      case "iceShard":
+        iceShardShape(shapeArgs);
+        break;
+      case "arcaneBlast":
+        arcaneBlastShape(shapeArgs);
+        break;
+      case "drain":
+        drainShape(shapeArgs);
+        break;
+      case "roots":
+        rootsShape(shapeArgs);
+        break;
+      case "quake":
+        quakeShape(shapeArgs);
+        break;
+      case "smash":
+        smashShape(shapeArgs);
+        break;
+      case "smite":
+        smiteShape(shapeArgs);
+        break;
+      case "venom":
+        venomShape(shapeArgs);
+        break;
+      case "spin":
+        spinShape(shapeArgs);
+        break;
+      case "spear":
+        spearShape(shapeArgs);
+        break;
+      case "explosion":
+        explosionShape(shapeArgs);
+        break;
+      case "roar":
+        roarShape(shapeArgs);
+        break;
+      case "stoneRing":
+        stoneRingShape(shapeArgs);
+        break;
+      case "tide":
+        tideShape(shapeArgs);
         break;
       default:
         this.burst(event.x, event.y, color, 5, 0.8);
@@ -2206,11 +2282,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private bubbleFx(x: number, y: number, color: number, accent: number, duration: number): void {
-    const bubble = this.add.circle(x, y, 26, color, 0.1).setDepth(y + 3);
-    bubble.setStrokeStyle(3, accent, 0.8);
+    // Only the soft inside of the ward: the hard outline is drawn by the shell, so this
+    // must not carry a rim of its own or the two edges blur into one dull orb.
+    const bubble = this.add.circle(x, y, 26, color, 0.08).setDepth(y + 2);
+    bubble.setStrokeStyle(1, accent, 0.22);
     this.tweens.add({
       targets: bubble,
-      scale: 1.25,
+      scale: 1.18,
       alpha: 0,
       duration,
       ease: "Cubic.easeOut",

@@ -1,4 +1,5 @@
 type Wave = OscillatorType;
+import type { SkillVoice } from "../game/vfx";
 export type MusicTheme = "village" | "forest" | "dungeon" | "marsh" | "frost" | "throne" | "boss";
 
 interface MusicDef {
@@ -237,8 +238,16 @@ export class Sfx {
    * Every element has its own voice: a fireball crackles and roars, an ice shard chimes
    * and cuts, shadow swallows the sound. Before this, all eight elements played the same
    * two notes, so a fight read as "something happened" instead of "what happened".
+   *
+   * The second layer gives the skill's *shape* a voice too, so a dash, a summon and a
+   * 40-second ultimate no longer share one sound just because they hit with fire.
    */
-  cast(kind = "physical"): void {
+  cast(kind = "physical", voice?: SkillVoice): void {
+    this.elementVoice(kind);
+    this.shapeVoice(voice);
+  }
+
+  private elementVoice(kind: string): void {
     switch (kind) {
       case "fire":
         this.noise(0.14, 0.1);
@@ -278,6 +287,51 @@ export class Sfx {
         this.tone(570, 0.12, "sine", 0.12, 120, 0.03);
         break;
     }
+  }
+
+  /** The shape of a skill: a cut, a shot, a burst, a ward, a summon or a blink. */
+  private shapeVoice(voice: SkillVoice = "strike"): void {
+    // The shape layer sits *under* the element sound, so it never becomes the
+    // loudest thing in a busy fight. One number here tunes every shape at once.
+    const shape = 0.6;
+    switch (voice) {
+      case "strike":
+        // A blade through air: noise cut short, then a small body thump.
+        this.noise(0.07, 0.06 * shape, 0.02);
+        this.tone(520, 0.1, "triangle", 0.08 * shape, -220, 0.02);
+        break;
+      case "shot":
+        // Something released: a high pluck falling away.
+        this.tone(880, 0.08, "triangle", 0.09 * shape, -420, 0.02);
+        this.noise(0.05, 0.05 * shape, 0.02);
+        break;
+      case "burst":
+        // A foot of weight landing: a low boom with grit behind it.
+        this.tone(96, 0.24, "sine", 0.14 * shape, -34, 0.04);
+        this.noise(0.2, 0.08 * shape, 0.04);
+        break;
+      case "ward":
+        // A shell rising: two notes climbing into a held third.
+        this.tone(392, 0.26, "sine", 0.08 * shape, 60, 0.03);
+        this.tone(588, 0.3, "sine", 0.06 * shape, 40, 0.09);
+        break;
+      case "summon":
+        // Something waking: a slow two-note hum under the cast.
+        this.tone(196, 0.3, "triangle", 0.09 * shape, 40, 0.04);
+        this.tone(294, 0.24, "sine", 0.06 * shape, 30, 0.14);
+        break;
+      default:
+        // A blink or a dash: air rushing past, no impact at all.
+        this.noise(0.14, 0.05 * shape, 0.02);
+        this.tone(700, 0.12, "sine", 0.05 * shape, -360, 0.02);
+        break;
+    }
+  }
+
+  /** A skill coming back off cooldown: a soft tick, so the eye can stop watching the bar. */
+  ready(): void {
+    this.tone(700, 0.06, "sine", 0.07, 60);
+    this.tone(980, 0.07, "sine", 0.05, 40, 0.05);
   }
 
   /** An elemental reaction woke: a rising shimmer, so the puzzle moment has a sound of its own. */

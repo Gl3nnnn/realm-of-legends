@@ -21,6 +21,82 @@ export interface GameUpdate {
 
 export const GAME_UPDATES: GameUpdate[] = [
   {
+    version: "1.39.1",
+    date: "December 5, 2026",
+    title: "The Quieter Shape Update",
+    summary:
+      "The second layer of skill sound - the cut, the shot, the burst - now sits about forty percent lower, so it tells you what a skill is without talking over the element it hits with. A busy fight is calmer to the ear.",
+    changes: [
+      { tag: "improved", text: "Every shape sound plays at roughly 60% of its old loudness, so the element sound stays in front and the shape reads as a detail under it." },
+      { tag: "fixed", text: "The end of a skill's dash, its heavy thump and its wards are all softer now, so several casts in a row no longer add up to a wall of noise." },
+      { tag: "improved", text: "The cooldown tick, the reaction shimmer and the sounds of weapon hits are unchanged, so the cues you rely on still cut through." },
+    ],
+  },
+  {
+    version: "1.39.0",
+    date: "December 4, 2026",
+    title: "The Skill Voice Update",
+    summary:
+      "Every skill now sounds like the thing it does, not just the element it hits with: a dash rushes, a summon wakes, a burst booms, a ward rises. Each skill also carries a real card you can read with a mouse, a keyboard or a thumb.",
+    changes: [
+      { tag: "new", text: "Skills speak in a second layer of sound: cuts, shots, bursts, wards, summons and blinks each have their own voice under the element." },
+      { tag: "new", text: "Hover, focus or hold a skill slot to open its card: name, cost, reach, cooldown and element, in a layout that a phone can read too." },
+      { tag: "improved", text: "Keywords in a description glow in their own colour, so a burn, a freeze, a shield and a stun stand out in one look." },
+      { tag: "improved", text: "A soft tick plays the moment a skill comes off cooldown, so you no longer need to watch the bar." },
+    ],
+  },
+  {
+    version: "1.38.1",
+    date: "December 3, 2026",
+    title: "The Clear Edges Update",
+    summary:
+      "The ward around your hero now has an edge you can actually see: its hexagon is drawn in layers, capped at every corner, and sheds bright shards as it holds. The faint outside glow no longer washes the line away.",
+    changes: [
+      { tag: "improved", text: "Shields draw their rim three times over - a wide soft band, a solid class-coloured edge and a white line on top - so the outline stays sharp even on a full-grown hero." },
+      { tag: "new", text: "Each corner of the ward carries a bright cap, and a light sweeps around the hexagon while it holds." },
+      { tag: "new", text: "Bright shards peel off the rim and fly outward, so a working ward visibly sheds its edge." },
+      { tag: "fixed", text: "The faint circle that used to sit under the shell carried its own blurry rim and blurred the real outline; it is now just a soft inside with no edge of its own." },
+      { tag: "improved", text: "Reduce motion keeps a single still dome with a bright edge instead of the sweep and the shards." },
+    ],
+  },
+  {
+    version: "1.38.0",
+    date: "December 2, 2026",
+    title: "The Skill Logic Update",
+    summary:
+      "Every skill in all 25 classes was read against its own description, and the picture and colour were fixed where they disagreed with the text. Shields now look like shields, roars look like shouts, a thrown charge explodes where it lands, stone rises as rock, and every class casts in its own colours.",
+    changes: [
+      { tag: "fixed", text: "Shields now bubble and hold: Scrap Shield, Bulwark Pulse, Mana Guard, Aegis Guard, Last Stand, Perfect Parry and Divine Aegis all draw a shell instead of a plain glow." },
+      { tag: "new", text: "Guardian Roar, Pack Howl and the other shouts send out rings and pressure spokes, so a roar reads as a shout." },
+      { tag: "new", text: "Artificer Blast Charge is now a thrown charge that explodes where it lands, instead of a meteor falling from the sky." },
+      { tag: "new", text: "Stone Ring raises blocky slabs of rock in a circle, and Tidal Surge washes outward as an arc of water." },
+      { tag: "fixed", text: "Unrelenting Fury, Frenzy and Eagle Eye were drawing a slash or a mark on the ground; they are self-buffs, so they now flare on your hero." },
+      { tag: "fixed", text: "Shadow Execution and Flying Kick were drawn as wide sweeps; both are single close-range blows, so they now land as one heavy hit and a leap." },
+      { tag: "fixed", text: "Oracle Sunbolt fires a focused bolt, Hunter's Mark draws its glyph on the chosen point, and Searing Glyph lands where you aim." },
+      { tag: "improved", text: "Necromancer casts violet with a pale green second colour, the Ranger casts warm tan with a green second colour, and the Oracle casts gold - each now matching its own class colour." },
+      { tag: "improved", text: "Stormcaller and Spellblade now lead with the colour their class wears, not their second shade: lightning casts pale blue and the spellblade's magic reads cyan." },
+    ],
+  },
+  {
+    version: "1.37.0",
+    date: "December 1, 2026",
+    title: "The True Shape Update",
+    summary:
+      "A skill's picture now does what its text says. Fireballs fly as burning balls, ice breaks into frost, judgment falls as a pillar of light, roots burst from the ground, and slams break the earth. Every skill icon got a silhouette of its own too, so no two class kits share the same little glowing orb.",
+    changes: [
+      { tag: "new", text: "Fireball is a burning ball that flies, lands and leaves a scorch mark, instead of a straight beam." },
+      { tag: "new", text: "Ice Shard throws a fan of sharp darts and leaves frost cracks on the ground." },
+      { tag: "new", text: "Arcane Blast detonates as rings and diamond spokes of raw magic." },
+      { tag: "new", text: "Soul Drain draws a tether from the victim back to you, with motes travelling home." },
+      { tag: "new", text: "Entangling Roots and Thorn Burst make spikes burst out of the floor in a ring." },
+      { tag: "new", text: "Ground Slam and Dragon Leap crack the earth with a wave, rock chips and lasting cracks." },
+      { tag: "new", text: "Judgment and Holy Nova fall as a pillar of light instead of a ring on the floor." },
+      { tag: "new", text: "Whirlwind is a full turn of the blade around your hero, and Tempest Spear is one long shaft of lightning." },
+      { tag: "improved", text: "Every skill icon now has its own shape: a snowflake for ice, a crescent moon for shadow, fangs for beast form, a dragon head for the dragon skills, and a three-swing combo mark." },
+      { tag: "improved", text: "Flame Slash and Frost Blade keep their class blades but are tinted hot and cold, so the two read apart." },
+    ],
+  },
+  {
     version: "1.36.1",
     date: "November 30, 2026",
     title: "The Clean Seed Update",

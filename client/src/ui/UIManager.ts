@@ -36,6 +36,7 @@ import { medalClock } from "../../../core/src/data/medals";
 import { STORY_CHAPTERS, newHeroIntro, type IntroPage } from "../../../core/src/data/story";
 import {
   abilityBarHtml,
+  abilityCardsHtml,
   characterSelectHtml,
   createPanelHtml,
   inventoryPanelHtml,
@@ -205,6 +206,7 @@ export class UIManager {
     overlay: must("overlay"),
     toasts: must("toasts"),
     abilityBar: must("ability-bar"),
+    abilityShelf: must("ability-card-shelf"),
     quickbar: must("quickbar"),
     prompt: must("interact-prompt"),
     log: must("combat-log"),
@@ -589,6 +591,26 @@ export class UIManager {
       this.sfx.ui();
       window.dispatchEvent(new CustomEvent("realm:cast", { detail: cast }));
     });
+
+    // A skill shows its card on hover, on keyboard focus and on a finger held down,
+    // so the same description is readable with a mouse, a keyboard or a thumb.
+    const showCard = (event: Event) => {
+      const slot = (event.target as HTMLElement).closest<HTMLElement>("[data-card]");
+      this.showAbilityCard(slot?.dataset.card ?? null);
+    };
+    const hideCard = (event: Event) => {
+      const next = (event as MouseEvent).relatedTarget as HTMLElement | null;
+      const stillInside = next?.closest<HTMLElement>("[data-card]");
+      if (stillInside) return;
+      this.showAbilityCard(null);
+    };
+    this.dom.abilityBar.addEventListener("mouseover", showCard);
+    this.dom.abilityBar.addEventListener("mouseout", hideCard);
+    this.dom.abilityBar.addEventListener("focusin", showCard);
+    this.dom.abilityBar.addEventListener("focusout", hideCard);
+    // A tap on a slot also opens the card, which is the only way to read one on a phone.
+    this.dom.abilityBar.addEventListener("pointerdown", showCard);
+    this.dom.abilityBar.addEventListener("pointerleave", () => this.showAbilityCard(null));
 
     for (const button of Array.from(document.querySelectorAll<HTMLElement>("[data-panel]"))) {
       button.addEventListener("click", () => this.openPanel(button.dataset.panel as PanelState["kind"]));
@@ -994,8 +1016,8 @@ export class UIManager {
   }
 
   /** The world asks the shell for sounds, so one place owns what a fight sounds like. */
-  playCastSound(element: string): void {
-    this.sfx.cast(element);
+  playCastSound(element: string, voice?: "strike" | "shot" | "burst" | "ward" | "summon" | "wisp"): void {
+    this.sfx.cast(element, voice);
   }
 
   playMiss(): void {
@@ -1879,9 +1901,31 @@ export class UIManager {
     if (signature === this.abilitySignature) return;
     this.abilitySignature = signature;
     this.dom.abilityBar.innerHTML = abilityBarHtml(this.session);
+    // The cards live in the bar's own markup, parked off screen until a slot is hovered or focused,
+    // so a phone player can tap-and-hold a skill and read exactly what it does.
+    this.dom.abilityShelf.innerHTML = abilityCardsHtml(this.session);
+    this.showAbilityCard(null);
     // Paint the bar in the hero's own colour, so the kit reads as one family.
     const tint = this.dom.abilityBar.querySelector<HTMLElement>(".ability-tint");
     this.dom.abilityBar.style.setProperty("--class-tint", tint?.dataset.tint ?? "#e8c07d");
+  }
+
+  private abilityCardShown: string | null = null;
+
+  /** Tracks which skills were cooling last frame, so a returning skill can ping once. */
+  private wasCooling = new Map<string, boolean>();
+
+  /**
+   * Opens one skill's card and closes the rest. Every card is already built beside the
+   * bar, so showing one is a pair of class changes - no markup is made on hover.
+   */
+  private showAbilityCard(abilityId: string | null): void {
+    if (this.abilityCardShown === abilityId) return;
+    this.abilityCardShown = abilityId;
+    for (const card of Array.from(this.dom.abilityShelf.querySelectorAll<HTMLElement>(".ability-card"))) {
+      card.classList.toggle("shown", abilityId !== null && card.dataset.cardId === abilityId);
+    }
+    this.dom.abilityShelf.classList.toggle("open", abilityId !== null);
   }
 
   private rebuildQuickbar(): void {
@@ -2111,6 +2155,10 @@ export class UIManager {
       const counter = button.querySelector<HTMLElement>(`[data-cdt="${ability.id}"]`);
       if (overlay) {
         const remaining = session.abilityCooldown(ability.id);
+        // A skill coming back gets one soft tick, so the ear learns to stop watching the bar.
+        const wasCooling = this.wasCooling.get(ability.id) ?? false;
+        if (wasCooling && remaining <= 0) this.sfx.ready();
+        this.wasCooling.set(ability.id, remaining > 0);
         const cooldownDuration = session.abilityCooldownDuration(ability.id);
         const pct = cooldownDuration > 0 ? Math.min(100, (remaining / cooldownDuration) * 100) : 0;
         overlay.style.height = `${pct}%`;

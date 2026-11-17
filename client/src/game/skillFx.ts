@@ -249,7 +249,11 @@ export function pillarFx(
   }
 }
 
-/** A hexagonal shield shell instead of a plain bubble, so a ward looks like a ward. */
+/**
+ * A warded shell: a hexagonal dome whose rim is drawn three times over - a wide soft
+ * band, the solid edge, then a white-hot line - so the outline stays readable even at
+ * the size of a standing hero. Corners get caps and the edge sheds bright shards.
+ */
 export function bubbleShellFx(
   scene: Phaser.Scene,
   x: number,
@@ -259,7 +263,8 @@ export function bubbleShellFx(
   radius: number,
   duration: number,
 ): void {
-  const shell = scene.add.graphics().setPosition(x, y).setDepth(y + 3);
+  const allowed = budget();
+  const depth = y + 3;
   const hex = (r: number): Phaser.Math.Vector2[] => {
     const pts: Phaser.Math.Vector2[] = [];
     for (let i = 0; i < 6; i += 1) {
@@ -268,21 +273,79 @@ export function bubbleShellFx(
     }
     return pts;
   };
-  shell.fillStyle(color, 0.12);
-  shell.fillPoints(hex(radius), true);
-  shell.lineStyle(3, accent, 0.85);
-  shell.strokePoints(hex(radius), true);
-  shell.lineStyle(1, 0xffffff, 0.55);
-  shell.strokePoints(hex(radius * 0.62), true);
-  shell.setBlendMode(ADD);
   bloomFx(scene, x, y, accent, radius * 2.4, 0.24, duration, y + 1, 1.3);
   // A warded body wears its shield as a rim of light as well as a drawn shell.
   rimGlowFx(scene, x, y, accent, radius * 0.72, 0.5, Math.max(260, duration), y + 4);
   lightPoolFx(scene, x, y, color, radius * 0.9, Math.max(300, duration), 0.22);
+  if (!allowed.motion) {
+    // Reduced motion: one still dome, bright edge, no sweep and no shards.
+    const still = scene.add.graphics().setPosition(x, y).setDepth(depth).setBlendMode(ADD);
+    still.lineStyle(4, accent, 1);
+    still.strokePoints(hex(radius), true);
+    scene.tweens.add({
+      targets: still,
+      alpha: 0,
+      duration,
+      ease: "Cubic.easeOut",
+      onComplete: () => still.destroy(),
+    });
+    return;
+  }
+  const shell = scene.add.graphics().setPosition(x, y).setDepth(depth).setBlendMode(ADD);
+  const pts = hex(radius);
+  shell.fillStyle(color, 0.1);
+  shell.fillPoints(pts, true);
+  // The rim in layers: soft band, solid edge, then a white line sitting on the edge.
+  shell.lineStyle(10, color, 0.32);
+  shell.strokePoints(pts, true);
+  shell.lineStyle(4, accent, 1);
+  shell.strokePoints(pts, true);
+  shell.lineStyle(2, 0xffffff, 0.92);
+  shell.strokePoints(hex(radius * 0.97), true);
+  shell.lineStyle(1, accent, 0.5);
+  shell.strokePoints(hex(radius * 0.62), true);
+  // A bright cap on every corner, so the shape holds instead of blurring away.
+  for (const p of pts) {
+    shell.fillStyle(accent, 0.45);
+    shell.fillCircle(p.x, p.y, 5);
+    shell.fillStyle(0xffffff, 0.95);
+    shell.fillCircle(p.x, p.y, 2.6);
+  }
+  // One light sweeping the rim, so the ward reads as alive rather than painted on.
+  const sweep = scene.add.graphics().setPosition(x, y).setDepth(depth + 1).setBlendMode(ADD);
+  sweep.lineStyle(3, 0xffffff, 0.9);
+  sweep.beginPath();
+  sweep.arc(0, 0, radius, 0, Math.PI * 0.5, false);
+  sweep.strokePath();
+  scene.tweens.add({
+    targets: sweep,
+    angle: 400,
+    alpha: 0,
+    duration,
+    ease: "Sine.easeOut",
+    onComplete: () => sweep.destroy(),
+  });
+  // Bright shards peeling off the edge: the rim is where a working ward shows itself.
+  const shards = allowed.particles >= 6 ? 9 : 5;
+  for (let i = 0; i < shards; i += 1) {
+    const a = (Math.PI * 2 * i) / shards + 0.2;
+    const px = Math.cos(a) * radius;
+    const py = Math.sin(a) * radius * 0.92;
+    const shard = scene.add.circle(x + px, y + py, 2.4, 0xffffff, 0.95).setDepth(depth + 2).setBlendMode(ADD);
+    scene.tweens.add({
+      targets: shard,
+      x: x + px * 1.45,
+      y: y + py * 1.45,
+      alpha: 0,
+      duration: Math.max(220, duration * 0.85),
+      ease: "Cubic.easeOut",
+      onComplete: () => shard.destroy(),
+    });
+  }
   scene.tweens.add({
     targets: shell,
-    scaleX: 1.2,
-    scaleY: 1.2,
+    scaleX: 1.14,
+    scaleY: 1.14,
     alpha: 0,
     duration,
     ease: "Cubic.easeOut",

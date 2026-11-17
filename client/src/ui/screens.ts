@@ -53,12 +53,13 @@ import {
   socketedGems,
   type CharacterSave,
   type ClassId,
+  type AbilityDef,
   type GameSession,
   type ItemStack,
   type MemorialEntry,
 } from "@realm/core";
 import { KEYBIND_LABELS, PAD_ACTIONS, PAD_LABELS, type GamePreferences, type KeybindAction, type PadAction } from "./preferences";
-import { classTint } from "../game/vfx";
+import { classTint, damageColor, primaryDamageType } from "../game/vfx";
 import { t, type TextKey } from "./text";
 import {
   abilityIconHtml,
@@ -211,7 +212,7 @@ export function abilityBarHtml(session: GameSession): string {
   // The bar wears the hero's own colour, so two players' bars never look alike.
   const tint = classTint(session.save.classId, session.classInfo.accent);
   const basic = session.classInfo.basic;
-  const basicSlot = `<button class="ability-slot basic" data-cast="basic" title="${esc(basic.name)} — click or Space">
+  const basicSlot = `<button class="ability-slot basic" data-cast="basic" data-card="basic" title="${esc(basic.name)} — click or Space">
     <span class="ability-key">LMB</span>
     <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${abilityIconHtml(basic.icon, 40)}</span>
   </button>`;
@@ -220,7 +221,7 @@ export function abilityBarHtml(session: GameSession): string {
     const notEnough = unlocked && session.save.resource < ability.cost;
     // An ultimate gets a gold rim and a slow shine, so the big button stands out.
     const ultimate = ability.signature === true;
-    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""} ${ultimate ? "ultimate" : ""}" data-cast="${unlocked ? ability.id : ""}" title="${esc(ability.name)} — ${esc(ability.description)}">
+    return `<button class="ability-slot ${unlocked ? "ready" : "empty"} ${notEnough ? "no-resource" : ""} ${ultimate ? "ultimate" : ""}" data-cast="${unlocked ? ability.id : ""}" data-card="${ability.id}" title="${esc(ability.name)} — ${esc(ability.description)}">
       <span class="ability-key">${i + 1}</span>
       ${ultimate ? `<span class="ultimate-shine" aria-hidden="true"></span>` : ""}
       ${unlocked ? `<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)">${abilityIconHtml(ability.icon, 40)}</span>` : ""}
@@ -232,6 +233,83 @@ export function abilityBarHtml(session: GameSession): string {
     </button>`;
   }).join("");
   return `<span class="ability-tint" data-tint="${esc(tint)}"></span>` + basicSlot + slots;
+}
+
+/** The keywords a description turns on, so a shield, a burn and a stun each read at a glance. */
+const KEYWORD_TAGS: [RegExp, string][] = [
+  [/\b(burn|burning|burned|flame|flames|fire|sear|scorch)(s|ed|ing)?\b/gi, "fire"],
+  [/\b(chill|chilled|freeze|frozen|frost|ice)\b/gi, "ice"],
+  [/\b(stun|stunned|stuns|chain)\b/gi, "stun"],
+  [/\b(slow|slowed|slows|snare|root|roots|entangled)\b/gi, "slow"],
+  [/\b(shield|shielded|guard|ward|barrier|aegis|parry)\b/gi, "shield"],
+  [/\b(heal|heals|healing|restore|restores|regen|mend)\b/gi, "heal"],
+  [/\b(poison|poisoned|venom|toxic|cursed|corrupt)\b/gi, "poison"],
+  [/\b(bleed|bleeding|wound|rend)\b/gi, "bleed"],
+  [/\b(shadow|dark|night)\b/gi, "shadow"],
+  [/\b(holy|radiant|light|divine|blessed)\b/gi, "holy"],
+  [/\b(summon|summons|skeleton|wolf|companion|minion)\b/gi, "summon"],
+  [/\b(dash|leap|blink|charge|lunge|roll)\b/gi, "move"],
+];
+
+const KEYWORD_COLORS: Record<string, string> = {
+  fire: "#ff9a4a",
+  ice: "#8fe6ff",
+  stun: "#ffe27a",
+  slow: "#9fd8ff",
+  shield: "#a8d8ff",
+  heal: "#8ef0a0",
+  poison: "#b8f04a",
+  bleed: "#ff6b6b",
+  shadow: "#b48cff",
+  holy: "#ffe08a",
+  summon: "#9fe8d8",
+  move: "#c9c2e8",
+};
+
+/** Escapes the text first, then wraps the keywords in a coloured mark. */
+function descriptionHtml(text: string): string {
+  let html = esc(text);
+  for (const [pattern, kind] of KEYWORD_TAGS) {
+    html = html.replace(pattern, (match) => `<em class="kw kw-${kind}" style="--kw:${KEYWORD_COLORS[kind]}">${match}</em>`);
+  }
+  return html;
+}
+
+/** One skill's card: what it does, what it costs, when it comes back and how far it reaches. */
+function abilityCardHtml(ability: AbilityDef, tint: string): string {
+  const element = primaryDamageType(ability);
+  const elementColor = damageColor(element);
+  const elementLabel = `${element[0].toUpperCase()}${element.slice(1)}`;
+  const reach = ability.range > 0 ? `${Math.round(ability.range)}` : "Self";
+  const cooldown = ability.cooldown > 0 ? `${ability.cooldown.toFixed(1)}s` : "None";
+  // An ultimate is worth one line of warning, so the card says so plainly.
+  const band = ability.signature ? "Ultimate" : ability.basic ? "Auto attack" : `${ability.targeting[0].toUpperCase()}${ability.targeting.slice(1)}`;
+  return `<div class="ability-card" data-card-id="${esc(ability.id)}" style="--card-tint:${esc(tint)};--card-element:${esc(elementColor)}">
+    <div class="ability-card-top">
+      <span class="ability-card-icon">${abilityIconHtml(ability.icon, 34)}</span>
+      <span class="ability-card-head">
+        <b class="ability-card-name">${esc(ability.name)}</b>
+        <span class="ability-card-band">${esc(band)} · Level ${ability.unlockLevel}</span>
+      </span>
+    </div>
+    <p class="ability-card-text">${descriptionHtml(ability.description)}</p>
+    <div class="ability-card-stats">
+      <span class="ability-card-stat"><i>Cost</i><b>${ability.cost > 0 ? ability.cost : "\u2014"}</b></span>
+      <span class="ability-card-stat"><i>Reach</i><b>${esc(reach)}</b></span>
+      <span class="ability-card-stat"><i>Cooldown</i><b>${esc(cooldown)}</b></span>
+      <span class="ability-card-stat element"><i>Element</i><b>${esc(elementLabel)}</b></span>
+    </div>
+  </div>`;
+}
+
+/** Every card an open hero needs, built in one go beside the bar. */
+export function abilityCardsHtml(session: GameSession): string {
+  const tint = classTint(session.save.classId, session.classInfo.accent);
+  const parts = session.classInfo.abilities
+    .slice(0, 5)
+    .map((ability) => abilityCardHtml(ability, tint))
+    .join("");
+  return abilityCardHtml(session.classInfo.basic, tint) + parts;
 }
 
 export function quickbarHtml(session: GameSession, keys: [string, string] = ["Z", "X"]): string {
